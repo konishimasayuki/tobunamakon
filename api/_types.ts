@@ -1,7 +1,8 @@
 export interface Customer {
   id: string
+  customerCode: string
   companyName: string
-  customerName: string
+  companyNameKana: string
   phone: string
   address: string
   contactPerson: string
@@ -20,9 +21,3 @@ export interface User {
 }
 
 export type UserRole = 'admin' | 'manager' | 'staff'
-
-export const ROLE_LABELS: Record<UserRole, string> = {
-  admin: '管理者',
-  manager: 'マネージャー',
-  staff: 'スタッフ',
-}
