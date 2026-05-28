@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { redis } from '../_redis'
 import { requireAuth } from '../_auth'
-import type { Customer } from '../_types'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -12,10 +11,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const ids = await redis.smembers('customers')
       if (!ids || ids.length === 0) return res.status(200).json([])
-
-      const customers: Customer[] = []
+      const customers = []
       for (const id of ids) {
-        const c = await redis.hgetall<Customer>(`customer:${id}`)
+        const c = await redis.hgetall(`customer:${id}`)
         if (c) customers.push(c)
       }
       customers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -28,14 +26,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo } = req.body
     if (!companyName) return res.status(400).json({ error: '会社名は必須です' })
-
     try {
       const id = uuidv4()
       const now = new Date().toISOString()
-      const customer: Customer = {
+      const customer = {
         id,
         customerCode:    customerCode    || '',
-        companyName:     companyName,
+        companyName,
         companyNameKana: companyNameKana || '',
         phone:           phone           || '',
         address:         address         || '',
@@ -44,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createdAt: now,
         updatedAt: now,
       }
-      await redis.hset(`customer:${id}`, customer as unknown as Record<string, unknown>)
+      await redis.hset(`customer:${id}`, customer)
       await redis.sadd('customers', id)
       return res.status(201).json(customer)
     } catch (e) {
