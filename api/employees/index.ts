@@ -16,10 +16,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const e = await redis.hgetall(`employee:${id}`)
         if (e && Object.keys(e).length > 0) employees.push(e)
       }
-      employees.sort((a, b) => (a.employeeId || '').localeCompare(b.employeeId || ''))
+      try {
+        employees.sort((a, b) => String(a.employeeId || '').localeCompare(String(b.employeeId || '')))
+      } catch (_) {}
       return res.status(200).json(employees)
     } catch (e) {
-      return res.status(500).json({ error: 'サーバーエラーが発生しました' })
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
     }
   }
 
@@ -38,7 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await redis.sadd('employees', id)
       return res.status(201).json(employee)
     } catch (e) {
-      return res.status(500).json({ error: 'サーバーエラーが発生しました' })
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
     }
   }
 
