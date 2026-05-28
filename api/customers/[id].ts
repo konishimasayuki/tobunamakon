@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as { id: string }
 
   if (req.method === 'PUT') {
-    const { companyName, customerName, phone, address, contactPerson, memo } = req.body
+    const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo } = req.body
     if (!companyName) return res.status(400).json({ error: '会社名は必須です' })
 
     try {
@@ -18,12 +18,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!existing) return res.status(404).json({ error: '顧客が見つかりません' })
 
       const updated: Customer = {
-        ...existing, companyName,
-        customerName: customerName || '',
-        phone: phone || '',
-        address: address || '',
-        contactPerson: contactPerson || '',
-        memo: memo || '',
+        ...existing,
+        customerCode:    customerCode    || '',
+        companyName:     companyName,
+        companyNameKana: companyNameKana || '',
+        phone:           phone           || '',
+        address:         address         || '',
+        contactPerson:   contactPerson   || '',
+        memo:            memo            || '',
         updatedAt: new Date().toISOString(),
       }
       await redis.hset(`customer:${id}`, updated as unknown as Record<string, unknown>)
