@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.1.1'
+const APP_VERSION = 'v0.1.2'
 const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
 const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
 const EMP_TYPES       = ['office', 'driver', 'admin']
@@ -740,12 +740,272 @@ function CustomersPage() {
   )
 }
 
+
+// ============================================================
+// 出荷登録ページ
+// ============================================================
+const VEHICLE_TYPES = ['4t', '7t', '大']
+const EQUIPMENT_TYPES = ['なし', 'クレーン', 'F1', 'ポンプ']
+
+const emptyShipForm = {
+  date: new Date().toISOString().slice(0, 10),
+  time: '',
+  companyId: '', companyName: '',
+  siteName: '',
+  vehicleType: '4t',
+  driverId: '', driverName: '',
+  mixCode: '', nbType: 'N',
+  volume: '', equipment: 'なし',
+  note: '', orderContact: '', siteContact: '',
+}
+
+function ShipmentsPage() {
+  const [form, setForm]             = useState({ ...emptyShipForm })
+  const [shipments, setShipments]   = useState([])
+  const [customers, setCustomers]   = useState([])
+  const [employees, setEmployees]   = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [error, setError]           = useState('')
+  const [search, setSearch]         = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
+
+  const load = useCallback(async () => {
+    try {
+      const [s, c, e] = await Promise.all([
+        api.get('/api/shipments'),
+        api.get('/api/customers'),
+        api.get('/api/employees'),
+      ])
+      setShipments(s)
+      setCustomers(c)
+      setEmployees(e.filter(emp => emp.type === 'driver'))
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+
+  const handleCompany = (e) => {
+    const c = customers.find(c => c.id === e.target.value)
+    setForm(f => ({ ...f, companyId: c?.id || '', companyName: c?.companyName || '' }))
+  }
+
+  const handleDriver = (e) => {
+    const emp = employees.find(emp => emp.id === e.target.value)
+    setForm(f => ({ ...f, driverId: emp?.id || '', driverName: emp?.name || '' }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    try {
+      await api.post('/api/shipments', form)
+      await load()
+      setForm({ ...emptyShipForm, date: form.date })
+    } catch (err) { setError(err.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleReset = () => setForm({ ...emptyShipForm })
+
+  const handleDelete = async (id) => {
+    try {
+      await api.del(`/api/shipments/${id}`)
+      setDeleteConfirm(null)
+      await load()
+    } catch (e) { alert('エラー: ' + e.message) }
+  }
+
+  const filtered = shipments.filter(s => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return [s.date, s.companyName, s.siteName, s.driverName, s.mixCode, s.vehicleType]
+      .some(v => String(v || '').toLowerCase().includes(q))
+  })
+
+  const iStyle = { ...S.smInput, width: '100%', boxSizing: 'border-box' }
+  const lStyle = { ...S.smLabel, marginBottom: 4 }
+  const fStyle = { display: 'flex', flexDirection: 'column', gap: 4 }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
+      {/* 入力フォーム */}
+      <div style={{ background: '#fff', borderBottom: '2px solid #dde3ed', padding: '16px 20px' }}>
+        <form onSubmit={handleSubmit}>
+          {/* 行1: 日付・時間・業者名 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 10, marginBottom: 10 }}>
+            <div style={fStyle}>
+              <label style={lStyle}>日付 *</label>
+              <input style={iStyle} type="date" value={form.date} onChange={set('date')} required />
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>時間</label>
+              <input style={iStyle} type="time" value={form.time} onChange={set('time')} />
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>業者名 *</label>
+              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.companyId} onChange={handleCompany} required>
+                <option value="">選択してください</option>
+                {customers.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* 行2: 現場名 */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={fStyle}>
+              <label style={lStyle}>現場名</label>
+              <input style={iStyle} type="text" value={form.siteName} onChange={set('siteName')} placeholder="現場名を入力" />
+            </div>
+          </div>
+
+          {/* 行3: 車種・ドライバー */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 10 }}>
+            <div style={fStyle}>
+              <label style={lStyle}>車種</label>
+              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.vehicleType} onChange={set('vehicleType')}>
+                {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>ドライバー</label>
+              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.driverId} onChange={handleDriver}>
+                <option value="">選択してください</option>
+                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* 行4: 配合・N/B・m3・設備 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr auto 1fr 1fr', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+            <div style={fStyle}>
+              <label style={lStyle}>配合（例: 18-12-20）</label>
+              <input style={iStyle} type="text" value={form.mixCode} onChange={set('mixCode')} placeholder="00-00-00" />
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>N・B</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', height: 36 }}>
+                {['N', 'B'].map(v => (
+                  <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 14, fontWeight: form.nbType === v ? 700 : 400 }}>
+                    <input type="radio" name="nbType" value={v} checked={form.nbType === v} onChange={set('nbType')} />
+                    {v}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>m³</label>
+              <input style={iStyle} type="number" step="0.25" value={form.volume} onChange={set('volume')} placeholder="0.00" />
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>設備</label>
+              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.equipment} onChange={set('equipment')}>
+                {EQUIPMENT_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* 行5: 連絡先 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div style={fStyle}>
+              <label style={lStyle}>受注連絡先</label>
+              <input style={iStyle} type="tel" value={form.orderContact} onChange={set('orderContact')} placeholder="電話番号" />
+            </div>
+            <div style={fStyle}>
+              <label style={lStyle}>現場連絡先</label>
+              <input style={iStyle} type="tel" value={form.siteContact} onChange={set('siteContact')} placeholder="電話番号" />
+            </div>
+          </div>
+
+          {/* 行6: 備考 */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={lStyle}>備考</label>
+            <textarea style={{ ...iStyle, height: 60, resize: 'vertical' }} value={form.note} onChange={set('note')} placeholder="備考" />
+          </div>
+
+          {error && <div style={{ ...S.error, marginBottom: 10 }}>{error}</div>}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" style={S.cancelBtn} onClick={handleReset}>リセット</button>
+            <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
+              {saving ? '登録中...' : '登録'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 一覧 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={S.toolbar}>
+          <input style={S.search} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
+
+        {loading ? (
+          <div style={S.empty}>読み込み中...</div>
+        ) : filtered.length === 0 ? (
+          <div style={S.empty}>{search ? '検索結果がありません' : '出荷登録がありません'}</div>
+        ) : (
+          <div style={S.tableWrap}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  {['日付', '時間', '業者名', '現場名', '車種', 'ドライバー', '配合', 'N/B', 'm³', '設備', '備考', ''].map(h => (
+                    <th key={h} style={S.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(s => (
+                  <tr key={s.id} style={S.tr}>
+                    <td style={S.td}>{s.date}</td>
+                    <td style={S.td}>{s.time || '—'}</td>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
+                    <td style={S.td}>{s.siteName || '—'}</td>
+                    <td style={S.td}>{s.vehicleType}</td>
+                    <td style={S.td}>{s.driverName || '—'}</td>
+                    <td style={S.td}>{s.mixCode || '—'}</td>
+                    <td style={S.td}>{s.nbType}</td>
+                    <td style={S.td}>{s.volume ? `${s.volume}m³` : '—'}</td>
+                    <td style={S.td}>{s.equipment !== 'なし' ? s.equipment : '—'}</td>
+                    <td style={{ ...S.td, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.note || '—'}</td>
+                    <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
+                      <button style={S.delBtn} onClick={() => setDeleteConfirm(s.id)}>削除</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {deleteConfirm && (
+        <div style={S.overlay}>
+          <div style={S.confirmBox}>
+            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>この出荷登録を削除しますか？</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>キャンセル</button>
+              <button style={S.dangerBtn} onClick={() => handleDelete(deleteConfirm)}>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ============================================================
 // レイアウト
 // ============================================================
 const TABS = [
   { id: 'customers', label: '顧客管理', icon: '👥' },
   { id: 'employees', label: '従業員管理', icon: '👷' },
+  { id: 'shipments', label: '出荷登録', icon: '🚛' },
 ]
 
 function Layout({ children, activeTab, onTabChange }) {
@@ -865,6 +1125,7 @@ function AppInner() {
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'customers' && <CustomersPage />}
       {activeTab === 'employees' && <EmployeesPage />}
+      {activeTab === 'shipments' && <ShipmentsPage />}
     </Layout>
   )
 }
