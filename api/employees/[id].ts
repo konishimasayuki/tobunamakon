@@ -13,13 +13,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!name) return res.status(400).json({ error: '氏名は必須です' })
     try {
       const existing = await redis.hgetall(`employee:${id}`)
-      if (!existing || !existing.id) return res.status(404).json({ error: '従業員が見つかりません' })
+      if (!existing || Object.keys(existing).length === 0) return res.status(404).json({ error: '従業員が見つかりません' })
       const updated = {
-        ...existing,
-        employeeId: employeeId || '',
-        name,
-        lineId: lineId || '',
-        type: type || 'office',
+        ...existing, employeeId: employeeId || '', name,
+        lineId: lineId || '', type: type || 'office',
         updatedAt: new Date().toISOString(),
       }
       await redis.hset(`employee:${id}`, updated)
