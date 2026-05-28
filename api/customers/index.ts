@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const customers = []
       for (const id of ids) {
         const c = await redis.hgetall(`customer:${id}`)
-        if (c) customers.push(c)
+        if (c && Object.keys(c).length > 0) customers.push(c)
       }
       customers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       return res.status(200).json(customers)
@@ -30,16 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = uuidv4()
       const now = new Date().toISOString()
       const customer = {
-        id,
-        customerCode:    customerCode    || '',
-        companyName,
-        companyNameKana: companyNameKana || '',
-        phone:           phone           || '',
-        address:         address         || '',
-        contactPerson:   contactPerson   || '',
-        memo:            memo            || '',
-        createdAt: now,
-        updatedAt: now,
+        id, customerCode: customerCode || '', companyName,
+        companyNameKana: companyNameKana || '', phone: phone || '',
+        address: address || '', contactPerson: contactPerson || '',
+        memo: memo || '', createdAt: now, updatedAt: now,
       }
       await redis.hset(`customer:${id}`, customer)
       await redis.sadd('customers', id)
