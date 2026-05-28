@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.0.6'
+const APP_VERSION = 'v0.0.7'
 const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
 const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
 const EMP_TYPES       = ['office', 'driver', 'admin']
@@ -520,8 +520,13 @@ function EmployeesPage() {
   })
 
   const handleSave = async (data) => {
-    if (editing) { await api.put(`/api/employees/${editing.id}`, data) }
-    else { await api.post('/api/employees', data) }
+    if (editing && editing.id) {
+      await api.put(`/api/employees/${editing.id}`, data)
+    } else if (editing && !editing.id) {
+      throw new Error('IDが取得できません。一度ページを更新してください')
+    } else {
+      await api.post('/api/employees', data)
+    }
     await load()
   }
 
@@ -532,11 +537,10 @@ function EmployeesPage() {
   }
 
   const cols = [
-    { w: '100px', label: '従業員ID' },
-    { w: '22%',   label: '氏名' },
-    { w: '18%',   label: '種別' },
-    { w: 'auto',  label: 'LINE ID' },
-    { w: '88px',  label: '' },
+    { w: '80px',  label: 'ID' },
+    { w: 'auto',  label: '氏名' },
+    { w: '90px',  label: '種別' },
+    { w: '100px', label: '' },
   ]
 
   return (
@@ -564,16 +568,18 @@ function EmployeesPage() {
                 return (
                   <tr key={e.id} style={S.tr}>
                     <td style={S.td}><span style={S.code}>{e.employeeId || '—'}</span></td>
-                    <td style={{ ...S.td, fontWeight: 600 }}>{e.name}</td>
                     <td style={S.td}>
-                      <span style={{ display: 'inline-block', background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`, borderRadius: 5, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+                      <div style={{ fontWeight: 600 }}>{e.name}</div>
+                      {e.lineId && <div style={{ fontSize: 11, color: '#6b7a8d' }}>{e.lineId}</div>}
+                    </td>
+                    <td style={S.td}>
+                      <span style={{ display: 'inline-block', background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
                         {EMP_TYPE_LABELS[e.type] || e.type}
                       </span>
                     </td>
-                    <td style={S.td}>{e.lineId || '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                       <button style={S.editBtn} onClick={() => { setEditing(e); setModalOpen(true) }}>編集</button>
-                      <button style={S.delBtn} onClick={() => setDeleteConfirm(e.id)}>削除</button>
+                      <button style={{ ...S.delBtn, marginTop: 4, display: 'block' }} onClick={() => setDeleteConfirm(e.id)}>削除</button>
                     </td>
                   </tr>
                 )
@@ -634,8 +640,13 @@ function CustomersPage() {
   })
 
   const handleSave = async (data) => {
-    if (editing) { await api.put(`/api/customers/${editing.id}`, data) }
-    else { await api.post('/api/customers', data) }
+    if (editing && editing.id) {
+      await api.put(`/api/customers/${editing.id}`, data)
+    } else if (editing && !editing.id) {
+      throw new Error('IDが取得できません。一度ページを更新してください')
+    } else {
+      await api.post('/api/customers', data)
+    }
     await load()
   }
 
@@ -647,13 +658,10 @@ function CustomersPage() {
 
   // テーブル列幅定義
   const cols = [
-    { w: '90px',  label: '顧客コード' },
-    { w: '18%',   label: '会社名' },
-    { w: '16%',   label: '会社名（カナ）' },
-    { w: '120px', label: '電話番号' },
-    { w: '12%',   label: '担当者' },
-    { w: 'auto',  label: '住所' },
-    { w: '88px',  label: '' },
+    { w: '80px',  label: 'コード' },
+    { w: 'auto',  label: '会社名' },
+    { w: '110px', label: '電話番号' },
+    { w: '100px', label: '' },
   ]
 
   return (
