@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.0.4'
+const APP_VERSION = 'v0.0.6'
 const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
 const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
 const EMP_TYPES       = ['office', 'driver', 'admin']
@@ -512,10 +512,12 @@ function EmployeesPage() {
 
   useEffect(() => { load() }, [load])
 
-  const filtered = employees.filter(e =>
-    [e.employeeId, e.name, e.lineId, EMP_TYPE_LABELS[e.type]]
-      .some(v => (v || '').toLowerCase().includes(search.toLowerCase()))
-  )
+  const filtered = employees.filter(e => {
+    if (!search) return true
+    const q = String(search).toLowerCase()
+    return [e.employeeId, e.name, e.lineId, EMP_TYPE_LABELS[e.type]]
+      .some(v => String(v || '').toLowerCase().includes(q))
+  })
 
   const handleSave = async (data) => {
     if (editing) { await api.put(`/api/employees/${editing.id}`, data) }
@@ -571,7 +573,7 @@ function EmployeesPage() {
                     <td style={S.td}>{e.lineId || '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                       <button style={S.editBtn} onClick={() => { setEditing(e); setModalOpen(true) }}>編集</button>
-                      {canDelete && <button style={S.delBtn} onClick={() => setDeleteConfirm(e.id)}>削除</button>}
+                      <button style={S.delBtn} onClick={() => setDeleteConfirm(e.id)}>削除</button>
                     </td>
                   </tr>
                 )
@@ -624,10 +626,12 @@ function CustomersPage() {
 
   useEffect(() => { load() }, [load])
 
-  const filtered = customers.filter(c =>
-    [c.customerCode, c.companyName, c.companyNameKana, c.phone, c.address, c.contactPerson]
-      .some(v => (v || '').toLowerCase().includes(search.toLowerCase()))
-  )
+  const filtered = customers.filter(c => {
+    if (!search) return true
+    const q = String(search).toLowerCase()
+    return [c.customerCode, c.companyName, c.companyNameKana, c.phone, c.address, c.contactPerson]
+      .some(v => String(v || '').toLowerCase().includes(q))
+  })
 
   const handleSave = async (data) => {
     if (editing) { await api.put(`/api/customers/${editing.id}`, data) }
@@ -684,7 +688,7 @@ function CustomersPage() {
                   <td style={S.td}>{c.address || '—'}</td>
                   <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                     <button style={S.editBtn} onClick={() => { setEditing(c); setModalOpen(true) }}>編集</button>
-                    {canDelete && <button style={S.delBtn} onClick={() => setDeleteConfirm(c.id)}>削除</button>}
+                    <button style={S.delBtn} onClick={() => setDeleteConfirm(c.id)}>削除</button>
                   </td>
                 </tr>
               ))}
