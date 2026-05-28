@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.0.9'
+const APP_VERSION = 'v0.1.0'
 const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
 const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
 const EMP_TYPES       = ['office', 'driver', 'admin']
@@ -14,19 +14,27 @@ const EMP_TYPES       = ['office', 'driver', 'admin']
 const getToken = () => localStorage.getItem('token') || ''
 
 async function request(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getToken()}`,
-      ...options.headers,
-    },
-  })
-  const text = await res.text()
-  if (!text) throw new Error('サーバーから応答がありませんでした')
+  let res
+  try {
+    res = await fetch(path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+        ...options.headers,
+      },
+    })
+  } catch (e) {
+    throw new Error('ネットワークエラー: ' + e.message)
+  }
   let data
-  try { data = JSON.parse(text) } catch { throw new Error('サーバーエラーが発生しました') }
-  if (!res.ok) throw new Error(data.error || 'エラーが発生しました')
+  try {
+    const text = await res.text()
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    data = {}
+  }
+  if (!res.ok) throw new Error(data.error || 'エラー(' + res.status + ')')
   return data
 }
 
