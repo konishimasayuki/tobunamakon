@@ -4,7 +4,7 @@ import type { VercelRequest } from '@vercel/node'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret'
 
-export interface UserPayload {
+interface UserPayload {
   id: string
   username: string
   role: 'admin' | 'manager' | 'staff'
