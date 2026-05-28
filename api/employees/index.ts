@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const employees = []
       for (const id of ids) {
         const e = await redis.hgetall(`employee:${id}`)
-        if (e) employees.push(e)
+        if (e && Object.keys(e).length > 0) employees.push(e)
       }
       employees.sort((a, b) => (a.employeeId || '').localeCompare(b.employeeId || ''))
       return res.status(200).json(employees)
