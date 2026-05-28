@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.0.7'
+const APP_VERSION = 'v0.0.8'
 const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
 const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
 const EMP_TYPES       = ['office', 'driver', 'admin']
@@ -161,8 +161,8 @@ const S = {
   exportBtn:  { background: '#f0f9f0', color: '#1a8f5a', border: '1.5px solid #a0dca0', borderRadius: 7, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
   importBtn:  { background: '#fff8f0', color: '#e8821a', border: '1.5px solid #f5c070', borderRadius: 7, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
   countBar:   { padding: '6px 16px', background: '#f8fafc', fontSize: 11, color: '#6b7a8d', borderBottom: '1px solid #eef0f4' },
-  tableWrap:  { flex: 1, overflow: 'auto' },
-  table:      { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' },
+  tableWrap:  { flex: 1, overflowX: 'hidden', overflowY: 'auto' },
+  table:      { width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' },
   th:         { padding: '9px 12px', background: '#f4f6f9', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#3a4a5c', borderBottom: '1px solid #dde3ed', whiteSpace: 'nowrap', position: 'sticky', top: 0, overflow: 'hidden' },
   tr:         { borderBottom: '1px solid #eef0f4' },
   td:         { padding: '10px 12px', fontSize: 13, color: '#1a2332', verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
@@ -537,10 +537,10 @@ function EmployeesPage() {
   }
 
   const cols = [
-    { w: '80px',  label: 'ID' },
-    { w: 'auto',  label: '氏名' },
-    { w: '90px',  label: '種別' },
-    { w: '100px', label: '' },
+    { w: null, label: 'ID' },
+    { w: null, label: '氏名' },
+    { w: null, label: '種別' },
+    { w: null, label: '' },
   ]
 
   return (
@@ -658,10 +658,10 @@ function CustomersPage() {
 
   // テーブル列幅定義
   const cols = [
-    { w: '80px',  label: 'コード' },
-    { w: 'auto',  label: '会社名' },
-    { w: '110px', label: '電話番号' },
-    { w: '100px', label: '' },
+    { w: null, label: 'コード' },
+    { w: null, label: '会社名' },
+    { w: null, label: '電話番号' },
+    { w: null, label: '' },
   ]
 
   return (
