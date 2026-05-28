@@ -3,8 +3,10 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.0.2'
-const ROLE_LABELS = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
+const APP_VERSION = 'v0.0.4'
+const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
+const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
+const EMP_TYPES       = ['office', 'driver', 'admin']
 
 // ============================================================
 // APIクライアント
@@ -188,6 +190,8 @@ const S = {
   successTag: { display: 'inline-block', background: '#f0f9f0', color: '#1a8f5a', border: '1px solid #a0dca0', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
   warnTag:    { display: 'inline-block', background: '#fff8f0', color: '#e8821a', border: '1px solid #f5c070', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
   skipTag:    { display: 'inline-block', background: '#f4f6f9', color: '#6b7a8d', border: '1px solid #dde3ed', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
+  overlay2:   { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 998 },
+  hamburger:  { background: 'none', border: 'none', color: '#1a2332', fontSize: 22, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 },
 }
 
 // ============================================================
@@ -406,6 +410,195 @@ function ImportModal({ onClose, onDone }) {
   )
 }
 
+
+// ============================================================
+// 従業員追加・編集モーダル
+// ============================================================
+const emptyEmpForm = { employeeId: '', name: '', lineId: '', type: 'office' }
+
+function EmployeeModal({ employee, onSave, onClose }) {
+  const [form, setForm]       = useState(emptyEmpForm)
+  const [error, setError]     = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setForm(employee ? {
+      employeeId: employee.employeeId || '',
+      name:       employee.name       || '',
+      lineId:     employee.lineId     || '',
+      type:       employee.type       || 'office',
+    } : emptyEmpForm)
+  }, [employee])
+
+  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try { await onSave(form); onClose() }
+    catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...S.modal, maxWidth: 460 }}>
+        <div style={S.modalHead}>
+          <h2 style={S.modalTitle}>{employee ? '従業員編集' : '従業員追加'}</h2>
+          <button style={S.closeBtn} onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={S.modalForm}>
+          <div style={S.grid2}>
+            <Field label="従業員ID" value={form.employeeId} onChange={set('employeeId')} />
+            <Field label="氏名 *"   value={form.name}       onChange={set('name')} required />
+          </div>
+          <div style={S.grid2}>
+            <Field label="LINE ID" value={form.lineId} onChange={set('lineId')} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={S.smLabel}>種別 *</label>
+              <select
+                style={{ ...S.smInput, cursor: 'pointer' }}
+                value={form.type}
+                onChange={set('type')}
+                required
+              >
+                {EMP_TYPES.map(t => (
+                  <option key={t} value={t}>{EMP_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {error && <div style={S.error}>{error}</div>}
+          <div style={S.actions}>
+            <button type="button" style={S.cancelBtn} onClick={onClose}>キャンセル</button>
+            <button type="submit" style={{ ...S.saveBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+              {loading ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// 従業員管理ページ
+// ============================================================
+const EMP_TYPE_COLORS = {
+  office: { bg: '#f0f4ff', color: '#1a4d8f', border: '#c0d0f0' },
+  driver: { bg: '#f0f9f0', color: '#1a8f5a', border: '#a0dca0' },
+  admin:  { bg: '#fff8f0', color: '#e8821a', border: '#f5c070' },
+}
+
+function EmployeesPage() {
+  const { user } = useAuth()
+  const [employees, setEmployees]         = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [search, setSearch]               = useState('')
+  const [modalOpen, setModalOpen]         = useState(false)
+  const [editing, setEditing]             = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
+
+  const canDelete = user?.role === 'admin' || user?.role === 'manager'
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.get('/api/employees')
+      setEmployees(data)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const filtered = employees.filter(e =>
+    [e.employeeId, e.name, e.lineId, EMP_TYPE_LABELS[e.type]]
+      .some(v => (v || '').toLowerCase().includes(search.toLowerCase()))
+  )
+
+  const handleSave = async (data) => {
+    if (editing) { await api.put(`/api/employees/${editing.id}`, data) }
+    else { await api.post('/api/employees', data) }
+    await load()
+  }
+
+  const handleDelete = async (id) => {
+    await api.del(`/api/employees/${id}`)
+    setDeleteConfirm(null)
+    await load()
+  }
+
+  const cols = [
+    { w: '100px', label: '従業員ID' },
+    { w: '22%',   label: '氏名' },
+    { w: '18%',   label: '種別' },
+    { w: 'auto',  label: 'LINE ID' },
+    { w: '88px',  label: '' },
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={S.toolbar}>
+        <input style={S.search} placeholder="🔍  ID・氏名・種別などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <button style={S.addBtn} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 従業員追加</button>
+      </div>
+      <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
+
+      {loading ? (
+        <div style={S.empty}>読み込み中...</div>
+      ) : filtered.length === 0 ? (
+        <div style={S.empty}>{search ? '検索結果がありません' : '従業員が登録されていません'}</div>
+      ) : (
+        <div style={S.tableWrap}>
+          <table style={S.table}>
+            <colgroup>{cols.map((c, i) => <col key={i} style={{ width: c.w }} />)}</colgroup>
+            <thead>
+              <tr>{cols.map(c => <th key={c.label} style={S.th}>{c.label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.map(e => {
+                const tc = EMP_TYPE_COLORS[e.type] || EMP_TYPE_COLORS.office
+                return (
+                  <tr key={e.id} style={S.tr}>
+                    <td style={S.td}><span style={S.code}>{e.employeeId || '—'}</span></td>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{e.name}</td>
+                    <td style={S.td}>
+                      <span style={{ display: 'inline-block', background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`, borderRadius: 5, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+                        {EMP_TYPE_LABELS[e.type] || e.type}
+                      </span>
+                    </td>
+                    <td style={S.td}>{e.lineId || '—'}</td>
+                    <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
+                      <button style={S.editBtn} onClick={() => { setEditing(e); setModalOpen(true) }}>編集</button>
+                      {canDelete && <button style={S.delBtn} onClick={() => setDeleteConfirm(e.id)}>削除</button>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modalOpen && (
+        <EmployeeModal employee={editing} onSave={handleSave} onClose={() => { setModalOpen(false); setEditing(null) }} />
+      )}
+      {deleteConfirm && (
+        <div style={S.overlay}>
+          <div style={S.confirmBox}>
+            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>この従業員を削除しますか？</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>キャンセル</button>
+              <button style={S.dangerBtn} onClick={() => handleDelete(deleteConfirm)}>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ============================================================
 // 顧客管理ページ
 // ============================================================
@@ -524,13 +717,40 @@ function CustomersPage() {
 // ============================================================
 const TABS = [
   { id: 'customers', label: '顧客管理', icon: '👥' },
+  { id: 'employees', label: '従業員管理', icon: '👷' },
 ]
 
 function Layout({ children, activeTab, onTabChange }) {
   const { user, logout } = useAuth()
+  const [open, setOpen]   = useState(false)
+  const [isPC, setIsPC]   = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768)
+
+  useEffect(() => {
+    const check = () => setIsPC(window.innerWidth >= 768)
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  const closeSidebar = () => setOpen(false)
+
+  const handleTab = (id) => {
+    onTabChange(id)
+    closeSidebar()
+  }
+
+  const sidebarStyle = {
+    ...S.sidebar,
+    position: 'fixed',
+    top: 0, left: 0, bottom: 0,
+    zIndex: 999,
+    transform: open ? 'translateX(0)' : 'translateX(-100%)',
+    transition: 'transform 0.25s ease',
+  }
+
   return (
     <div style={S.appRoot}>
-      <aside style={S.sidebar}>
+      {/* PC用サイドバー（常時表示） */}
+      <aside style={{ ...S.sidebar, position: 'relative', transform: 'none', display: isPC ? 'flex' : 'none' }}>
         <div style={S.sideHead}>
           <div style={{ fontSize: 26 }}>🏗</div>
           <div>
@@ -552,8 +772,44 @@ function Layout({ children, activeTab, onTabChange }) {
           <div style={S.verTxt}>{APP_VERSION}</div>
         </div>
       </aside>
-      <main style={S.main}>
-        <div style={S.pageHead}>
+
+      {/* モバイル用オーバーレイ */}
+      {!isPC && open && <div style={S.overlay2} onClick={closeSidebar} />}
+
+      {/* モバイル用サイドバー（スライド） */}
+      {!isPC && (
+        <aside style={sidebarStyle}>
+          <div style={{ ...S.sideHead, justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 26 }}>🏗</div>
+              <div>
+                <div style={S.coName}>東部生コン</div>
+                <div style={S.syName}>業務管理システム</div>
+              </div>
+            </div>
+            <button style={{ ...S.hamburger, color: '#fff' }} onClick={closeSidebar}>✕</button>
+          </div>
+          <nav style={S.nav}>
+            {TABS.map(tab => (
+              <button key={tab.id} style={{ ...S.navItem, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
+                <span style={{ fontSize: 15 }}>{tab.icon}</span>{tab.label}
+              </button>
+            ))}
+          </nav>
+          <div style={S.sideFoot}>
+            <div style={S.userName}>{user?.displayName}</div>
+            <div style={S.userRole}>{user?.role ? ROLE_LABELS[user.role] : ''}</div>
+            <button style={S.logoutBtn} onClick={logout}>ログアウト</button>
+            <div style={S.verTxt}>{APP_VERSION}</div>
+          </div>
+        </aside>
+      )}
+
+      <main style={{ ...S.main, width: '100%' }}>
+        <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 12 }}>
+          {!isPC && (
+            <button style={S.hamburger} onClick={() => setOpen(true)}>☰</button>
+          )}
           <h1 style={S.pageTitle}>{TABS.find(t => t.id === activeTab)?.icon}{' '}{TABS.find(t => t.id === activeTab)?.label}</h1>
         </div>
         <div style={S.content}>{children}</div>
@@ -580,6 +836,7 @@ function AppInner() {
   return (
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'customers' && <CustomersPage />}
+      {activeTab === 'employees' && <EmployeesPage />}
     </Layout>
   )
 }
