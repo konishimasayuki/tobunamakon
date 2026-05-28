@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { redis } from '../_redis'
 import { requireAuth, hashPassword } from '../_auth'
-import type { User } from '../_types'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -14,8 +13,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const usernames = await redis.smembers('users')
       const users = []
       for (const username of usernames) {
-        const u = await redis.hgetall<User>(`user:${username}`)
-        if (u) {
+        const u = await redis.hgetall(`user:${username}`) as any
+        if (u && u.id) {
           const { passwordHash, ...safe } = u
           users.push(safe)
         }
