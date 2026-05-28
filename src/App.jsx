@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 // ============================================================
 // 定数
 // ============================================================
-const APP_VERSION = 'v0.1.0'
+const APP_VERSION = 'v0.1.1'
 const ROLE_LABELS    = { admin: '管理者', manager: 'マネージャー', staff: 'スタッフ' }
 const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin: '管理者' }
 const EMP_TYPES       = ['office', 'driver', 'admin']
@@ -540,9 +540,7 @@ function EmployeesPage() {
 
   const handleDelete = async (id) => {
     try {
-      alert('削除開始: ' + id)
       await api.del(`/api/employees/${id}`)
-      alert('削除成功')
       setDeleteConfirm(null)
       await load()
     } catch(e) {
@@ -666,9 +664,7 @@ function CustomersPage() {
 
   const handleDelete = async (id) => {
     try {
-      alert('削除開始: ' + id)
       await api.del(`/api/customers/${id}`)
-      alert('削除成功')
       setDeleteConfirm(null)
       await load()
     } catch(e) {
