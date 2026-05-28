@@ -26,20 +26,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { companyName, customerName, phone, address, contactPerson, memo } = req.body
+    const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo } = req.body
     if (!companyName) return res.status(400).json({ error: '会社名は必須です' })
 
     try {
       const id = uuidv4()
       const now = new Date().toISOString()
       const customer: Customer = {
-        id, companyName,
-        customerName: customerName || '',
-        phone: phone || '',
-        address: address || '',
-        contactPerson: contactPerson || '',
-        memo: memo || '',
-        createdAt: now, updatedAt: now,
+        id,
+        customerCode:    customerCode    || '',
+        companyName:     companyName,
+        companyNameKana: companyNameKana || '',
+        phone:           phone           || '',
+        address:         address         || '',
+        contactPerson:   contactPerson   || '',
+        memo:            memo            || '',
+        createdAt: now,
+        updatedAt: now,
       }
       await redis.hset(`customer:${id}`, customer as unknown as Record<string, unknown>)
       await redis.sadd('customers', id)
