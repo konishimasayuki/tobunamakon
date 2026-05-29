@@ -751,7 +751,7 @@ function CustomersPage() {
 const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
-const DEFAULT_SITE_ADDRESS = '〒830-0038 福岡県久留米市西町２丁目１３−７２３−７'
+const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
 
 const emptyShipForm = {
   date: new Date().toISOString().slice(0, 10),
@@ -769,7 +769,7 @@ const emptyShipForm = {
   volumeUncertain: false,
   placements: [],
   orderContact: '', siteContact: '',
-  driverId: '', driverName: '',
+  drivers: [],
   notes: [{ text: '', important: false }],
   driverMessages: [{ text: '', important: false }],
 }
@@ -869,6 +869,13 @@ function cleanupJpAddress(s) {
   return String(s || '').replace(/^日本、?\s*/, '').replace(/〒?\s*\d{3}-?\d{4}\s*/, '').trim()
 }
 
+// 文字列中の「緯度経度」数値を取り出す（例: 33.123456, 130.123456）
+function extractCoords(s) {
+  const m = String(s || '').match(/(-?\d{1,3}\.\d{3,})\s*[,，]\s*(-?\d{1,3}\.\d{3,})/)
+  if (!m) return null
+  return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
+}
+
 function SiteMap({ address, onAddressChange }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
@@ -880,6 +887,16 @@ function SiteMap({ address, onAddressChange }) {
   const doGeocode = (addr) => {
     const g = geocoderRef.current
     if (!g || !mapRef.current) return
+    // 住所に緯度経度が含まれていればその座標を直接使う（再ジオコード不要）
+    const c = extractCoords(addr)
+    if (c && window.google) {
+      const loc = new window.google.maps.LatLng(c.lat, c.lng)
+      mapRef.current.setCenter(loc)
+      mapRef.current.setZoom(16)
+      markerRef.current.setPosition(loc)
+      setStatus('')
+      return
+    }
     g.geocode({ address: addr }, (res, st) => {
       if (st === 'OK' && res[0]) {
         const loc = res[0].geometry.location
@@ -905,12 +922,12 @@ function SiteMap({ address, onAddressChange }) {
       markerRef.current = new maps.Marker({ map: mapRef.current, position: center, draggable: true })
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current.getPosition()
+        const lat = pos.lat().toFixed(6), lng = pos.lng().toFixed(6)
         geocoderRef.current.geocode({ location: pos }, (res, st) => {
-          if (st === 'OK' && res[0]) {
-            const addr = cleanupJpAddress(res[0].formatted_address)
-            selfSetRef.current = addr
-            onAddressChange(addr)
-          }
+          const base = (st === 'OK' && res[0]) ? cleanupJpAddress(res[0].formatted_address) : ''
+          const full = `${base}（緯度経度: ${lat}, ${lng}）`
+          selfSetRef.current = full
+          onAddressChange(full)
         })
       })
       setStatus('')
@@ -978,10 +995,13 @@ function ShipmentsPage() {
     setForm(f => ({ ...f, companyId: c?.id || '', companyName: c?.companyName || '' }))
   }
 
-  const handleDriver = (e) => {
+  const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
-    setForm(f => ({ ...f, driverId: emp?.id || '', driverName: emp?.name || '' }))
+    if (!emp) return
+    setForm(f => (f.drivers.length >= 4 || f.drivers.some(d => d.id === emp.id))
+      ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] }))
   }
+  const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
 
   const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
   const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
@@ -1004,8 +1024,7 @@ function ShipmentsPage() {
     placements: Array.isArray(s.placements) ? s.placements : [],
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
-    driverId: s.driverId || '',
-    driverName: s.driverName || '',
+    drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
     notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
     driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
   })
@@ -1099,9 +1118,9 @@ function ShipmentsPage() {
                   </div>
                 </div>
                 <div className="subrow">
-                  <div className="cell" style={{ flex: 1, minHeight: 52 }}>
+                  <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">現 場 住 所</div>
-                    <textarea className="f" rows={2} value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
+                    <textarea className="f" rows={1} value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
                   </div>
                 </div>
               </div>
@@ -1136,7 +1155,7 @@ function ShipmentsPage() {
                 <div className="subrow">
                   <div className="cell m3" style={{ flex: '0 0 59%', justifyContent: 'center' }}>
                     <div className="inline" style={{ justifyContent: 'center' }}>
-                      <input type="number" min="0" step="0.5" inputMode="decimal" value={form.volume} onChange={set('volume')} />
+                      <input type="number" min="0" step="0.01" inputMode="decimal" value={form.volume} onChange={set('volume')} />
                       <span className="unit">m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
                     </div>
                     <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
@@ -1148,14 +1167,14 @@ function ShipmentsPage() {
               </div>
             </div>
 
-            {/* 5段: 連絡先 / 現場連絡先 */}
+            {/* 5段: 連絡先 / 現場連絡先（ラベル左・入力右） */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 50%', minHeight: 58 }}>
-                <div className="lbl">連 絡 先</div>
+              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <div className="lbl" style={{ marginBottom: 0 }}>連 絡 先</div>
                 <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
               </div>
-              <div className="cell" style={{ flex: 1, minHeight: 58 }}>
-                <div className="lbl">現 場 連 絡 先</div>
+              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <div className="lbl" style={{ marginBottom: 0 }}>現 場 連 絡 先</div>
                 <input className="f" type="text" value={form.siteContact} onChange={set('siteContact')} />
               </div>
             </div>
@@ -1171,11 +1190,21 @@ function ShipmentsPage() {
             {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 32%' }}>
-                <div className="lbl">担 当 ド ラ イ バ ー</div>
-                <select className="f" value={form.driverId} onChange={handleDriver}>
-                  <option value="">選択してください</option>
-                  {employees.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                <div className="lbl">担 当 ド ラ イ バ ー（最大4）</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
+                  {form.drivers.map((d, i) => (
+                    <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
+                      {d.name}
+                      <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+                {form.drivers.length < 4 && (
+                  <select className="f" value="" onChange={addDriver} style={{ marginTop: 5 }}>
+                    <option value="">＋ ドライバーを追加</option>
+                    {employees.filter(e => !form.drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                )}
               </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl">ド ラ イ バ ー へ の 連 絡</div>
@@ -1185,16 +1214,15 @@ function ShipmentsPage() {
           </div>
           <div style={{ flex: '1 1 340px', minWidth: 280 }}>
             <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
+            {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
+            {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+              <button type="button" style={S.cancelBtn} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
+              <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
+                {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
+              </button>
+            </div>
           </div>
-          </div>
-
-          {editing && <div style={{ maxWidth: 720, margin: '10px auto 0', padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
-          {error && <div style={{ ...S.error, maxWidth: 720, margin: '10px auto 0' }}>{error}</div>}
-          <div style={{ display: 'flex', gap: 10, maxWidth: 720, margin: '12px auto 0' }}>
-            <button type="button" style={S.cancelBtn} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
-            <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
-              {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
-            </button>
           </div>
         </form>
       </div>
@@ -1228,7 +1256,7 @@ function ShipmentsPage() {
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
                     <td style={S.td}>{s.tradingCompany || '—'}</td>
                     <td style={S.td}>{s.siteName || '—'}</td>
-                    <td style={S.td}>{s.driverName || '—'}</td>
+                    <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
                     <td style={S.td}>{s.vehicleType || '—'}</td>
                     <td style={S.td}>{s.truckCount ? `${s.truckCount}台` : '—'}</td>
                     <td style={S.td}>{s.mixCode || '—'}</td>
