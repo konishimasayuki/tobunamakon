@@ -17,15 +17,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET' && !hasUsername) {
     try {
       const usernames = await redis.smembers('users')
-      const users = []
-      for (const uname of usernames) {
-        const u = await redis.hgetall<User>(`user:${uname}`)
-        if (u) {
-          const { passwordHash, ...safe } = u
-          users.push(safe)
-        }
-      }
-      users.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      if (!usernames || usernames.length === 0) return res.status(200).json([])
+      const p = redis.pipeline()
+      usernames.forEach(uname => p.hgetall<User>(`user:${uname}`))
+      const rows = await p.exec<(User | null)[]>()
+      const users = rows
+        .filter((u): u is User => !!u && Object.keys(u).length > 0)
+        .map(({ passwordHash, ...safe }) => safe)
+      users.sort((a, b) => new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime())
       return res.status(200).json(users)
     } catch (e) {
       return res.status(500).json({ error: 'サーバーエラーが発生しました' })

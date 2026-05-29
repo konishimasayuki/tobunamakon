@@ -524,22 +524,25 @@ function EmployeesPage() {
       .some(v => String(v || '').toLowerCase().includes(q))
   })
 
+  const sortEmp = (arr) => [...arr].sort((a, b) => String(a.employeeId ?? '').localeCompare(String(b.employeeId ?? '')))
+
   const handleSave = async (data) => {
     if (editing && editing.id) {
-      await api.put(`/api/employees/${editing.id}`, data)
+      const updated = await api.put(`/api/employees/${editing.id}`, data)
+      setEmployees(es => sortEmp(es.map(e => e.id === updated.id ? updated : e)))
     } else if (editing && !editing.id) {
       throw new Error('IDが取得できません。一度ページを更新してください')
     } else {
-      await api.post('/api/employees', data)
+      const created = await api.post('/api/employees', data)
+      setEmployees(es => sortEmp([...es, created]))
     }
-    await load()
   }
 
   const handleDelete = async (id) => {
     try {
       await api.del(`/api/employees/${id}`)
       setDeleteConfirm(null)
-      await load()
+      setEmployees(es => es.filter(e => e.id !== id))
     } catch(e) {
       alert('エラー: ' + e.message)
     }
@@ -650,20 +653,21 @@ function CustomersPage() {
 
   const handleSave = async (data) => {
     if (editing && editing.id) {
-      await api.put(`/api/customers/${editing.id}`, data)
+      const updated = await api.put(`/api/customers/${editing.id}`, data)
+      setCustomers(cs => cs.map(c => c.id === updated.id ? updated : c))
     } else if (editing && !editing.id) {
       throw new Error('IDが取得できません。一度ページを更新してください')
     } else {
-      await api.post('/api/customers', data)
+      const created = await api.post('/api/customers', data)
+      setCustomers(cs => [created, ...cs])
     }
-    await load()
   }
 
   const handleDelete = async (id) => {
     try {
       await api.del(`/api/customers/${id}`)
       setDeleteConfirm(null)
-      await load()
+      setCustomers(cs => cs.filter(c => c.id !== id))
     } catch(e) {
       alert('エラー: ' + e.message)
     }
@@ -798,13 +802,15 @@ function ShipmentsPage() {
     setForm(f => ({ ...f, driverId: emp?.id || '', driverName: emp?.name || '' }))
   }
 
+  const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + (a.time || '')).localeCompare(String(b.date) + (b.time || '')))
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSaving(true)
     try {
-      await api.post('/api/shipments', form)
-      await load()
+      const created = await api.post('/api/shipments', form)
+      setShipments(ss => sortShip([...ss, created]))
       setForm({ ...emptyShipForm, date: form.date })
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
@@ -816,7 +822,7 @@ function ShipmentsPage() {
     try {
       await api.del(`/api/shipments/${id}`)
       setDeleteConfirm(null)
-      await load()
+      setShipments(ss => ss.filter(s => s.id !== id))
     } catch (e) { alert('エラー: ' + e.message) }
   }
 

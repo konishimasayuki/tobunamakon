@@ -16,12 +16,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const ids = await redis.smembers('shipments')
       if (!ids || ids.length === 0) return res.status(200).json([])
-      const shipments = []
-      for (const sid of ids) {
-        const s = await redis.hgetall(`shipment:${sid}`)
-        if (s && Object.keys(s).length > 0) shipments.push(s)
-      }
-      shipments.sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
+      const p = redis.pipeline()
+      ids.forEach(sid => p.hgetall(`shipment:${sid}`))
+      const rows = await p.exec<Record<string, any>[]>()
+      const shipments = rows.filter(s => s && Object.keys(s).length > 0)
+      shipments.sort((a, b) => (String(a.date) + (a.time || '')).localeCompare(String(b.date) + (b.time || '')))
       return res.status(200).json(shipments)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
