@@ -764,6 +764,7 @@ const emptyShipForm = {
   truckCount: '',
   mixCode: '',
   specialNote: '',
+  mixNotes: ['', '', ''],
   cementType: '',
   volume: '',
   volumeUncertain: false,
@@ -787,7 +788,7 @@ function fitText(ta) {
 }
 
 // 選択チップ（単一 / 複数）
-function Chips({ options, value, multi, onChange }) {
+function Chips({ options, value, multi, onChange, big }) {
   const isOn = (o) => multi ? (value || []).includes(o) : value === o
   const toggle = (o) => {
     if (multi) {
@@ -798,7 +799,7 @@ function Chips({ options, value, multi, onChange }) {
     }
   }
   return (
-    <div className="chips">
+    <div className={'chips' + (big ? ' big' : '')}>
       {options.map(o => (
         <span key={o} className={'chip' + (isOn(o) ? ' on' : '')} onClick={() => toggle(o)}>{o}</span>
       ))}
@@ -1007,6 +1008,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return { ...f, mixCode: parts.slice(0, 3).join('-') }
   })
   const mixPart = (i) => (String(form.mixCode || '').split('-')[i] || '')
+  const setMixNote = (i, v) => setForm(f => {
+    const n = Array.isArray(f.mixNotes) ? [...f.mixNotes] : ['', '', '']
+    while (n.length < 3) n.push('')
+    n[i] = v
+    return { ...f, mixNotes: n }
+  })
+  const mixNote = (i) => (Array.isArray(form.mixNotes) ? (form.mixNotes[i] || '') : '')
 
   const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
@@ -1031,6 +1039,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
     mixCode: s.mixCode || '',
     specialNote: s.specialNote || '',
+    mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
     cementType: s.cementType || '',
     volume: (s.volume ?? '') === '' ? '' : String(s.volume),
     volumeUncertain: !!s.volumeUncertain,
@@ -1164,7 +1173,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
                 <div>
                   <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} />
+                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} big />
                 </div>
                 <div className="inline" style={{ justifyContent: 'flex-end' }}>
                   <input className="num" type="number" min="0" inputMode="numeric" value={form.truckCount} onChange={set('truckCount')} />
@@ -1174,16 +1183,22 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
                   <div className="cell" style={{ flex: '0 0 59%' }}>
-                    <div className="haigou-head">
-                      <div className="lbl" style={redIf('mixCode')}>配 合</div>
-                      <input className="f tokki" type="text" placeholder="特記事項" value={form.specialNote} onChange={set('specialNote')} />
-                    </div>
+                    <div className="lbl" style={redIf('mixCode')}>配 合</div>
                     <div className="haigou3" style={redIf('mixCode')}>
-                      <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(0)} onChange={e => setMix(0, e.target.value)} />
-                      <span>-</span>
-                      <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(1)} onChange={e => setMix(1, e.target.value)} />
-                      <span>-</span>
-                      <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(2)} onChange={e => setMix(2, e.target.value)} />
+                      <div className="hgcol">
+                        <input className="hgnote" placeholder="特記" value={mixNote(0)} onChange={e => setMixNote(0, e.target.value)} />
+                        <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(0)} onChange={e => setMix(0, e.target.value)} />
+                      </div>
+                      <span className="hgsep">-</span>
+                      <div className="hgcol">
+                        <input className="hgnote" placeholder="特記" value={mixNote(1)} onChange={e => setMixNote(1, e.target.value)} />
+                        <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(1)} onChange={e => setMix(1, e.target.value)} />
+                      </div>
+                      <span className="hgsep">-</span>
+                      <div className="hgcol">
+                        <input className="hgnote" placeholder="特記" value={mixNote(2)} onChange={e => setMixNote(2, e.target.value)} />
+                        <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(2)} onChange={e => setMix(2, e.target.value)} />
+                      </div>
                     </div>
                   </div>
                   <div className="cell" style={{ flex: 1 }}>
@@ -1505,7 +1520,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
                 <td>{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'mixCode', '', { center: true, big: true })}{cell(s, 'specialNote', '特記事項', { center: true, tokki: true })}</td>
+                <td>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</td>
                 <td>{cell(s, 'volume', '', { center: true })}</td>
                 <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
                 <td>{cellMulti(s, 'times', '', { center: true, big: true })}</td>
@@ -1541,13 +1556,254 @@ function SchedulePage({ onEditShipment, isPopup }) {
 }
 
 // ============================================================
+// 集計・レポート系ページ
+// ============================================================
+const WD = ['日', '月', '火', '水', '木', '金', '土']
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const mondayOf = (dateStr) => { const d = new Date(dateStr); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return d }
+const firstTimeOf = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
+const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
+
+function useShipments() {
+  const [all, setAll] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { api.get('/api/shipments').then(setAll).catch(e => console.error(e)).finally(() => setLoading(false)) }, [])
+  return { all, loading }
+}
+
+const RPT = {
+  wrap: { height: '100%', overflow: 'auto', padding: 18 },
+  head: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 },
+  date: { padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 14 },
+  table: { borderCollapse: 'collapse', width: '100%', fontSize: 13 },
+  th: { border: '1px solid #cfd6e0', background: '#f4f6f9', padding: '5px 8px', fontWeight: 700, whiteSpace: 'nowrap' },
+  td: { border: '1px solid #e3e8ef', padding: '5px 8px' },
+}
+
+function DashboardPage() {
+  const { all, loading } = useShipments()
+  const today = new Date().toISOString().slice(0, 10)
+  const ms = mondayOf(today)
+  const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return ymd(d) })
+  const todays = all.filter(s => s.date === today)
+  const weeks = all.filter(s => weekDates.includes(s.date))
+  const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0).toFixed(2)
+  const card = (label, value, sub) => (
+    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '16px 18px', minWidth: 150 }}>
+      <div style={{ fontSize: 12, color: '#6b7a8d' }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: '#0f3060' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#9aa7b5' }}>{sub}</div>}
+    </div>
+  )
+  return (
+    <div style={RPT.wrap}>
+      <h2 style={{ margin: '0 0 16px', color: '#1a2332' }}>📊 ダッシュボード</h2>
+      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div> : (
+        <>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
+            {card('今日の出荷', `${todays.length} 件`, today)}
+            {card('今日の合計', `${vol(todays)} m³`)}
+            {card('今週の出荷', `${weeks.length} 件`, `${weekDates[0]}〜${weekDates[6]}`)}
+            {card('今週の合計', `${vol(weeks)} m³`)}
+            {card('登録総数', `${all.length} 件`)}
+          </div>
+          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ fontSize: 14, color: '#3a4a5c' }}>今日の車種別</h3>
+              {todays.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>なし</div>
+                : Object.entries(todays.reduce((m, s) => { const k = s.vehicleType || '未設定'; m[k] = (m[k] || 0) + 1; return m }, {})).map(([k, v]) => <div key={k} style={{ fontSize: 13 }}>{k}: {v}件</div>)}
+            </div>
+            <div>
+              <h3 style={{ fontSize: 14, color: '#3a4a5c' }}>今日の担当別</h3>
+              {(() => {
+                const m = {}; todays.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => m[n] = (m[n] || 0) + 1) })
+                const e = Object.entries(m)
+                return e.length ? e.map(([k, v]) => <div key={k} style={{ fontSize: 13 }}>{k}: {v}件</div>) : <div style={{ fontSize: 12, color: '#9aa7b5' }}>なし</div>
+              })()}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function WeeklySchedulePage() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const { all, loading } = useShipments()
+  const ms = mondayOf(date)
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
+  const todayStr = new Date().toISOString().slice(0, 10)
+  return (
+    <div style={RPT.wrap}>
+      <div style={RPT.head}>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>🗓️ 週間出荷予定表</h2>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{ymd(days[0])} 〜 {ymd(days[6])}</span>
+      </div>
+      {loading ? <div>読み込み中...</div> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, minWidth: 900 }}>
+          {days.map(d => {
+            const ds = ymd(d), wd = WD[d.getDay()]
+            const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+            return (
+              <div key={ds} style={{ border: '1px solid #dde3ed', borderRadius: 8, minHeight: 220, background: ds === todayStr ? '#eef5ff' : '#fff' }}>
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', fontWeight: 700, fontSize: 13, textAlign: 'center', color: wd === '日' ? '#c0392b' : wd === '土' ? '#1b4ea8' : '#1a2332' }}>{d.getMonth() + 1}/{d.getDate()}（{wd}）</div>
+                <div style={{ padding: 6 }}>
+                  {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
+                    : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? ` /${s.volume}m³` : ''}</span></div>)}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ShipReportPage() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const { all, loading } = useShipments()
+  const rows = all.filter(s => s.date === date).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+  const totalVol = rows.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
+  return (
+    <div style={RPT.wrap}>
+      <div style={RPT.head}>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>📑 出荷日報</h2>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{(() => { const d = new Date(date); return isNaN(d) ? '' : WD[d.getDay()] })()}）</span>
+      </div>
+      {loading ? <div>読み込み中...</div> : rows.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日の出荷はありません</div> : (
+        <table style={RPT.table}>
+          <thead><tr>{['時間', '業者名', '商社', '現場名', '車種', '配合', '量', '担当'].map(h => <th key={h} style={RPT.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {rows.map(s => (
+              <tr key={s.id}>
+                <td style={RPT.td}>{firstTimeOf(s)}</td>
+                <td style={RPT.td}>{s.companyName}</td>
+                <td style={RPT.td}>{s.tradingCompany || ''}</td>
+                <td style={RPT.td}>{s.siteName || ''}</td>
+                <td style={RPT.td}>{s.vehicleType || ''}</td>
+                <td style={RPT.td}>{s.mixCode || ''}</td>
+                <td style={RPT.td}>{s.volume ? `${s.volume}m³` : ''}{s.volumeUncertain ? '?' : ''}</td>
+                <td style={RPT.td}>{driversOf(s).join('・')}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr><td style={{ ...RPT.td, textAlign: 'right', fontWeight: 700 }} colSpan={6}>合計</td><td style={{ ...RPT.td, fontWeight: 700 }}>{totalVol.toFixed(2)}m³</td><td style={{ ...RPT.td, fontWeight: 700 }}>{rows.length}件</td></tr></tfoot>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function DriverReportPage() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const { all, loading } = useShipments()
+  const rows = all.filter(s => s.date === date)
+  const groups = {}
+  rows.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => { (groups[n] = groups[n] || []).push(s) }) })
+  const names = Object.keys(groups).sort()
+  return (
+    <div style={RPT.wrap}>
+      <div style={RPT.head}>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>🚚 運行日報（担当別）</h2>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+      </div>
+      {loading ? <div>読み込み中...</div> : names.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日の出荷はありません</div> : (
+        names.map(n => {
+          const list = groups[n].sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+          const vol = list.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
+          return (
+            <div key={n} style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, color: '#0f3060', marginBottom: 6 }}>👤 {n}（{list.length}件 / {vol.toFixed(2)}m³）</div>
+              <table style={RPT.table}>
+                <thead><tr>{['時間', '業者名', '現場名', '車種', '配合', '量'].map(h => <th key={h} style={RPT.th}>{h}</th>)}</tr></thead>
+                <tbody>{list.map(s => (
+                  <tr key={s.id}>
+                    <td style={RPT.td}>{firstTimeOf(s)}</td><td style={RPT.td}>{s.companyName}</td><td style={RPT.td}>{s.siteName || ''}</td>
+                    <td style={RPT.td}>{s.vehicleType || ''}</td><td style={RPT.td}>{s.mixCode || ''}</td><td style={RPT.td}>{s.volume ? `${s.volume}m³` : ''}{s.volumeUncertain ? '?' : ''}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+function AssignPage() {
+  return (
+    <div style={RPT.wrap}>
+      <h2 style={{ margin: '0 0 12px', color: '#1a2332' }}>🔁 配送臨時割り当て</h2>
+      <div style={{ color: '#6b7a8d', maxWidth: 580, lineHeight: 1.9, fontSize: 14 }}>
+        この画面の仕様を確認させてください。想定している操作・項目（例：当日の出荷一覧に対して担当ドライバーを素早く割り当て／変更する、急な代替ドライバーを割り当てる、車両の臨時手配など）を教えていただければ、それに合わせて実装します。
+      </div>
+    </div>
+  )
+}
+
+function SettingsPage() {
+  const [token, setToken] = useState(() => localStorage.getItem('lineToken') || '')
+  const [users, setUsers] = useState(() => { try { return JSON.parse(localStorage.getItem('lineUsers') || '[]') } catch { return [] } })
+  const [nu, setNu] = useState({ name: '', userId: '' })
+  const saveToken = () => { localStorage.setItem('lineToken', token); alert('LINEトークンを保存しました（この端末のみ）') }
+  const addUser = () => {
+    if (!nu.name.trim()) { alert('名前を入力してください'); return }
+    const next = [...users, { name: nu.name.trim(), userId: nu.userId.trim() }]
+    setUsers(next); localStorage.setItem('lineUsers', JSON.stringify(next)); setNu({ name: '', userId: '' })
+  }
+  const delUser = (i) => { const next = users.filter((_, x) => x !== i); setUsers(next); localStorage.setItem('lineUsers', JSON.stringify(next)) }
+  const inp = { padding: '8px 10px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 14, width: '100%', boxSizing: 'border-box' }
+  const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 560, marginBottom: 18 }
+  return (
+    <div style={RPT.wrap}>
+      <h2 style={{ margin: '0 0 16px', color: '#1a2332' }}>⚙️ 設定</h2>
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>LINE API設定</h3>
+        <label style={{ fontSize: 12, color: '#6b7a8d' }}>チャネルアクセストークン</label>
+        <input style={{ ...inp, marginTop: 4 }} value={token} onChange={e => setToken(e.target.value)} placeholder="LINE Messaging API のトークン" />
+        <button onClick={saveToken} style={{ ...S.saveBtn, marginTop: 10 }}>保存</button>
+        <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8 }}>※現在この端末（ブラウザ）に保存します。実際の自動送信にはサーバー側のLINE連携設定が必要です。</div>
+      </div>
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>LINEユーザー追加</h3>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input style={{ ...inp, flex: '1 1 160px' }} value={nu.name} onChange={e => setNu(n => ({ ...n, name: e.target.value }))} placeholder="表示名（例：中村）" />
+          <input style={{ ...inp, flex: '1 1 220px' }} value={nu.userId} onChange={e => setNu(n => ({ ...n, userId: e.target.value }))} placeholder="LINEユーザーID（U...）" />
+          <button onClick={addUser} style={S.addBtn}>＋ 追加</button>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          {users.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>登録なし</div>
+            : users.map((u, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
+                <span style={{ fontSize: 13 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d' }}>{u.userId || '（ID未設定）'}</span></span>
+                <button onClick={() => delUser(i)} style={S.delBtn}>削除</button>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
 // レイアウト
 // ============================================================
 const TABS = [
-  { id: 'customers', label: '顧客管理', icon: '👥' },
-  { id: 'employees', label: '従業員管理', icon: '👷' },
+  { id: 'dashboard', label: 'ダッシュボード', icon: '📊' },
   { id: 'shipments', label: '出荷登録', icon: '🚛' },
   { id: 'schedule', label: '出荷予定表', icon: '📋' },
+  { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
+  { id: 'assign', label: '配送臨時割り当て', icon: '🔁' },
+  { id: 'shipreport', label: '出荷日報', icon: '📑' },
+  { id: 'driverreport', label: '運行日報', icon: '🚚' },
+  { id: 'settings', label: '設定', icon: '⚙️' },
+  { id: 'customers', label: '顧客管理', icon: '👥' },
+  { id: 'employees', label: '従業員管理', icon: '👷' },
 ]
 
 function Layout({ children, activeTab, onTabChange }) {
@@ -1657,7 +1913,7 @@ function AppInner() {
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'customers'))
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
 
@@ -1676,10 +1932,16 @@ function AppInner() {
 
   if (!user) return <LoginPage />
 
-  const page = activeTab === 'customers' ? <CustomersPage />
+  const page = activeTab === 'dashboard' ? <DashboardPage />
+    : activeTab === 'customers' ? <CustomersPage />
     : activeTab === 'employees' ? <EmployeesPage />
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
+    : activeTab === 'weekly' ? <WeeklySchedulePage />
+    : activeTab === 'assign' ? <AssignPage />
+    : activeTab === 'shipreport' ? <ShipReportPage />
+    : activeTab === 'driverreport' ? <DriverReportPage />
+    : activeTab === 'settings' ? <SettingsPage />
     : null
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示

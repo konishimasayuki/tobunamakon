@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, drivers, notes, driverMessages } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, mixNotes, cementType, volume, volumeUncertain, placements, orderContact, siteContact, drivers, notes, driverMessages } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const newId = uuidv4()
@@ -47,6 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         truckCount: truckCount || '',
         mixCode: mixCode || '',
         specialNote: specialNote || '',
+        mixNotes: Array.isArray(mixNotes) ? mixNotes : ['', '', ''],
         cementType: cementType || '',
         volume: volume || '',
         volumeUncertain: !!volumeUncertain,
@@ -70,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, drivers, notes, driverMessages, changedFields } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, mixNotes, cementType, volume, volumeUncertain, placements, orderContact, siteContact, drivers, notes, driverMessages, changedFields } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const existing = await redis.hgetall(`shipment:${id}`)
@@ -88,6 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         truckCount: truckCount || '',
         mixCode: mixCode || '',
         specialNote: specialNote || '',
+        mixNotes: Array.isArray(mixNotes) ? mixNotes : ['', '', ''],
         cementType: cementType || '',
         volume: volume || '',
         volumeUncertain: !!volumeUncertain,
