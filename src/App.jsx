@@ -1747,44 +1747,71 @@ function AssignPage() {
 }
 
 function SettingsPage() {
-  const [token, setToken] = useState(() => localStorage.getItem('lineToken') || '')
-  const [users, setUsers] = useState(() => { try { return JSON.parse(localStorage.getItem('lineUsers') || '[]') } catch { return [] } })
-  const [nu, setNu] = useState({ name: '', userId: '' })
-  const saveToken = () => { localStorage.setItem('lineToken', token); alert('LINEトークンを保存しました（この端末のみ）') }
-  const addUser = () => {
-    if (!nu.name.trim()) { alert('名前を入力してください'); return }
-    const next = [...users, { name: nu.name.trim(), userId: nu.userId.trim() }]
-    setUsers(next); localStorage.setItem('lineUsers', JSON.stringify(next)); setNu({ name: '', userId: '' })
+  const [token, setToken] = useState('')
+  const [secret, setSecret] = useState('')
+  const [data, setData] = useState({ users: [], hasToken: false, hasSecret: false })
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const webhookUrl = `${window.location.origin}/api/line`
+
+  const saveSettings = async () => {
+    setSaving(true)
+    try {
+      await api.put('/api/line', { channelAccessToken: token, channelSecret: secret })
+      alert('保存しました')
+      setToken(''); setSecret(''); load()
+    } catch (e) { alert('エラー: ' + e.message) } finally { setSaving(false) }
   }
-  const delUser = (i) => { const next = users.filter((_, x) => x !== i); setUsers(next); localStorage.setItem('lineUsers', JSON.stringify(next)) }
+  const delUser = async (userId) => {
+    if (!window.confirm('このLINEユーザーを削除しますか？')) return
+    try { await api.del(`/api/line?userId=${encodeURIComponent(userId)}`); load() } catch (e) { alert(e.message) }
+  }
+  const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
+
   const inp = { padding: '8px 10px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 14, width: '100%', boxSizing: 'border-box' }
-  const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 560, marginBottom: 18 }
+  const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 620, marginBottom: 18 }
+
   return (
     <div style={RPT.wrap}>
       <h2 style={{ margin: '0 0 16px', color: '#1a2332' }}>⚙️ 設定</h2>
+
       <div style={box}>
         <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>LINE API設定</h3>
-        <label style={{ fontSize: 12, color: '#6b7a8d' }}>チャネルアクセストークン</label>
-        <input style={{ ...inp, marginTop: 4 }} value={token} onChange={e => setToken(e.target.value)} placeholder="LINE Messaging API のトークン" />
-        <button onClick={saveToken} style={{ ...S.saveBtn, marginTop: 10 }}>保存</button>
-        <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8 }}>※現在この端末（ブラウザ）に保存します。実際の自動送信にはサーバー側のLINE連携設定が必要です。</div>
+        <label style={{ fontSize: 12, color: '#6b7a8d' }}>チャネルアクセストークン {data.hasToken && <span style={{ color: '#1a8f5a' }}>（設定済み）</span>}</label>
+        <input style={{ ...inp, marginTop: 4 }} value={token} onChange={e => setToken(e.target.value)} placeholder={data.hasToken ? '変更する場合のみ入力' : 'LINE Messaging API のチャネルアクセストークン'} />
+        <label style={{ fontSize: 12, color: '#6b7a8d', display: 'block', marginTop: 10 }}>チャネルシークレット {data.hasSecret && <span style={{ color: '#1a8f5a' }}>（設定済み）</span>}</label>
+        <input style={{ ...inp, marginTop: 4 }} value={secret} onChange={e => setSecret(e.target.value)} placeholder={data.hasSecret ? '変更する場合のみ入力' : 'チャネルシークレット'} />
+        <button onClick={saveSettings} disabled={saving} style={{ ...S.saveBtn, marginTop: 12, opacity: saving ? 0.7 : 1 }}>{saving ? '保存中...' : '保存'}</button>
       </div>
+
       <div style={box}>
-        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>LINEユーザー追加</h3>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input style={{ ...inp, flex: '1 1 160px' }} value={nu.name} onChange={e => setNu(n => ({ ...n, name: e.target.value }))} placeholder="表示名（例：中村）" />
-          <input style={{ ...inp, flex: '1 1 220px' }} value={nu.userId} onChange={e => setNu(n => ({ ...n, userId: e.target.value }))} placeholder="LINEユーザーID（U...）" />
-          <button onClick={addUser} style={S.addBtn}>＋ 追加</button>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>Webhook URL</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 8 }}>このURLを LINE Developers の Messaging API「Webhook URL」に登録し、Webhookを「オン」にしてください。</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <code style={{ background: '#f4f6f9', border: '1px solid #dde3ed', borderRadius: 6, padding: '6px 10px', fontSize: 13 }}>{webhookUrl}</code>
+          <button onClick={copy} style={S.editBtn}>コピー</button>
         </div>
-        <div style={{ marginTop: 12 }}>
-          {users.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>登録なし</div>
-            : users.map((u, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
-                <span style={{ fontSize: 13 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d' }}>{u.userId || '（ID未設定）'}</span></span>
-                <button onClick={() => delUser(i)} style={S.delBtn}>削除</button>
+      </div>
+
+      <div style={box}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>登録済みLINEユーザー（友だち追加時に自動登録）</h3>
+          <button onClick={load} style={S.editBtn}>🔄 更新</button>
+        </div>
+        {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+          : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
+            : data.users.map((u) => (
+              <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
+                <span style={{ fontSize: 13 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11 }}>{u.userId}</span></span>
+                <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
               </div>
             ))}
-        </div>
       </div>
     </div>
   )
