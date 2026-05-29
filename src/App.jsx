@@ -1341,16 +1341,23 @@ function SchedulePage({ onEditShipment }) {
 
   const getVal = (s, f) => {
     switch (f) {
-      case 'drivers': return (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])).join('・')
-      case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join(' / ')
+      case 'drivers': {
+        const names = Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
+        const lines = []
+        for (let i = 0; i < names.length; i += 2) lines.push(names.slice(i, i + 2).join('・'))
+        return lines.join('\n')   // 2人ごとに改行
+      }
+      case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
+      case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '?' : '')
       default: return s[f] == null ? '' : String(s[f])
     }
   }
   const applyField = (s, f, raw) => {
-    if (f === 'drivers') return { ...s, drivers: raw.split(/[・,、/]/).map(x => x.trim()).filter(Boolean).map(n => ({ id: '', name: n })) }
-    if (f === 'times') return { ...s, times: raw.split('/').map(x => x.trim()).filter(Boolean) }
+    if (f === 'drivers') return { ...s, drivers: raw.split(/[・,、/\n]/).map(x => x.trim()).filter(Boolean).map(n => ({ id: '', name: n })) }
+    if (f === 'times') return { ...s, times: raw.split(/[/\n]/).map(x => x.trim()).filter(Boolean) }
     if (f === 'notes') return { ...s, notes: raw.split('/').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })) }
+    if (f === 'volume') { const uncertain = /[?？]/.test(raw); return { ...s, volume: raw.replace(/[?？]/g, '').trim(), volumeUncertain: uncertain } }
     return { ...s, [f]: raw }
   }
   const saveField = async (s, f, raw) => {
@@ -1370,6 +1377,8 @@ function SchedulePage({ onEditShipment }) {
     const cls = 'sc-in'
       + (isChanged(s, f) ? ' changed' : '')
       + (opts.center ? ' center' : '')
+      + (opts.big ? ' big' : '')
+      + (opts.tokki ? ' tokki' : '')
       + (imp ? ' imp' : (opts.plain ? ' plain' : ''))
     return (
       <input
@@ -1382,9 +1391,44 @@ function SchedulePage({ onEditShipment }) {
     )
   }
 
+  const cellMulti = (s, f, ph, opts = {}) => {
+    const v = getVal(s, f)
+    const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
+    const cls = 'sc-in sc-ta'
+      + (isChanged(s, f) ? ' changed' : '')
+      + (opts.center ? ' center' : '')
+      + (opts.big ? ' big' : '')
+    return (
+      <textarea
+        key={f + (isChanged(s, f) ? '_c' : '') + '_r' + rows}
+        className={cls}
+        rows={rows}
+        defaultValue={v}
+        placeholder={ph || ''}
+        onBlur={e => saveField(s, f, e.target.value)}
+      />
+    )
+  }
+
   const openEditWindow = (s) => {
     const url = `${window.location.pathname}?editShipment=${encodeURIComponent(s.id)}&popup=1`
-    window.open(url, 'shipmentEdit_' + s.id, 'width=900,height=950,scrollbars=yes,resizable=yes')
+    const w = window.open(url, '_blank', 'width=900,height=950,scrollbars=yes,resizable=yes')
+    if (!w) {
+      alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可するか、下のリンクから開いてください。')
+      window.open(url, '_blank')
+    }
+  }
+
+  const resetReds = async () => {
+    const targets = all.filter(s => Array.isArray(s.changedFields) && s.changedFields.length)
+    if (targets.length === 0) { alert('赤（変更）表示はありません'); return }
+    if (!window.confirm(`変更（赤）表示を${targets.length}件リセットしますか？（デバッグ用）`)) return
+    for (const s of targets) {
+      try {
+        const res = await api.put(`/api/shipments/${s.id}`, { ...s, changedFields: [] })
+        setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      } catch (e) { console.error(e) }
+    }
   }
 
   const containerStyle = popup
@@ -1430,12 +1474,12 @@ function SchedulePage({ onEditShipment }) {
             {rows.map(s => (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
-                <td>{cell(s, 'siteName')}</td>
-                <td>{cell(s, 'vehicleType', '', { center: true })}</td>
-                <td>{cell(s, 'mixCode', '', { center: true })}</td>
+                <td>{cell(s, 'siteName', '', { big: true })}</td>
+                <td>{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
+                <td>{cell(s, 'mixCode', '', { center: true, big: true })}{cell(s, 'specialNote', '特記事項', { center: true, tokki: true })}</td>
                 <td>{cell(s, 'volume', '', { center: true })}</td>
-                <td>{cell(s, 'drivers')}</td>
-                <td>{cell(s, 'times', '', { center: true })}</td>
+                <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
+                <td>{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 <td style={{ textAlign: 'center' }}>
                   <button type="button" onClick={() => openEditWindow(s)}
@@ -1454,6 +1498,12 @@ function SchedulePage({ onEditShipment }) {
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
         )}
+        <div style={{ marginTop: 16, textAlign: 'right' }}>
+          <button type="button" onClick={resetReds}
+            style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
+            🧹 変更(赤)をリセット（デバッグ）
+          </button>
+        </div>
       </div>
     </div>
   )
