@@ -96,7 +96,7 @@ function exportCSV(customers) {
   const rows = [
     CSV_HEADERS.join(','),
     ...customers.map(c =>
-      CSV_KEYS.map(k => `"${(c[k] || '').replace(/"/g, '""')}"`).join(',')
+      CSV_KEYS.map(k => `"${String(c[k] ?? '').replace(/"/g, '""')}"`).join(',')
     ),
   ]
   const bom  = '\uFEFF'
@@ -105,8 +105,10 @@ function exportCSV(customers) {
   const a    = document.createElement('a')
   a.href     = url
   a.download = `顧客一覧_${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function parseCSV(text) {
@@ -676,7 +678,10 @@ function CustomersPage() {
   const cols = [
     { w: null, label: 'コード' },
     { w: null, label: '会社名' },
+    { w: null, label: '会社名（カナ）' },
     { w: null, label: '電話番号' },
+    { w: null, label: '担当者名' },
+    { w: null, label: '住所' },
     { w: null, label: '' },
   ]
 
