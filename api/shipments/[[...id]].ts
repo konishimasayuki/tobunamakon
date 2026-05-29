@@ -7,30 +7,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = requireAuth(req)
   if (!user) return res.status(401).json({ error: '認証が必要です' })
 
-  if (req.method === 'GET') {
+  const idParam = req.query.id
+  const id = Array.isArray(idParam) ? idParam[0] : idParam
+  const hasId = !!id
+
+  // 一覧取得
+  if (req.method === 'GET' && !hasId) {
     try {
       const ids = await redis.smembers('shipments')
       if (!ids || ids.length === 0) return res.status(200).json([])
       const shipments = []
-      for (const id of ids) {
-        const s = await redis.hgetall(`shipment:${id}`)
+      for (const sid of ids) {
+        const s = await redis.hgetall(`shipment:${sid}`)
         if (s && Object.keys(s).length > 0) shipments.push(s)
       }
-      shipments.sort((a, b) => (a.date + (a.time||'')).localeCompare(b.date + (b.time||'')))
+      shipments.sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
       return res.status(200).json(shipments)
     } catch (e) {
-      return res.status(500).json({ error: 'サーバーエラーが発生しました' })
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
     }
   }
 
-  if (req.method === 'POST') {
+  // 新規作成
+  if (req.method === 'POST' && !hasId) {
     const { date, time, companyId, companyName, siteName, vehicleType, driverId, driverName, mixCode, nbType, volume, equipment, note, orderContact, siteContact } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
-      const id = uuidv4()
+      const newId = uuidv4()
       const now = new Date().toISOString()
       const shipment = {
-        id, date, time: time || '', companyId: companyId || '', companyName,
+        id: newId, date, time: time || '', companyId: companyId || '', companyName,
         siteName: siteName || '', vehicleType: vehicleType || '4t',
         driverId: driverId || '', driverName: driverName || '',
         mixCode: mixCode || '', nbType: nbType || 'N',
@@ -38,11 +45,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         note: note || '', orderContact: orderContact || '',
         siteContact: siteContact || '', createdAt: now, updatedAt: now,
       }
-      await redis.hset(`shipment:${id}`, shipment)
-      await redis.sadd('shipments', id)
+      await redis.hset(`shipment:${newId}`, shipment)
+      await redis.sadd('shipments', newId)
       return res.status(201).json(shipment)
     } catch (e) {
-      return res.status(500).json({ error: 'サーバーエラーが発生しました' })
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
+
+  // 削除
+  if (req.method === 'DELETE' && hasId) {
+    try {
+      await redis.del(`shipment:${id}`)
+      await redis.srem('shipments', id)
+      return res.status(200).json({ message: '削除しました' })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
     }
   }
 

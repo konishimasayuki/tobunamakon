@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { redis } from '../_redis'
 import { comparePassword, signToken } from '../_auth'
+import type { User } from '../_auth'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -11,8 +12,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const user = await redis.hgetall(`user:${username}`) as any
-    if (!user || !user.id) return res.status(401).json({ error: 'ユーザー名またはパスワードが違います' })
+    const user = await redis.hgetall<User>(`user:${username}`)
+    if (!user) return res.status(401).json({ error: 'ユーザー名またはパスワードが違います' })
 
     const valid = await comparePassword(password, user.passwordHash)
     if (!valid) return res.status(401).json({ error: 'ユーザー名またはパスワードが違います' })
@@ -24,6 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role },
     })
   } catch (e) {
+    console.error(e)
     return res.status(500).json({ error: 'サーバーエラーが発生しました' })
   }
 }

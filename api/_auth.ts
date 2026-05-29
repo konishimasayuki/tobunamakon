@@ -4,10 +4,20 @@ import type { VercelRequest } from '@vercel/node'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret'
 
-interface UserPayload {
+export interface UserPayload {
   id: string
   username: string
   role: 'admin' | 'manager' | 'staff'
+}
+
+export interface User {
+  id: string
+  username: string
+  displayName: string
+  passwordHash: string
+  role: 'admin' | 'manager' | 'staff'
+  createdAt: string
+  [key: string]: unknown
 }
 
 export function signToken(payload: UserPayload): string {
