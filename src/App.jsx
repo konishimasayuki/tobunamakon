@@ -845,6 +845,100 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
   )
 }
 
+// ===== Google マップ（現場住所） =====
+const GMAPS_KEY = import.meta.env.VITE_GMAPS_API_KEY || ''
+let _gmapsPromise = null
+function loadGoogleMaps() {
+  if (typeof window !== 'undefined' && window.google && window.google.maps) return Promise.resolve(window.google.maps)
+  if (_gmapsPromise) return _gmapsPromise
+  _gmapsPromise = new Promise((resolve, reject) => {
+    if (!GMAPS_KEY) { reject(new Error('NO_KEY')); return }
+    window.__gmapsReady = () => resolve(window.google.maps)
+    const s = document.createElement('script')
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&callback=__gmapsReady&language=ja&region=JP&loading=async`
+    s.async = true
+    s.onerror = () => reject(new Error('LOAD_FAILED'))
+    document.head.appendChild(s)
+  })
+  return _gmapsPromise
+}
+
+function cleanupJpAddress(s) {
+  return String(s || '').replace(/^日本、?\s*/, '').replace(/〒?\s*\d{3}-?\d{4}\s*/, '').trim()
+}
+
+function SiteMap({ address, onAddressChange }) {
+  const mapEl = useRef(null)
+  const mapRef = useRef(null)
+  const markerRef = useRef(null)
+  const geocoderRef = useRef(null)
+  const selfSetRef = useRef('')   // 地図側で設定した住所値（ループ防止）
+  const [status, setStatus] = useState('loading')
+
+  const doGeocode = (addr) => {
+    const g = geocoderRef.current
+    if (!g || !mapRef.current) return
+    g.geocode({ address: addr }, (res, st) => {
+      if (st === 'OK' && res[0]) {
+        const loc = res[0].geometry.location
+        mapRef.current.setCenter(loc)
+        mapRef.current.setZoom(16)
+        markerRef.current.setPosition(loc)
+        setStatus('')
+      } else {
+        setStatus('notfound')
+      }
+    })
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    loadGoogleMaps().then(maps => {
+      if (cancelled || !mapEl.current) return
+      geocoderRef.current = new maps.Geocoder()
+      const center = { lat: 35.681236, lng: 139.767125 }
+      mapRef.current = new maps.Map(mapEl.current, {
+        center, zoom: 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+      })
+      markerRef.current = new maps.Marker({ map: mapRef.current, position: center, draggable: true })
+      markerRef.current.addListener('dragend', () => {
+        const pos = markerRef.current.getPosition()
+        geocoderRef.current.geocode({ location: pos }, (res, st) => {
+          if (st === 'OK' && res[0]) {
+            const addr = cleanupJpAddress(res[0].formatted_address)
+            selfSetRef.current = addr
+            onAddressChange(addr)
+          }
+        })
+      })
+      setStatus('')
+      if (address && address.trim()) doGeocode(address)
+    }).catch(err => {
+      if (!cancelled) setStatus(err.message === 'NO_KEY' ? 'nokey' : 'error')
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!address || !address.trim()) return
+    if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
+    if (!geocoderRef.current) return
+    const t = setTimeout(() => doGeocode(address), 800)
+    return () => clearTimeout(t)
+  }, [address])
+
+  return (
+    <div>
+      <div ref={mapEl} style={{ width: '100%', height: 320, borderRadius: 8, background: '#e8eaed' }} />
+      {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
+      {status === 'notfound' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>住所が見つかりませんでした。ピンを動かして調整してください。</div>}
+      {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
+      {status === 'error' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図の読み込みに失敗しました</div>}
+      <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>📍 ピンをドラッグすると現場住所が更新されます</div>
+    </div>
+  )
+}
+
 function ShipmentsPage() {
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
@@ -959,7 +1053,8 @@ function ShipmentsPage() {
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div className="sheet">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', justifyContent: 'center' }}>
+          <div className="sheet" style={{ flex: '1 1 460px', minWidth: 0, margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
@@ -1067,6 +1162,12 @@ function ShipmentsPage() {
                 <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={2} height={80} addLabel="＋ 段落を追加" />
               </div>
             </div>
+          </div>
+          {form.siteAddress && form.siteAddress.trim() && (
+            <div style={{ flex: '1 1 340px', minWidth: 280 }}>
+              <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
+            </div>
+          )}
           </div>
 
           {editing && <div style={{ maxWidth: 720, margin: '10px auto 0', padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
