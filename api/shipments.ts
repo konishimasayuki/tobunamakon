@@ -66,6 +66,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // 更新
+  if (req.method === 'PUT' && hasId) {
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, notes, driverMessages } = req.body
+    if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
+    try {
+      const existing = await redis.hgetall(`shipment:${id}`)
+      if (!existing || Object.keys(existing).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
+      const updated = {
+        ...existing,
+        id,
+        date,
+        companyId: companyId || '', companyName,
+        tradingCompany: tradingCompany || '',
+        times: Array.isArray(times) ? times : [],
+        siteName: siteName || '',
+        siteAddress: siteAddress || '',
+        vehicleType: vehicleType || '',
+        truckCount: truckCount || '',
+        mixCode: mixCode || '',
+        specialNote: specialNote || '',
+        cementType: cementType || '',
+        volume: volume || '',
+        volumeUncertain: !!volumeUncertain,
+        placements: Array.isArray(placements) ? placements : [],
+        orderContact: orderContact || '',
+        siteContact: siteContact || '',
+        notes: Array.isArray(notes) ? notes : [],
+        driverMessages: Array.isArray(driverMessages) ? driverMessages : [],
+        updatedAt: new Date().toISOString(),
+      }
+      await redis.hset(`shipment:${id}`, updated)
+      return res.status(200).json(updated)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
+
   // 削除
   if (req.method === 'DELETE' && hasId) {
     try {

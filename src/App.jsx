@@ -855,6 +855,8 @@ function ShipmentsPage() {
   const [error, setError]           = useState('')
   const [search, setSearch]         = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [editing, setEditing]       = useState(null)
+  const topRef = useRef(null)
 
   const load = useCallback(async () => {
     try {
@@ -881,6 +883,35 @@ function ShipmentsPage() {
   const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
   const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
 
+  const toForm = (s) => ({
+    date: s.date || new Date().toISOString().slice(0, 10),
+    companyId: s.companyId || '',
+    companyName: s.companyName || '',
+    tradingCompany: s.tradingCompany || '',
+    times: (Array.isArray(s.times) && s.times.length ? s.times : ['']).map(t => ({ text: String(t ?? ''), important: false })),
+    siteName: s.siteName || '',
+    siteAddress: s.siteAddress || '',
+    vehicleType: s.vehicleType || '',
+    truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
+    mixCode: s.mixCode || '',
+    specialNote: s.specialNote || '',
+    cementType: s.cementType || '',
+    volume: (s.volume ?? '') === '' ? '' : String(s.volume),
+    volumeUncertain: !!s.volumeUncertain,
+    placements: Array.isArray(s.placements) ? s.placements : [],
+    orderContact: s.orderContact || '',
+    siteContact: s.siteContact || '',
+    notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
+    driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
+  })
+
+  const startEdit = (s) => {
+    setEditing(s.id)
+    setForm(toForm(s))
+    setError('')
+    requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -892,14 +923,21 @@ function ShipmentsPage() {
         notes: form.notes.filter(n => n.text.trim() !== ''),
         driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
       }
-      const created = await api.post('/api/shipments', payload)
-      setShipments(ss => sortShip([...ss, created]))
-      setForm({ ...emptyShipForm, date: form.date })
+      if (editing) {
+        const updated = await api.put(`/api/shipments/${editing}`, payload)
+        setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
+        setEditing(null)
+        setForm({ ...emptyShipForm })
+      } else {
+        const created = await api.post('/api/shipments', payload)
+        setShipments(ss => sortShip([...ss, created]))
+        setForm({ ...emptyShipForm, date: form.date })
+      }
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
   }
 
-  const handleReset = () => setForm({ ...emptyShipForm })
+  const handleReset = () => { setEditing(null); setForm({ ...emptyShipForm }) }
 
   const handleDelete = async (id) => {
     try {
@@ -917,7 +955,7 @@ function ShipmentsPage() {
   })
 
   return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
+    <div ref={topRef} style={{ height: '100%', overflow: 'auto' }}>
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
@@ -1031,11 +1069,12 @@ function ShipmentsPage() {
             </div>
           </div>
 
+          {editing && <div style={{ maxWidth: 720, margin: '10px auto 0', padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
           {error && <div style={{ ...S.error, maxWidth: 720, margin: '10px auto 0' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, maxWidth: 720, margin: '12px auto 0' }}>
-            <button type="button" style={S.cancelBtn} onClick={handleReset}>リセット</button>
+            <button type="button" style={S.cancelBtn} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
             <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
-              {saving ? '登録中...' : '登録'}
+              {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
             </button>
           </div>
         </form>
@@ -1064,7 +1103,7 @@ function ShipmentsPage() {
               </thead>
               <tbody>
                 {filtered.map(s => (
-                  <tr key={s.id} style={S.tr}>
+                  <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => startEdit(s)}>
                     <td style={S.td}>{s.date}</td>
                     <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
@@ -1077,7 +1116,7 @@ function ShipmentsPage() {
                     <td style={S.td}>{s.volume ? `${s.volume}m³${s.volumeUncertain ? '?' : ''}` : (s.volumeUncertain ? '?' : '—')}</td>
                     <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
-                      <button style={S.delBtn} onClick={() => setDeleteConfirm(s.id)}>削除</button>
+                      <button style={S.delBtn} onClick={(e) => { e.stopPropagation(); setDeleteConfirm(s.id) }}>削除</button>
                     </td>
                   </tr>
                 ))}
