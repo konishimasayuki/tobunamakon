@@ -1754,7 +1754,6 @@ function AssignPage() {
 
 function SettingsPage() {
   const [token, setToken] = useState('')
-  const [secret, setSecret] = useState('')
   const [data, setData] = useState({ users: [], hasToken: false, hasSecret: false })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -1769,9 +1768,9 @@ function SettingsPage() {
   const saveSettings = async () => {
     setSaving(true)
     try {
-      await api.put('/api/line', { channelAccessToken: token, channelSecret: secret })
+      await api.put('/api/line', { channelAccessToken: token })
       alert('保存しました')
-      setToken(''); setSecret(''); load()
+      setToken(''); load()
     } catch (e) { alert('エラー: ' + e.message) } finally { setSaving(false) }
   }
   const delUser = async (userId) => {
@@ -1791,8 +1790,6 @@ function SettingsPage() {
         <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>LINE API設定</h3>
         <label style={{ fontSize: 12, color: '#6b7a8d' }}>チャネルアクセストークン {data.hasToken && <span style={{ color: '#1a8f5a' }}>（設定済み）</span>}</label>
         <input style={{ ...inp, marginTop: 4 }} value={token} onChange={e => setToken(e.target.value)} placeholder={data.hasToken ? '変更する場合のみ入力' : 'LINE Messaging API のチャネルアクセストークン'} />
-        <label style={{ fontSize: 12, color: '#6b7a8d', display: 'block', marginTop: 10 }}>チャネルシークレット {data.hasSecret && <span style={{ color: '#1a8f5a' }}>（設定済み）</span>}</label>
-        <input style={{ ...inp, marginTop: 4 }} value={secret} onChange={e => setSecret(e.target.value)} placeholder={data.hasSecret ? '変更する場合のみ入力' : 'チャネルシークレット'} />
         <button onClick={saveSettings} disabled={saving} style={{ ...S.saveBtn, marginTop: 12, opacity: saving ? 0.7 : 1 }}>{saving ? '保存中...' : '保存'}</button>
       </div>
 
