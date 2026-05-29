@@ -958,7 +958,7 @@ function SiteMap({ address, onAddressChange }) {
   )
 }
 
-function ShipmentsPage() {
+function ShipmentsPage({ editTarget, onEditConsumed }) {
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
   const [customers, setCustomers]   = useState([])
@@ -1038,6 +1038,12 @@ function ShipmentsPage() {
     requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
   }
 
+  // 出荷予定表の「編集」ボタンから渡された伝票を開く
+  useEffect(() => {
+    if (editTarget) { startEdit(editTarget); onEditConsumed && onEditConsumed() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editTarget])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -1081,6 +1087,9 @@ function ShipmentsPage() {
       .some(v => String(v || '').toLowerCase().includes(q))
   })
 
+  // 予定表で変更された項目を赤く表示
+  const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
+
   return (
     <div ref={topRef} style={{ height: '100%', overflow: 'auto' }}>
       {/* 手配伝票フォーム */}
@@ -1095,29 +1104,29 @@ function ShipmentsPage() {
                 <input className="f" type="date" value={form.date} onChange={set('date')} required />
               </div>
               <div className="cell" style={{ flex: '0 0 45%' }}>
-                <div className="lbl">業 者 名</div>
-                <select className="f" value={form.companyId} onChange={handleCompany} required>
+                <div className="lbl" style={redIf('companyName')}>業 者 名</div>
+                <select className="f" style={redIf('companyName')} value={form.companyId} onChange={handleCompany} required>
                   <option value="">選択してください</option>
                   {customers.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
                 </select>
               </div>
               <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl">商 社 名</div>
-                <input className="f" type="text" value={form.tradingCompany} onChange={set('tradingCompany')} />
+                <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
+                <input className="f" style={redIf('tradingCompany')} type="text" value={form.tradingCompany} onChange={set('tradingCompany')} />
               </div>
             </div>
 
             {/* 2段: 時間 / 現場名 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
-                <div className="lbl">時 間</div>
+                <div className="lbl" style={redIf('times')}>時 間</div>
                 <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
-                    <div className="lbl">現 場 名</div>
-                    <input className="f" type="text" value={form.siteName} onChange={set('siteName')} />
+                    <div className="lbl" style={redIf('siteName')}>現 場 名</div>
+                    <input className="f" style={redIf('siteName')} type="text" value={form.siteName} onChange={set('siteName')} />
                   </div>
                 </div>
                 <div className="subrow">
@@ -1133,7 +1142,7 @@ function ShipmentsPage() {
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
                 <div>
-                  <div className="lbl">車 種</div>
+                  <div className="lbl" style={redIf('vehicleType')}>車 種</div>
                   <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} />
                 </div>
                 <div className="inline" style={{ justifyContent: 'flex-end' }}>
@@ -1145,10 +1154,10 @@ function ShipmentsPage() {
                 <div className="subrow">
                   <div className="cell" style={{ flex: '0 0 59%' }}>
                     <div className="haigou-head">
-                      <div className="lbl">配 合</div>
+                      <div className="lbl" style={redIf('mixCode')}>配 合</div>
                       <input className="f tokki" type="text" placeholder="特記事項" value={form.specialNote} onChange={set('specialNote')} />
                     </div>
-                    <input className="f haigou" type="text" placeholder="00-00-00" value={form.mixCode} onChange={set('mixCode')} />
+                    <input className="f haigou" style={redIf('mixCode')} type="text" placeholder="00-00-00" value={form.mixCode} onChange={set('mixCode')} />
                   </div>
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">セメント種</div>
@@ -1158,8 +1167,8 @@ function ShipmentsPage() {
                 <div className="subrow">
                   <div className="cell m3" style={{ flex: '0 0 59%', justifyContent: 'center' }}>
                     <div className="inline" style={{ justifyContent: 'center' }}>
-                      <input type="number" min="0" step="0.01" inputMode="decimal" value={form.volume} onChange={set('volume')} />
-                      <span className="unit">m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
+                      <input type="number" min="0" step="0.01" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={set('volume')} />
+                      <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
                     </div>
                     <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
                   </div>
@@ -1177,15 +1186,15 @@ function ShipmentsPage() {
                 <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
               </div>
               <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <div className="lbl" style={{ marginBottom: 0 }}>現 場 連 絡 先</div>
-                <input className="f" type="text" value={form.siteContact} onChange={set('siteContact')} />
+                <div className="lbl" style={{ marginBottom: 0, ...redIf('siteContact') }}>現 場 連 絡 先</div>
+                <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} />
               </div>
             </div>
 
             {/* 6段: 備考 */}
             <div className="band">
               <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl">備 考</div>
+                <div className="lbl" style={redIf('notes')}>備 考</div>
                 <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={2} height={90} addLabel="＋ 段落を追加" />
               </div>
             </div>
@@ -1193,7 +1202,7 @@ function ShipmentsPage() {
             {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 32%' }}>
-                <div className="lbl">担 当 ド ラ イ バ ー（最大4）</div>
+                <div className="lbl" style={redIf('drivers')}>担 当 ド ラ イ バ ー（最大4）</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
                   {form.drivers.map((d, i) => (
                     <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
@@ -1302,10 +1311,11 @@ const SCHEDULE_FIELD_LABELS = {
   times: '時間', notes: '備考', siteContact: '現場連絡先',
 }
 
-function SchedulePage() {
+function SchedulePage({ onEditShipment }) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
+  const [popup, setPopup] = useState(false)
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -1356,23 +1366,43 @@ function SchedulePage() {
     />
   )
 
+  const containerStyle = popup
+    ? { position: 'fixed', inset: 0, zIndex: 9999, background: '#fff', overflow: 'auto' }
+    : { height: '100%', overflow: 'auto', background: '#fff' }
+
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+    <div style={containerStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', flexWrap: 'wrap', gap: 8 }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: '#111' }}>出荷予定表</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
+          <button type="button" onClick={() => setPopup(p => !p)}
+            style={{ border: '1.5px solid #0f3060', background: popup ? '#0f3060' : '#fff', color: popup ? '#fff' : '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {popup ? '✕ 閉じる' : '⛶ ポップアップ表示'}
+          </button>
         </div>
       </div>
       <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>
         <table>
+          <colgroup>
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '19%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '5%' }} />
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ width: '17%' }}><div>業者名</div><div>商社</div></th>
+              <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
-              <th style={{ width: '24%' }}><div>備考</div><div>現場連絡先</div></th>
+              <th><div>備考</div><div>現場連絡先</div></th>
+              <th>編集</th>
             </tr>
           </thead>
           <tbody>
@@ -1386,6 +1416,10 @@ function SchedulePage() {
                 <td>{cell(s, 'drivers')}</td>
                 <td>{cell(s, 'times')}</td>
                 <td>{cell(s, 'notes', '備考')}{cell(s, 'siteContact', '現場連絡先')}</td>
+                <td style={{ textAlign: 'center' }}>
+                  <button type="button" onClick={() => { setPopup(false); onEditShipment && onEditShipment(s) }}
+                    style={{ border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1518,6 +1552,7 @@ function Layout({ children, activeTab, onTabChange }) {
 function AppInner() {
   const { user, loading } = useAuth()
   const [activeTab, setActiveTab] = useState('customers')
+  const [editTarget, setEditTarget] = useState(null)
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f4f6f9' }}>
@@ -1531,8 +1566,8 @@ function AppInner() {
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'customers' && <CustomersPage />}
       {activeTab === 'employees' && <EmployeesPage />}
-      {activeTab === 'shipments' && <ShipmentsPage />}
-      {activeTab === 'schedule' && <SchedulePage />}
+      {activeTab === 'shipments' && <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} />}
+      {activeTab === 'schedule' && <SchedulePage onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />}
     </Layout>
   )
 }
