@@ -1,9 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import crypto from 'crypto'
 import { redis } from './_redis'
 import { requireAuth } from './_auth'
 
 const SETTINGS_KEY = 'line:settings'
 const USERS_KEY = 'line:users'
+
+// JWT_SECRET から導出した鍵で AES-256-GCM 暗号化（保存時に難読化）
+const ENC_KEY = crypto.createHash('sha256').update(process.env.JWT_SECRET || 'change-this-secret').digest()
+function enc(text: string): string {
+  if (!text) return ''
+  const iv = crypto.randomBytes(12)
+  const c = crypto.createCipheriv('aes-256-gcm', ENC_KEY, iv)
+  const data = Buffer.concat([c.update(String(text), 'utf8'), c.final()])
+  return `v1:${iv.toString('hex')}:${c.getAuthTag().toString('hex')}:${data.toString('hex')}`
+}
+function dec(stored: string): string {
+  if (!stored) return ''
+  const s = String(stored)
+  if (!s.startsWith('v1:')) return s // 旧・平文は後方互換でそのまま返す
+  try {
+    const [, ivh, tagh, datah] = s.split(':')
+    const d = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, Buffer.from(ivh, 'hex'))
+    d.setAuthTag(Buffer.from(tagh, 'hex'))
+    return Buffer.concat([d.update(Buffer.from(datah, 'hex')), d.final()]).toString('utf8')
+  } catch { return '' }
+}
 
 async function fetchProfile(userId: string, token: string): Promise<string | null> {
   try {
@@ -23,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     try {
       const settings = (await redis.hgetall<Record<string, string>>(SETTINGS_KEY)) || {}
-      const token = settings.channelAccessToken || ''
+      const token = dec(settings.channelAccessToken || '')
       const events = (req.body && (req.body as any).events) || []
       for (const ev of events) {
         const userId = ev?.source?.userId
@@ -59,8 +81,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { channelAccessToken, channelSecret } = (req.body || {}) as any
     const cur = (await redis.hgetall<Record<string, string>>(SETTINGS_KEY)) || {}
     await redis.hset(SETTINGS_KEY, {
-      channelAccessToken: channelAccessToken != null ? channelAccessToken : (cur.channelAccessToken || ''),
-      channelSecret: channelSecret != null ? channelSecret : (cur.channelSecret || ''),
+      channelAccessToken: channelAccessToken != null ? enc(channelAccessToken) : (cur.channelAccessToken || ''),
+      channelSecret: channelSecret != null ? enc(channelSecret) : (cur.channelSecret || ''),
     })
     return res.status(200).json({ ok: true })
   }
