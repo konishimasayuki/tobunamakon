@@ -20,7 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ids.forEach(sid => p.hgetall(`shipment:${sid}`))
       const rows = await p.exec<Record<string, any>[]>()
       const shipments = rows.filter(s => s && Object.keys(s).length > 0)
-      shipments.sort((a, b) => (String(a.date) + (a.time || '')).localeCompare(String(b.date) + (b.time || '')))
+      const ft = (s: any) => Array.isArray(s.times) ? (s.times[0] || '') : (s.time || '')
+      shipments.sort((a, b) => (String(a.date) + ft(a)).localeCompare(String(b.date) + ft(b)))
       return res.status(200).json(shipments)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -30,19 +31,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { date, time, companyId, companyName, siteName, vehicleType, driverId, driverName, mixCode, nbType, volume, equipment, note, orderContact, siteContact } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, notes, driverMessages } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const newId = uuidv4()
       const now = new Date().toISOString()
       const shipment = {
-        id: newId, date, time: time || '', companyId: companyId || '', companyName,
-        siteName: siteName || '', vehicleType: vehicleType || '4t',
-        driverId: driverId || '', driverName: driverName || '',
-        mixCode: mixCode || '', nbType: nbType || 'N',
-        volume: volume || '', equipment: equipment || '',
-        note: note || '', orderContact: orderContact || '',
-        siteContact: siteContact || '', createdAt: now, updatedAt: now,
+        id: newId, date,
+        companyId: companyId || '', companyName,
+        tradingCompany: tradingCompany || '',
+        times: Array.isArray(times) ? times : [],
+        siteName: siteName || '',
+        siteAddress: siteAddress || '',
+        vehicleType: vehicleType || '',
+        truckCount: truckCount || '',
+        mixCode: mixCode || '',
+        specialNote: specialNote || '',
+        cementType: cementType || '',
+        volume: volume || '',
+        volumeUncertain: !!volumeUncertain,
+        placements: Array.isArray(placements) ? placements : [],
+        orderContact: orderContact || '',
+        siteContact: siteContact || '',
+        notes: Array.isArray(notes) ? notes : [],
+        driverMessages: Array.isArray(driverMessages) ? driverMessages : [],
+        createdAt: now, updatedAt: now,
       }
       await redis.hset(`shipment:${newId}`, shipment)
       await redis.sadd('shipments', newId)

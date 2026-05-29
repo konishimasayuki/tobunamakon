@@ -12,3 +12,45 @@ input, textarea, select { font-family: inherit; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #f4f6f9; }
 ::-webkit-scrollbar-thumb { background: #c0c8d4; border-radius: 3px; }
+
+/* ===== 出荷手配伝票フォーム ===== */
+.denpyo { font-family: "Yu Mincho","YuMincho","Hiragino Mincho ProN","Hiragino Mincho Pro","MS Mincho",serif; color:#111; }
+.denpyo .sheet { max-width:720px; margin:0 auto; background:#fff; border:2px solid #111; overflow:hidden; }
+.denpyo .band { display:flex; border-bottom:1px solid #111; }
+.denpyo .band:last-child { border-bottom:none; }
+.denpyo .cell { border-right:1px solid #111; padding:6px; position:relative; min-height:46px; display:flex; flex-direction:column; }
+.denpyo .cell:last-child { border-right:none; }
+.denpyo .lbl { font-size:13px; font-weight:700; letter-spacing:.18em; margin-bottom:2px; white-space:nowrap; }
+.denpyo input.f, .denpyo textarea.f { border:none; outline:none; width:100%; background:transparent; font-family:inherit; font-size:15px; color:#111; padding:0; flex:1; }
+.denpyo textarea.f { resize:none; line-height:1.5; }
+.denpyo input.f::placeholder, .denpyo textarea.f::placeholder { color:#bbb; }
+.denpyo select.f { border:none; outline:none; width:100%; background:transparent; font-family:inherit; font-size:15px; color:#111; padding:0; flex:1; cursor:pointer; }
+.denpyo .stack { display:flex; flex-direction:column; }
+.denpyo .subrow { display:flex; border-bottom:1px solid #111; flex:1; }
+.denpyo .subrow:last-child { border-bottom:none; }
+.denpyo .chips { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:2px; }
+.denpyo .chip { border:1px solid #999; border-radius:5px; padding:3px 10px; font-size:14px; cursor:pointer; user-select:none; background:#fff; line-height:1.6; font-family:inherit; }
+.denpyo .chip.on { border-color:#1b4ea8; background:#e8f0ff; color:#1b4ea8; font-weight:700; }
+.denpyo .inline { display:flex; align-items:baseline; gap:4px; }
+.denpyo .num { width:54px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
+.denpyo .unit { font-size:15px; }
+.denpyo .m3 input[type="number"] { width:70px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
+.denpyo .qmark { display:none; margin-left:6px; font-weight:700; font-size:34px; line-height:0; vertical-align:-2px; color:#222; }
+.denpyo .qmark.on { display:inline; }
+.denpyo .qtoggle { position:absolute; bottom:4px; right:6px; font-size:11px; font-family:'Noto Sans JP',sans-serif; color:#555; display:flex; align-items:center; gap:2px; cursor:pointer; user-select:none; }
+.denpyo .qtoggle input { margin:0; }
+.denpyo .haigou-head { display:flex; align-items:baseline; gap:12px; }
+.denpyo .haigou-head .lbl { margin-bottom:0; flex:0 0 auto; }
+.denpyo .tokki { flex:1 1 auto; width:auto; min-width:0; font-size:13px; color:#c81e1e; font-weight:700; }
+.denpyo .tokki::placeholder { color:#e7a3a3; }
+.denpyo .haigou { width:100%; font-size:90px; font-weight:700; margin-top:6px; line-height:1.1; text-align:center; }
+.denpyo .memo-grid { display:grid; grid-template-columns:repeat(var(--memo-cols,2),1fr); grid-auto-rows:1fr; height:var(--memo-h,170px); border-top:1px solid #bbb; border-left:1px solid #bbb; margin-top:3px; width:100%; }
+.denpyo .memo-cell { min-height:0; overflow:hidden; border-right:1px solid #bbb; border-bottom:1px solid #bbb; position:relative; }
+.denpyo .memo-cell textarea { width:100%; height:100%; border:none; outline:none; resize:none; background:transparent; font-family:inherit; line-height:1.25; color:#111; box-sizing:border-box; padding:3px 36px 3px 6px; overflow:hidden; display:block; }
+.denpyo .memo-cell textarea.is-imp { color:#c81e1e; font-weight:700; }
+.denpyo .ctl { position:absolute; top:2px; right:2px; display:flex; gap:2px; }
+.denpyo .imp, .denpyo .del { width:16px; height:16px; padding:0; border-radius:4px; font-size:11px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:'Noto Sans JP',sans-serif; }
+.denpyo .imp { border:1px solid #c81e1e; color:#c81e1e; background:#fff; }
+.denpyo .imp.on { background:#c81e1e; color:#fff; }
+.denpyo .del { border:1px solid #aaa; color:#888; background:#fff; }
+.denpyo .addrow { margin-top:6px; border:1px dashed #999; background:#fafafa; border-radius:5px; font-size:13px; padding:5px 12px; cursor:pointer; font-family:'Noto Sans JP',sans-serif; color:#333; align-self:flex-start; }

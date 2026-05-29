@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef } from 'react'
 
 // ============================================================
 // 定数
@@ -748,19 +748,101 @@ function CustomersPage() {
 // ============================================================
 // 出荷登録ページ
 // ============================================================
-const VEHICLE_TYPES = ['4t', '7t', '大']
-const EQUIPMENT_TYPES = ['なし', 'クレーン', 'F1', 'ポンプ']
+const VEHICLE_TYPES = ['4t', '7t', '大型']
+const CEMENT_TYPES = ['N', 'B']
+const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
 
 const emptyShipForm = {
   date: new Date().toISOString().slice(0, 10),
-  time: '',
   companyId: '', companyName: '',
+  tradingCompany: '',
+  times: [{ text: '', important: false }],
   siteName: '',
-  vehicleType: '4t',
-  driverId: '', driverName: '',
-  mixCode: '', nbType: 'N',
-  volume: '', equipment: 'なし',
-  note: '', orderContact: '', siteContact: '',
+  siteAddress: '',
+  vehicleType: '',
+  truckCount: '',
+  mixCode: '',
+  specialNote: '',
+  cementType: '',
+  volume: '',
+  volumeUncertain: false,
+  placements: [],
+  orderContact: '', siteContact: '',
+  notes: [{ text: '', important: false }],
+  driverMessages: [{ text: '', important: false }],
+}
+
+// テキストをマス内に収めるよう自動縮小
+function fitText(ta) {
+  if (!ta) return
+  const max = 22, min = 7
+  let size = max
+  ta.style.fontSize = size + 'px'
+  let guard = 0
+  while (size > min && ta.scrollHeight > ta.clientHeight && guard < 40) {
+    size--; ta.style.fontSize = size + 'px'; guard++
+  }
+}
+
+// 選択チップ（単一 / 複数）
+function Chips({ options, value, multi, onChange }) {
+  const isOn = (o) => multi ? (value || []).includes(o) : value === o
+  const toggle = (o) => {
+    if (multi) {
+      const cur = value || []
+      onChange(cur.includes(o) ? cur.filter(x => x !== o) : [...cur, o])
+    } else {
+      onChange(value === o ? '' : o)
+    }
+  }
+  return (
+    <div className="chips">
+      {options.map(o => (
+        <span key={o} className={'chip' + (isOn(o) ? ' on' : '')} onClick={() => toggle(o)}>{o}</span>
+      ))}
+    </div>
+  )
+}
+
+// 固定枠＋分割＋文字自動リサイズの動的マス群（時間 / 備考 / ドライバー連絡 共通）
+function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel }) {
+  const refs = useRef([])
+  const refit = () => requestAnimationFrame(() => {
+    for (let i = 0; i < items.length; i++) fitText(refs.current[i])
+  })
+  useLayoutEffect(() => { refit() })
+  useEffect(() => {
+    const onResize = () => refit()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const update = (i, patch) => onChange(items.map((it, idx) => idx === i ? { ...it, ...patch } : it))
+  const add = () => { if (items.length < max) onChange([...items, { text: '', important: false }]) }
+  const del = (i) => {
+    if (items.length > 1) onChange(items.filter((_, idx) => idx !== i))
+    else onChange([{ text: '', important: false }])
+  }
+  return (
+    <>
+      <div className="memo-grid" style={{ '--memo-cols': cols, '--memo-h': height + 'px' }}>
+        {items.map((it, i) => (
+          <div className="memo-cell" key={i}>
+            <textarea
+              ref={el => { refs.current[i] = el }}
+              className={it.important ? 'is-imp' : ''}
+              value={it.text}
+              onChange={e => update(i, { text: e.target.value })}
+            />
+            <div className="ctl">
+              <button type="button" className={'imp' + (it.important ? ' on' : '')} title="重要" onClick={() => update(i, { important: !it.important })}>!</button>
+              <button type="button" className="del" title="削除" onClick={() => del(i)}>×</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {items.length < max && <button type="button" className="addrow" onClick={add}>{addLabel}</button>}
+    </>
+  )
 }
 
 function ShipmentsPage() {
@@ -776,14 +858,12 @@ function ShipmentsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [s, c, e] = await Promise.all([
+      const [s, c] = await Promise.all([
         api.get('/api/shipments'),
         api.get('/api/customers'),
-        api.get('/api/employees'),
       ])
       setShipments(s)
       setCustomers(c)
-      setEmployees(e.filter(emp => emp.type === 'driver'))
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [])
@@ -791,25 +871,28 @@ function ShipmentsPage() {
   useEffect(() => { load() }, [load])
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+  const setVal = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
   const handleCompany = (e) => {
     const c = customers.find(c => c.id === e.target.value)
     setForm(f => ({ ...f, companyId: c?.id || '', companyName: c?.companyName || '' }))
   }
 
-  const handleDriver = (e) => {
-    const emp = employees.find(emp => emp.id === e.target.value)
-    setForm(f => ({ ...f, driverId: emp?.id || '', driverName: emp?.name || '' }))
-  }
-
-  const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + (a.time || '')).localeCompare(String(b.date) + (b.time || '')))
+  const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
+  const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSaving(true)
     try {
-      const created = await api.post('/api/shipments', form)
+      const payload = {
+        ...form,
+        times: form.times.map(t => t.text).filter(t => t.trim() !== ''),
+        notes: form.notes.filter(n => n.text.trim() !== ''),
+        driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
+      }
+      const created = await api.post('/api/shipments', payload)
       setShipments(ss => sortShip([...ss, created]))
       setForm({ ...emptyShipForm, date: form.date })
     } catch (err) { setError(err.message) }
@@ -829,113 +912,127 @@ function ShipmentsPage() {
   const filtered = shipments.filter(s => {
     if (!search) return true
     const q = search.toLowerCase()
-    return [s.date, s.companyName, s.siteName, s.driverName, s.mixCode, s.vehicleType]
+    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
 
-  const iStyle = { ...S.smInput, width: '100%', boxSizing: 'border-box' }
-  const lStyle = { ...S.smLabel, marginBottom: 4 }
-  const fStyle = { display: 'flex', flexDirection: 'column', gap: 4 }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
-      {/* 入力フォーム */}
-      <div style={{ background: '#fff', borderBottom: '2px solid #dde3ed', padding: '16px 20px' }}>
+      {/* 手配伝票フォーム */}
+      <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          {/* 行1: 日付・時間・業者名 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 10, marginBottom: 10 }}>
-            <div style={fStyle}>
-              <label style={lStyle}>日付 *</label>
-              <input style={iStyle} type="date" value={form.date} onChange={set('date')} required />
-            </div>
-            <div style={fStyle}>
-              <label style={lStyle}>時間</label>
-              <input style={iStyle} type="time" value={form.time} onChange={set('time')} />
-            </div>
-            <div style={fStyle}>
-              <label style={lStyle}>業者名 *</label>
-              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.companyId} onChange={handleCompany} required>
-                <option value="">選択してください</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* 行2: 現場名 */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={fStyle}>
-              <label style={lStyle}>現場名</label>
-              <input style={iStyle} type="text" value={form.siteName} onChange={set('siteName')} placeholder="現場名を入力" />
-            </div>
-          </div>
-
-          {/* 行3: 車種・ドライバー */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 10 }}>
-            <div style={fStyle}>
-              <label style={lStyle}>車種</label>
-              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.vehicleType} onChange={set('vehicleType')}>
-                {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-            <div style={fStyle}>
-              <label style={lStyle}>ドライバー</label>
-              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.driverId} onChange={handleDriver}>
-                <option value="">選択してください</option>
-                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* 行4: 配合・N/B・m3・設備 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr auto 1fr 1fr', gap: 10, marginBottom: 10, alignItems: 'end' }}>
-            <div style={fStyle}>
-              <label style={lStyle}>配合（例: 18-12-20）</label>
-              <input style={iStyle} type="text" value={form.mixCode} onChange={set('mixCode')} placeholder="00-00-00" />
-            </div>
-            <div style={fStyle}>
-              <label style={lStyle}>N・B</label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', height: 36 }}>
-                {['N', 'B'].map(v => (
-                  <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 14, fontWeight: form.nbType === v ? 700 : 400 }}>
-                    <input type="radio" name="nbType" value={v} checked={form.nbType === v} onChange={set('nbType')} />
-                    {v}
-                  </label>
-                ))}
+          <div className="sheet">
+            {/* 1段: 日付 / 業者名 / 商社名 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 24%' }}>
+                <div className="lbl">日 付</div>
+                <input className="f" type="date" value={form.date} onChange={set('date')} required />
+              </div>
+              <div className="cell" style={{ flex: '0 0 45%' }}>
+                <div className="lbl">業 者 名</div>
+                <select className="f" value={form.companyId} onChange={handleCompany} required>
+                  <option value="">選択してください</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
+                </select>
+              </div>
+              <div className="cell" style={{ flex: 1 }}>
+                <div className="lbl">商 社 名</div>
+                <input className="f" type="text" value={form.tradingCompany} onChange={set('tradingCompany')} />
               </div>
             </div>
-            <div style={fStyle}>
-              <label style={lStyle}>m³</label>
-              <input style={iStyle} type="number" step="0.25" value={form.volume} onChange={set('volume')} placeholder="0.00" />
+
+            {/* 2段: 時間 / 現場名 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 24%' }}>
+                <div className="lbl">時 間</div>
+                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
+              </div>
+              <div className="cell" style={{ flex: 1 }}>
+                <div className="lbl">現 場 名</div>
+                <input className="f" type="text" value={form.siteName} onChange={set('siteName')} />
+              </div>
             </div>
-            <div style={fStyle}>
-              <label style={lStyle}>設備</label>
-              <select style={{ ...iStyle, cursor: 'pointer' }} value={form.equipment} onChange={set('equipment')}>
-                {EQUIPMENT_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+
+            {/* 3段: 現場住所 */}
+            <div className="band">
+              <div className="cell" style={{ flex: 1, minHeight: 60 }}>
+                <div className="lbl">現 場 住 所</div>
+                <textarea className="f" rows={2} value={form.siteAddress} onChange={set('siteAddress')} />
+              </div>
+            </div>
+
+            {/* 4段: 車種 / 配合・m³ / セメント種・配置 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
+                <div>
+                  <div className="lbl">車 種</div>
+                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} />
+                </div>
+                <div className="inline" style={{ justifyContent: 'flex-end' }}>
+                  <input className="num" type="number" min="0" inputMode="numeric" value={form.truckCount} onChange={set('truckCount')} />
+                  <span className="unit">台</span>
+                </div>
+              </div>
+              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
+                <div className="subrow">
+                  <div className="cell" style={{ flex: '0 0 59%' }}>
+                    <div className="haigou-head">
+                      <div className="lbl">配 合</div>
+                      <input className="f tokki" type="text" placeholder="特記事項" value={form.specialNote} onChange={set('specialNote')} />
+                    </div>
+                    <input className="f haigou" type="text" placeholder="00-00-00" value={form.mixCode} onChange={set('mixCode')} />
+                  </div>
+                  <div className="cell" style={{ flex: 1 }}>
+                    <div className="lbl">セメント種</div>
+                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} />
+                  </div>
+                </div>
+                <div className="subrow">
+                  <div className="cell m3" style={{ flex: '0 0 59%', justifyContent: 'center' }}>
+                    <div className="inline" style={{ justifyContent: 'center' }}>
+                      <input type="number" min="0" step="0.5" inputMode="decimal" value={form.volume} onChange={set('volume')} />
+                      <span className="unit">m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
+                    </div>
+                    <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
+                  </div>
+                  <div className="cell" style={{ flex: 1 }}>
+                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 5段: 連絡先 / 現場連絡先 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 50%', minHeight: 58 }}>
+                <div className="lbl">連 絡 先</div>
+                <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
+              </div>
+              <div className="cell" style={{ flex: 1, minHeight: 58 }}>
+                <div className="lbl">現 場 連 絡 先</div>
+                <input className="f" type="text" value={form.siteContact} onChange={set('siteContact')} />
+              </div>
+            </div>
+
+            {/* 6段: 備考 */}
+            <div className="band">
+              <div className="cell" style={{ flex: 1 }}>
+                <div className="lbl">備 考</div>
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={2} height={90} addLabel="＋ 段落を追加" />
+              </div>
+            </div>
+
+            {/* 7段: ドライバーへの連絡 */}
+            <div className="band">
+              <div className="cell" style={{ flex: 1 }}>
+                <div className="lbl">ド ラ イ バ ー へ の 連 絡</div>
+                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={2} height={80} addLabel="＋ 段落を追加" />
+              </div>
             </div>
           </div>
 
-          {/* 行5: 連絡先 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <div style={fStyle}>
-              <label style={lStyle}>受注連絡先</label>
-              <input style={iStyle} type="tel" value={form.orderContact} onChange={set('orderContact')} placeholder="電話番号" />
-            </div>
-            <div style={fStyle}>
-              <label style={lStyle}>現場連絡先</label>
-              <input style={iStyle} type="tel" value={form.siteContact} onChange={set('siteContact')} placeholder="電話番号" />
-            </div>
-          </div>
-
-          {/* 行6: 備考 */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={lStyle}>備考</label>
-            <textarea style={{ ...iStyle, height: 60, resize: 'vertical' }} value={form.note} onChange={set('note')} placeholder="備考" />
-          </div>
-
-          {error && <div style={{ ...S.error, marginBottom: 10 }}>{error}</div>}
-
-          <div style={{ display: 'flex', gap: 10 }}>
+          {error && <div style={{ ...S.error, maxWidth: 720, margin: '10px auto 0' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, maxWidth: 720, margin: '12px auto 0' }}>
             <button type="button" style={S.cancelBtn} onClick={handleReset}>リセット</button>
             <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
               {saving ? '登録中...' : '登録'}
@@ -960,8 +1057,8 @@ function ShipmentsPage() {
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '現場名', '車種', 'ドライバー', '配合', 'N/B', 'm³', '設備', '備考', ''].map(h => (
-                    <th key={h} style={S.th}>{h}</th>
+                  {['日付', '時間', '業者名', '商社名', '現場名', '車種', '台数', '配合', 'セメント', 'm³', '配置', ''].map((h, i) => (
+                    <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -969,16 +1066,16 @@ function ShipmentsPage() {
                 {filtered.map(s => (
                   <tr key={s.id} style={S.tr}>
                     <td style={S.td}>{s.date}</td>
-                    <td style={S.td}>{s.time || '—'}</td>
+                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
+                    <td style={S.td}>{s.tradingCompany || '—'}</td>
                     <td style={S.td}>{s.siteName || '—'}</td>
-                    <td style={S.td}>{s.vehicleType}</td>
-                    <td style={S.td}>{s.driverName || '—'}</td>
+                    <td style={S.td}>{s.vehicleType || '—'}</td>
+                    <td style={S.td}>{s.truckCount ? `${s.truckCount}台` : '—'}</td>
                     <td style={S.td}>{s.mixCode || '—'}</td>
-                    <td style={S.td}>{s.nbType}</td>
-                    <td style={S.td}>{s.volume ? `${s.volume}m³` : '—'}</td>
-                    <td style={S.td}>{s.equipment !== 'なし' ? s.equipment : '—'}</td>
-                    <td style={{ ...S.td, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.note || '—'}</td>
+                    <td style={S.td}>{s.cementType || '—'}</td>
+                    <td style={S.td}>{s.volume ? `${s.volume}m³${s.volumeUncertain ? '?' : ''}` : (s.volumeUncertain ? '?' : '—')}</td>
+                    <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                       <button style={S.delBtn} onClick={() => setDeleteConfirm(s.id)}>削除</button>
                     </td>
