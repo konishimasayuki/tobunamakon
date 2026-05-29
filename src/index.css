@@ -58,8 +58,11 @@ input, textarea, select { font-family: inherit; }
 /* ===== 出荷予定表 ===== */
 .schedule table { border-collapse:collapse; width:100%; min-width:980px; font-family:'Noto Sans JP',sans-serif; }
 .schedule th, .schedule td { border:1px solid #111; padding:2px 6px; vertical-align:middle; }
-.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:15px; text-align:center; white-space:nowrap; }
+.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:15px; text-align:center; white-space:nowrap; letter-spacing:0.12em; }
 .schedule td { height:36px; }
-.schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:17px; color:#1b4ea8; font-family:inherit; padding:2px 3px; }
-.schedule .sc-in::placeholder { color:#cbd2dc; }
+.schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:17px; color:#111; font-weight:700; font-family:inherit; padding:2px 3px; }
+.schedule .sc-in::placeholder { color:#cbd2dc; font-weight:400; }
+.schedule .sc-in.center { text-align:center; }
+.schedule .sc-in.plain { font-weight:400; }
 .schedule .sc-in.changed { color:#c81e1e; }
+.schedule .sc-in.imp { color:#c81e1e; font-weight:700; }

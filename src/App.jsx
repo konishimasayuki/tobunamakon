@@ -958,7 +958,7 @@ function SiteMap({ address, onAddressChange }) {
   )
 }
 
-function ShipmentsPage({ editTarget, onEditConsumed }) {
+function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed }) {
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
   const [customers, setCustomers]   = useState([])
@@ -1038,11 +1038,20 @@ function ShipmentsPage({ editTarget, onEditConsumed }) {
     requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
   }
 
-  // 出荷予定表の「編集」ボタンから渡された伝票を開く
+  // 出荷予定表の「編集」ボタンから渡された伝票を開く（同一ウィンドウ）
   useEffect(() => {
     if (editTarget) { startEdit(editTarget); onEditConsumed && onEditConsumed() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTarget])
+
+  // 別ウィンドウ（?editShipment=...）で開いた場合、読み込み後に該当伝票を編集状態にする
+  useEffect(() => {
+    if (pendingEditId && shipments.length) {
+      const s = shipments.find(x => x.id === pendingEditId)
+      if (s) { startEdit(s); onPendingConsumed && onPendingConsumed() }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEditId, shipments])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -1356,15 +1365,27 @@ function SchedulePage({ onEditShipment }) {
 
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
 
-  const cell = (s, f, ph) => (
-    <input
-      key={f + (isChanged(s, f) ? '_c' : '')}
-      className={'sc-in' + (isChanged(s, f) ? ' changed' : '')}
-      defaultValue={getVal(s, f)}
-      placeholder={ph || ''}
-      onBlur={e => saveField(s, f, e.target.value)}
-    />
-  )
+  const cell = (s, f, ph, opts = {}) => {
+    const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
+    const cls = 'sc-in'
+      + (isChanged(s, f) ? ' changed' : '')
+      + (opts.center ? ' center' : '')
+      + (imp ? ' imp' : (opts.plain ? ' plain' : ''))
+    return (
+      <input
+        key={f + (isChanged(s, f) ? '_c' : '') + (imp ? '_i' : '')}
+        className={cls}
+        defaultValue={getVal(s, f)}
+        placeholder={ph || ''}
+        onBlur={e => saveField(s, f, e.target.value)}
+      />
+    )
+  }
+
+  const openEditWindow = (s) => {
+    const url = `${window.location.pathname}?editShipment=${encodeURIComponent(s.id)}&popup=1`
+    window.open(url, 'shipmentEdit_' + s.id, 'width=900,height=950,scrollbars=yes,resizable=yes')
+  }
 
   const containerStyle = popup
     ? { position: 'fixed', inset: 0, zIndex: 9999, background: '#fff', overflow: 'auto' }
@@ -1372,9 +1393,9 @@ function SchedulePage({ onEditShipment }) {
 
   return (
     <div style={containerStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#111' }}>出荷予定表</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
+      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44 }}>
+        <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '0.35em' }}>出荷予定表</div>
+        <div style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
@@ -1388,13 +1409,13 @@ function SchedulePage({ onEditShipment }) {
         <table>
           <colgroup>
             <col style={{ width: '10%' }} />
-            <col style={{ width: '19%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '18%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '22%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '18%' }} />
             <col style={{ width: '5%' }} />
           </colgroup>
           <thead>
@@ -1410,14 +1431,14 @@ function SchedulePage({ onEditShipment }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName')}</td>
-                <td>{cell(s, 'vehicleType')}</td>
-                <td>{cell(s, 'mixCode')}</td>
-                <td>{cell(s, 'volume')}</td>
+                <td>{cell(s, 'vehicleType', '', { center: true })}</td>
+                <td>{cell(s, 'mixCode', '', { center: true })}</td>
+                <td>{cell(s, 'volume', '', { center: true })}</td>
                 <td>{cell(s, 'drivers')}</td>
-                <td>{cell(s, 'times')}</td>
-                <td>{cell(s, 'notes', '備考')}{cell(s, 'siteContact', '現場連絡先')}</td>
+                <td>{cell(s, 'times', '', { center: true })}</td>
+                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 <td style={{ textAlign: 'center' }}>
-                  <button type="button" onClick={() => { setPopup(false); onEditShipment && onEditShipment(s) }}
+                  <button type="button" onClick={() => openEditWindow(s)}
                     style={{ border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
                 </td>
               </tr>
@@ -1430,7 +1451,7 @@ function SchedulePage({ onEditShipment }) {
           <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
         ) : (
           <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d' }}>
-            青＝出荷登録の値／赤＝この予定表で変更した値（出荷登録にも反映されます）
+            黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
         )}
       </div>
@@ -1551,8 +1572,19 @@ function Layout({ children, activeTab, onTabChange }) {
 // ============================================================
 function AppInner() {
   const { user, loading } = useAuth()
-  const [activeTab, setActiveTab] = useState('customers')
+  const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  const initialEditId = params.get('editShipment') || ''
+  const isPopup = params.get('popup') === '1'
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : 'customers')
   const [editTarget, setEditTarget] = useState(null)
+  const [pendingEditId, setPendingEditId] = useState(initialEditId)
+
+  // 編集ポップアップ（別ウィンドウ）は1分ごとに自動更新
+  useEffect(() => {
+    if (!isPopup) return
+    const t = setInterval(() => window.location.reload(), 60000)
+    return () => clearInterval(t)
+  }, [isPopup])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f4f6f9' }}>
@@ -1566,7 +1598,7 @@ function AppInner() {
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'customers' && <CustomersPage />}
       {activeTab === 'employees' && <EmployeesPage />}
-      {activeTab === 'shipments' && <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} />}
+      {activeTab === 'shipments' && <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} />}
       {activeTab === 'schedule' && <SchedulePage onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />}
     </Layout>
   )
