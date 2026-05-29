@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, notes, driverMessages } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, driverId, driverName, notes, driverMessages } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const newId = uuidv4()
@@ -53,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         placements: Array.isArray(placements) ? placements : [],
         orderContact: orderContact || '',
         siteContact: siteContact || '',
+        driverId: driverId || '',
+        driverName: driverName || '',
         notes: Array.isArray(notes) ? notes : [],
         driverMessages: Array.isArray(driverMessages) ? driverMessages : [],
         createdAt: now, updatedAt: now,
@@ -68,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, notes, driverMessages } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, mixCode, specialNote, cementType, volume, volumeUncertain, placements, orderContact, siteContact, driverId, driverName, notes, driverMessages } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const existing = await redis.hgetall(`shipment:${id}`)
@@ -92,6 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         placements: Array.isArray(placements) ? placements : [],
         orderContact: orderContact || '',
         siteContact: siteContact || '',
+        driverId: driverId || '',
+        driverName: driverName || '',
         notes: Array.isArray(notes) ? notes : [],
         driverMessages: Array.isArray(driverMessages) ? driverMessages : [],
         updatedAt: new Date().toISOString(),

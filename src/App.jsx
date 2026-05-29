@@ -751,6 +751,7 @@ function CustomersPage() {
 const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
+const DEFAULT_SITE_ADDRESS = '〒830-0038 福岡県久留米市西町２丁目１３−７２３−７'
 
 const emptyShipForm = {
   date: new Date().toISOString().slice(0, 10),
@@ -768,6 +769,7 @@ const emptyShipForm = {
   volumeUncertain: false,
   placements: [],
   orderContact: '', siteContact: '',
+  driverId: '', driverName: '',
   notes: [{ text: '', important: false }],
   driverMessages: [{ text: '', important: false }],
 }
@@ -912,7 +914,7 @@ function SiteMap({ address, onAddressChange }) {
         })
       })
       setStatus('')
-      if (address && address.trim()) doGeocode(address)
+      doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
     }).catch(err => {
       if (!cancelled) setStatus(err.message === 'NO_KEY' ? 'nokey' : 'error')
     })
@@ -920,16 +922,16 @@ function SiteMap({ address, onAddressChange }) {
   }, [])
 
   useEffect(() => {
-    if (!address || !address.trim()) return
-    if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
     if (!geocoderRef.current) return
-    const t = setTimeout(() => doGeocode(address), 800)
+    if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
+    const target = (address && address.trim()) ? address : DEFAULT_SITE_ADDRESS
+    const t = setTimeout(() => doGeocode(target), 800)
     return () => clearTimeout(t)
   }, [address])
 
   return (
     <div>
-      <div ref={mapEl} style={{ width: '100%', height: 320, borderRadius: 8, background: '#e8eaed' }} />
+      <div ref={mapEl} style={{ width: '100%', height: 640, borderRadius: 8, background: '#e8eaed' }} />
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
       {status === 'notfound' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>住所が見つかりませんでした。ピンを動かして調整してください。</div>}
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
@@ -954,12 +956,14 @@ function ShipmentsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [s, c] = await Promise.all([
+      const [s, c, e] = await Promise.all([
         api.get('/api/shipments'),
         api.get('/api/customers'),
+        api.get('/api/employees'),
       ])
       setShipments(s)
       setCustomers(c)
+      setEmployees(e.filter(emp => emp.type === 'driver'))
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [])
@@ -972,6 +976,11 @@ function ShipmentsPage() {
   const handleCompany = (e) => {
     const c = customers.find(c => c.id === e.target.value)
     setForm(f => ({ ...f, companyId: c?.id || '', companyName: c?.companyName || '' }))
+  }
+
+  const handleDriver = (e) => {
+    const emp = employees.find(emp => emp.id === e.target.value)
+    setForm(f => ({ ...f, driverId: emp?.id || '', driverName: emp?.name || '' }))
   }
 
   const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
@@ -995,6 +1004,8 @@ function ShipmentsPage() {
     placements: Array.isArray(s.placements) ? s.placements : [],
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
+    driverId: s.driverId || '',
+    driverName: s.driverName || '',
     notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
     driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
   })
@@ -1080,17 +1091,19 @@ function ShipmentsPage() {
                 <div className="lbl">時 間</div>
                 <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
               </div>
-              <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl">現 場 名</div>
-                <input className="f" type="text" value={form.siteName} onChange={set('siteName')} />
-              </div>
-            </div>
-
-            {/* 3段: 現場住所 */}
-            <div className="band">
-              <div className="cell" style={{ flex: 1, minHeight: 60 }}>
-                <div className="lbl">現 場 住 所</div>
-                <textarea className="f" rows={2} value={form.siteAddress} onChange={set('siteAddress')} />
+              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
+                <div className="subrow">
+                  <div className="cell" style={{ flex: 1 }}>
+                    <div className="lbl">現 場 名</div>
+                    <input className="f" type="text" value={form.siteName} onChange={set('siteName')} />
+                  </div>
+                </div>
+                <div className="subrow">
+                  <div className="cell" style={{ flex: 1, minHeight: 52 }}>
+                    <div className="lbl">現 場 住 所</div>
+                    <textarea className="f" rows={2} value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1155,19 +1168,24 @@ function ShipmentsPage() {
               </div>
             </div>
 
-            {/* 7段: ドライバーへの連絡 */}
+            {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
             <div className="band">
+              <div className="cell" style={{ flex: '0 0 32%' }}>
+                <div className="lbl">担 当 ド ラ イ バ ー</div>
+                <select className="f" value={form.driverId} onChange={handleDriver}>
+                  <option value="">選択してください</option>
+                  {employees.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl">ド ラ イ バ ー へ の 連 絡</div>
                 <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={2} height={80} addLabel="＋ 段落を追加" />
               </div>
             </div>
           </div>
-          {form.siteAddress && form.siteAddress.trim() && (
-            <div style={{ flex: '1 1 340px', minWidth: 280 }}>
-              <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
-            </div>
-          )}
+          <div style={{ flex: '1 1 340px', minWidth: 280 }}>
+            <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
+          </div>
           </div>
 
           {editing && <div style={{ maxWidth: 720, margin: '10px auto 0', padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
@@ -1197,7 +1215,7 @@ function ShipmentsPage() {
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', '車種', '台数', '配合', 'セメント', 'm³', '配置', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '台数', '配合', 'セメント', 'm³', '配置', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -1210,6 +1228,7 @@ function ShipmentsPage() {
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
                     <td style={S.td}>{s.tradingCompany || '—'}</td>
                     <td style={S.td}>{s.siteName || '—'}</td>
+                    <td style={S.td}>{s.driverName || '—'}</td>
                     <td style={S.td}>{s.vehicleType || '—'}</td>
                     <td style={S.td}>{s.truckCount ? `${s.truckCount}台` : '—'}</td>
                     <td style={S.td}>{s.mixCode || '—'}</td>
