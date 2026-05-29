@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const e = await redis.hgetall(`employee:${eid}`)
         if (e && Object.keys(e).length > 0) employees.push(e)
       }
-      employees.sort((a, b) => (a.employeeId || '').localeCompare(b.employeeId || ''))
+      employees.sort((a, b) => String(a.employeeId ?? '').localeCompare(String(b.employeeId ?? '')))
       return res.status(200).json(employees)
     } catch (e) {
       return res.status(500).json({ error: 'サーバーエラーが発生しました' })
