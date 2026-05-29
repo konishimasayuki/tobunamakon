@@ -268,7 +268,7 @@ function Field({ label, value, onChange, required, type = 'text', fullWidth = fa
 // ============================================================
 // 顧客追加・編集モーダル
 // ============================================================
-const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '', memo: '' }
+const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '' }
 
 function CustomerModal({ customer, onSave, onClose }) {
   const [form, setForm]       = useState(emptyForm)
@@ -283,7 +283,6 @@ function CustomerModal({ customer, onSave, onClose }) {
       phone:           customer.phone           || '',
       address:         customer.address         || '',
       contactPerson:   customer.contactPerson   || '',
-      memo:            customer.memo            || '',
     } : emptyForm)
   }, [customer])
 
@@ -316,10 +315,6 @@ function CustomerModal({ customer, onSave, onClose }) {
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
           <Field label="住所" value={form.address} onChange={set('address')} fullWidth />
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={S.smLabel}>メモ・備考</label>
-            <textarea style={{ ...S.smInput, height: 70, resize: 'vertical' }} value={form.memo} onChange={set('memo')} placeholder="自由記入" />
-          </div>
           {error && <div style={S.error}>{error}</div>}
           <div style={S.actions}>
             <button type="button" style={S.cancelBtn} onClick={onClose}>キャンセル</button>
