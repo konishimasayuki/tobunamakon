@@ -1338,11 +1338,10 @@ const SCHEDULE_FIELD_LABELS = {
   times: '時間', notes: '備考', siteContact: '現場連絡先',
 }
 
-function SchedulePage({ onEditShipment }) {
+function SchedulePage({ onEditShipment, isPopup }) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
-  const [popup, setPopup] = useState(false)
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -1437,6 +1436,21 @@ function SchedulePage({ onEditShipment }) {
     }
   }
 
+  const openScheduleWindow = () => {
+    const url = `${window.location.pathname}?view=schedule&popup=1`
+    const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+
+  const sendLine = (s) => {
+    const drivers = Array.isArray(s.drivers) ? s.drivers : []
+    if (drivers.length === 0) { alert('担当が入っていません'); return }
+    const names = drivers.map(d => d.name).join('、')
+    if (window.confirm(`${names} に送信しますか？`)) {
+      alert('送信を受け付けました。\n（※実際のLINE送信にはLINE Messaging APIの連携設定が必要です）')
+    }
+  }
+
   const resetReds = async () => {
     const targets = all.filter(s => Array.isArray(s.changedFields) && s.changedFields.length)
     if (targets.length === 0) { alert('赤（変更）表示はありません'); return }
@@ -1449,22 +1463,19 @@ function SchedulePage({ onEditShipment }) {
     }
   }
 
-  const containerStyle = popup
-    ? { position: 'fixed', inset: 0, zIndex: 9999, background: '#fff', overflow: 'auto' }
-    : { height: '100%', overflow: 'auto', background: '#fff' }
-
   return (
-    <div style={containerStyle}>
+    <div style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44 }}>
         <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '0.35em' }}>出荷予定表</div>
         <div style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
-          <button type="button" onClick={() => setPopup(p => !p)}
-            style={{ border: '1.5px solid #0f3060', background: popup ? '#0f3060' : '#fff', color: popup ? '#fff' : '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {popup ? '✕ 閉じる' : '⛶ ポップアップ表示'}
-          </button>
+          {isPopup
+            ? <button type="button" onClick={() => window.close()}
+                style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+            : <button type="button" onClick={openScheduleWindow}
+                style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>}
         </div>
       </div>
       <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>
@@ -1475,10 +1486,10 @@ function SchedulePage({ onEditShipment }) {
             <col style={{ width: '8%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '7%' }} />
-            <col style={{ width: '13%' }} />
+            <col style={{ width: '12%' }} />
             <col style={{ width: '9%' }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '5%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '8%' }} />
           </colgroup>
           <thead>
             <tr>
@@ -1501,7 +1512,9 @@ function SchedulePage({ onEditShipment }) {
                 <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 <td style={{ textAlign: 'center' }}>
                   <button type="button" onClick={() => openEditWindow(s)}
-                    style={{ border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
+                    style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
+                  <button type="button" onClick={() => sendLine(s)}
+                    style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
                 </td>
               </tr>
             ))}
@@ -1642,17 +1655,18 @@ function AppInner() {
   const { user, loading } = useAuth()
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
+  const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : 'customers')
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'customers'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
 
-  // 編集ポップアップ（別ウィンドウ）は1分ごとに自動更新
+  // 編集ポップアップ（別ウィンドウ）は1分ごとに自動更新（予定表ビューは除く）
   useEffect(() => {
-    if (!isPopup) return
+    if (!isPopup || view === 'schedule') return
     const t = setInterval(() => window.location.reload(), 60000)
     return () => clearInterval(t)
-  }, [isPopup])
+  }, [isPopup, view])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f4f6f9' }}>
@@ -1662,14 +1676,16 @@ function AppInner() {
 
   if (!user) return <LoginPage />
 
-  return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-      {activeTab === 'customers' && <CustomersPage />}
-      {activeTab === 'employees' && <EmployeesPage />}
-      {activeTab === 'shipments' && <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} />}
-      {activeTab === 'schedule' && <SchedulePage onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />}
-    </Layout>
-  )
+  const page = activeTab === 'customers' ? <CustomersPage />
+    : activeTab === 'employees' ? <EmployeesPage />
+    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} />
+    : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
+    : null
+
+  // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
+  if (isPopup) return <div style={{ height: '100vh', overflow: 'auto', background: '#fff' }}>{page}</div>
+
+  return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }
 
 export default function App() {
