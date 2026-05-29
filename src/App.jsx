@@ -917,7 +917,7 @@ function ShipmentsPage() {
   })
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
+    <div style={{ height: '100%', overflow: 'auto' }}>
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
@@ -1042,7 +1042,7 @@ function ShipmentsPage() {
       </div>
 
       {/* 一覧 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={S.toolbar}>
           <input style={S.search} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
