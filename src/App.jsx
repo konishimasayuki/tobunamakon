@@ -34,6 +34,12 @@ async function request(path, options = {}) {
   } catch {
     data = {}
   }
+  if (res.status === 401 && getToken()) {
+    // ログイン有効期限切れ等 → 認証情報を消してログイン画面へ
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    window.location.reload()
+  }
   if (!res.ok) throw new Error(data.error || 'エラー(' + res.status + ')')
   return data
 }
