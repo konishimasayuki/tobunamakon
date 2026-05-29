@@ -54,3 +54,12 @@ input, textarea, select { font-family: inherit; }
 .denpyo .imp.on { background:#c81e1e; color:#fff; }
 .denpyo .del { border:1px solid #aaa; color:#888; background:#fff; }
 .denpyo .addrow { margin-top:6px; border:1px dashed #999; background:#fafafa; border-radius:5px; font-size:13px; padding:5px 12px; cursor:pointer; font-family:'Noto Sans JP',sans-serif; color:#333; align-self:flex-start; }
+
+/* ===== 出荷予定表 ===== */
+.schedule table { border-collapse:collapse; width:100%; min-width:980px; font-family:'Noto Sans JP',sans-serif; }
+.schedule th, .schedule td { border:1px solid #111; padding:2px 6px; vertical-align:middle; }
+.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:13px; text-align:center; white-space:nowrap; }
+.schedule td { height:28px; }
+.schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:13px; color:#1b4ea8; font-family:inherit; padding:1px 2px; }
+.schedule .sc-in::placeholder { color:#cbd2dc; }
+.schedule .sc-in.changed { color:#c81e1e; }

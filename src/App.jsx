@@ -969,6 +969,7 @@ function ShipmentsPage() {
   const [search, setSearch]         = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [editing, setEditing]       = useState(null)
+  const [editChanged, setEditChanged] = useState([])
   const topRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -1031,6 +1032,7 @@ function ShipmentsPage() {
 
   const startEdit = (s) => {
     setEditing(s.id)
+    setEditChanged(Array.isArray(s.changedFields) ? s.changedFields : [])
     setForm(toForm(s))
     setError('')
     requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
@@ -1051,6 +1053,7 @@ function ShipmentsPage() {
         const updated = await api.put(`/api/shipments/${editing}`, payload)
         setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
         setEditing(null)
+        setEditChanged([])
         setForm({ ...emptyShipForm })
       } else {
         const created = await api.post('/api/shipments', payload)
@@ -1061,7 +1064,7 @@ function ShipmentsPage() {
     finally { setSaving(false) }
   }
 
-  const handleReset = () => { setEditing(null); setForm({ ...emptyShipForm }) }
+  const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }) }
 
   const handleDelete = async (id) => {
     try {
@@ -1215,6 +1218,7 @@ function ShipmentsPage() {
           <div style={{ flex: '1 1 340px', minWidth: 280 }}>
             <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
+            {editing && editChanged.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {editChanged.map(f => SCHEDULE_FIELD_LABELS[f] || f).join('・')}</div>}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
               <button type="button" style={S.cancelBtn} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
@@ -1290,12 +1294,124 @@ function ShipmentsPage() {
 }
 
 // ============================================================
+// 出荷予定表ページ
+// ============================================================
+const SCHEDULE_FIELD_LABELS = {
+  companyName: '業者名', tradingCompany: '商社名', siteName: '現場名',
+  vehicleType: '車種', mixCode: '配合', volume: '量', drivers: '担当',
+  times: '時間', notes: '備考', siteContact: '現場連絡先',
+}
+
+function SchedulePage() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [all, setAll] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try { setAll(await api.get('/api/shipments')) }
+    catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
+  const rows = all.filter(s => s.date === date)
+    .sort((a, b) => String(firstT(a)).localeCompare(String(firstT(b))))
+
+  const isChanged = (s, f) => Array.isArray(s.changedFields) && s.changedFields.includes(f)
+
+  const getVal = (s, f) => {
+    switch (f) {
+      case 'drivers': return (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])).join('・')
+      case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join(' / ')
+      case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
+      default: return s[f] == null ? '' : String(s[f])
+    }
+  }
+  const applyField = (s, f, raw) => {
+    if (f === 'drivers') return { ...s, drivers: raw.split(/[・,、/]/).map(x => x.trim()).filter(Boolean).map(n => ({ id: '', name: n })) }
+    if (f === 'times') return { ...s, times: raw.split('/').map(x => x.trim()).filter(Boolean) }
+    if (f === 'notes') return { ...s, notes: raw.split('/').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })) }
+    return { ...s, [f]: raw }
+  }
+  const saveField = async (s, f, raw) => {
+    if (raw === getVal(s, f)) return
+    const updated = applyField(s, f, raw)
+    const changedFields = Array.from(new Set([...(Array.isArray(s.changedFields) ? s.changedFields : []), f]))
+    try {
+      const res = await api.put(`/api/shipments/${s.id}`, { ...updated, changedFields })
+      setAll(arr => arr.map(x => x.id === res.id ? res : x))
+    } catch (e) { alert('保存エラー: ' + e.message) }
+  }
+
+  const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
+
+  const cell = (s, f, ph) => (
+    <input
+      key={f + (isChanged(s, f) ? '_c' : '')}
+      className={'sc-in' + (isChanged(s, f) ? ' changed' : '')}
+      defaultValue={getVal(s, f)}
+      placeholder={ph || ''}
+      onBlur={e => saveField(s, f, e.target.value)}
+    />
+  )
+
+  return (
+    <div style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#111' }}>出荷予定表</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+          <span style={{ fontSize: 15 }}>（{weekday}）</span>
+        </div>
+      </div>
+      <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: '17%' }}><div>業者名</div><div>商社</div></th>
+              <th>現場名</th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
+              <th style={{ width: '24%' }}><div>備考</div><div>現場連絡先</div></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(s => (
+              <tr key={s.id}>
+                <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
+                <td>{cell(s, 'siteName')}</td>
+                <td>{cell(s, 'vehicleType')}</td>
+                <td>{cell(s, 'mixCode')}</td>
+                <td>{cell(s, 'volume')}</td>
+                <td>{cell(s, 'drivers')}</td>
+                <td>{cell(s, 'times')}</td>
+                <td>{cell(s, 'notes', '備考')}{cell(s, 'siteContact', '現場連絡先')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {loading ? (
+          <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
+        ) : (
+          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d' }}>
+            青＝出荷登録の値／赤＝この予定表で変更した値（出荷登録にも反映されます）
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
 // レイアウト
 // ============================================================
 const TABS = [
   { id: 'customers', label: '顧客管理', icon: '👥' },
   { id: 'employees', label: '従業員管理', icon: '👷' },
   { id: 'shipments', label: '出荷登録', icon: '🚛' },
+  { id: 'schedule', label: '出荷予定表', icon: '📋' },
 ]
 
 function Layout({ children, activeTab, onTabChange }) {
@@ -1416,6 +1532,7 @@ function AppInner() {
       {activeTab === 'customers' && <CustomersPage />}
       {activeTab === 'employees' && <EmployeesPage />}
       {activeTab === 'shipments' && <ShipmentsPage />}
+      {activeTab === 'schedule' && <SchedulePage />}
     </Layout>
   )
 }
