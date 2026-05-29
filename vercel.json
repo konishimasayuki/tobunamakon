@@ -1,5 +1,9 @@
 {
   "rewrites": [
+    { "source": "/api/customers/:id", "destination": "/api/customers?id=:id" },
+    { "source": "/api/employees/:id", "destination": "/api/employees?id=:id" },
+    { "source": "/api/shipments/:id", "destination": "/api/shipments?id=:id" },
+    { "source": "/api/users/:username", "destination": "/api/users?username=:username" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
   ]
 }

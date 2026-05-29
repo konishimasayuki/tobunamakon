@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { redis } from '../_redis'
-import { requireAuth, hashPassword } from '../_auth'
-import type { User } from '../_auth'
+import { redis } from './_redis'
+import { requireAuth, hashPassword } from './_auth'
+import type { User } from './_auth'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
