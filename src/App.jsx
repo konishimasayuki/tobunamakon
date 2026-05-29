@@ -918,16 +918,14 @@ function SiteMap({ address, onAddressChange }) {
       const center = { lat: 35.681236, lng: 139.767125 }
       mapRef.current = new maps.Map(mapEl.current, {
         center, zoom: 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+        gestureHandling: 'cooperative',
       })
       markerRef.current = new maps.Marker({ map: mapRef.current, position: center, draggable: true })
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current.getPosition()
-        const lat = pos.lat().toFixed(6), lng = pos.lng().toFixed(6)
         geocoderRef.current.geocode({ location: pos }, (res, st) => {
-          const base = (st === 'OK' && res[0]) ? cleanupJpAddress(res[0].formatted_address) : ''
-          const full = `${base}（緯度経度: ${lat}, ${lng}）`
-          selfSetRef.current = full
-          onAddressChange(full)
+          const addr = (st === 'OK' && res[0]) ? cleanupJpAddress(res[0].formatted_address) : ''
+          if (addr) { selfSetRef.current = addr; onAddressChange(addr) }
         })
       })
       setStatus('')
@@ -948,7 +946,7 @@ function SiteMap({ address, onAddressChange }) {
 
   return (
     <div>
-      <div ref={mapEl} style={{ width: '100%', height: 640, borderRadius: 8, background: '#e8eaed' }} />
+      <div ref={mapEl} className="sitemap-canvas" />
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
       {status === 'notfound' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>住所が見つかりませんでした。ピンを動かして調整してください。</div>}
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
@@ -996,6 +994,20 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     setForm(f => ({ ...f, companyId: c?.id || '', companyName: c?.companyName || '' }))
   }
 
+  const handleCompanyInput = (e) => {
+    const v = e.target.value
+    const c = customers.find(c => c.companyName === v)
+    setForm(f => ({ ...f, companyId: c?.id || '', companyName: v }))
+  }
+
+  const setMix = (i, v) => setForm(f => {
+    const parts = String(f.mixCode || '').split('-')
+    while (parts.length < 3) parts.push('')
+    parts[i] = v.replace(/\D/g, '').slice(0, 2)
+    return { ...f, mixCode: parts.slice(0, 3).join('-') }
+  })
+  const mixPart = (i) => (String(form.mixCode || '').split('-')[i] || '')
+
   const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
     if (!emp) return
@@ -1014,7 +1026,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     tradingCompany: s.tradingCompany || '',
     times: (Array.isArray(s.times) && s.times.length ? s.times : ['']).map(t => ({ text: String(t ?? ''), important: false })),
     siteName: s.siteName || '',
-    siteAddress: s.siteAddress || '',
+    siteAddress: (s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim(),
     vehicleType: s.vehicleType || '',
     truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
     mixCode: s.mixCode || '',
@@ -1105,7 +1117,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', justifyContent: 'center' }}>
-          <div className="sheet" style={{ flex: '1 1 460px', minWidth: 0, margin: 0 }}>
+          <div className="sheet" style={{ flex: '1 1 460px', minWidth: 0, margin: 0, zoom: 0.8 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
@@ -1114,10 +1126,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell" style={{ flex: '0 0 45%' }}>
                 <div className="lbl" style={redIf('companyName')}>業 者 名</div>
-                <select className="f" style={redIf('companyName')} value={form.companyId} onChange={handleCompany} required>
-                  <option value="">選択してください</option>
-                  {customers.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
-                </select>
+                <input className="f" style={redIf('companyName')} list="customerList" value={form.companyName} onChange={handleCompanyInput} placeholder="入力して検索" required />
+                <datalist id="customerList">
+                  {customers.map(c => <option key={c.id} value={c.companyName} />)}
+                </datalist>
               </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
@@ -1166,7 +1178,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       <div className="lbl" style={redIf('mixCode')}>配 合</div>
                       <input className="f tokki" type="text" placeholder="特記事項" value={form.specialNote} onChange={set('specialNote')} />
                     </div>
-                    <input className="f haigou" style={redIf('mixCode')} type="text" placeholder="00-00-00" value={form.mixCode} onChange={set('mixCode')} />
+                    <div className="haigou3" style={redIf('mixCode')}>
+                      <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(0)} onChange={e => setMix(0, e.target.value)} />
+                      <span>-</span>
+                      <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(1)} onChange={e => setMix(1, e.target.value)} />
+                      <span>-</span>
+                      <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(2)} onChange={e => setMix(2, e.target.value)} />
+                    </div>
                   </div>
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">セメント種</div>
@@ -1204,7 +1222,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <div className="band">
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl" style={redIf('notes')}>備 考</div>
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={2} height={90} addLabel="＋ 段落を追加" />
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={2} max={2} height={90} addLabel="＋ 段落を追加" />
               </div>
             </div>
 
