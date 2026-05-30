@@ -1393,7 +1393,9 @@ const SCHEDULE_FIELD_LABELS = {
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
-  const isMobile = useIsMobile()
+  // 出荷予定表は縦持ち（スマホ・iPhone・iPad）前提。横スクロールのテーブルではなく
+  // 1件=1カードの縦リストで表示する。PC・横向き（>=1025px）のみ従来テーブル。
+  const isMobile = useIsMobile(1025)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1535,6 +1537,51 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>}
         </div>
       </div>
+      {isMobile ? (
+        <div className="schedule sc-cards">
+          {loading ? (
+            <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
+          ) : rows.length === 0 ? (
+            <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
+          ) : (
+            <>
+              {rows.map(s => (
+                <div className="sc-card" key={s.id}>
+                  <div className="sc-card-head">
+                    <div className="sc-time">{cellMulti(s, 'times', '時間', { big: true })}</div>
+                    <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
+                  </div>
+                  <div className="sc-row"><span className="sc-lbl">商社</span><span className="sc-val">{cell(s, 'tradingCompany', '商社')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">現場名</span><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
+                  <div className="sc-grid3">
+                    <div className="sc-box"><span className="sc-lbl">車種</span>{cell(s, 'vehicleType', '', { center: true, big: true })}</div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
+                    <div className="sc-box"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                  </div>
+                  <div className="sc-row"><span className="sc-lbl">担当</span><span className="sc-val">{cellMulti(s, 'drivers', '担当', { big: true })}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
+                  <div className="sc-card-actions">
+                    <button type="button" onClick={() => openEditWindow(s)}
+                      style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
+                    <button type="button" onClick={() => sendLine(s)}
+                      style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize: 12, color: '#6b7a8d', padding: '4px 2px' }}>
+                黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
+              </div>
+            </>
+          )}
+          <div style={{ marginTop: 8, textAlign: 'right' }}>
+            <button type="button" onClick={resetReds}
+              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>
+              🧹 変更(赤)をリセット（デバッグ）
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>
         <table>
           <colgroup>
@@ -1593,6 +1640,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </button>
         </div>
       </div>
+      )}
     </div>
   )
 }
