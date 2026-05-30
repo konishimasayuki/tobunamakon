@@ -942,9 +942,13 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   const selfSetRef = useRef('')   // 地図側で設定した住所値（ループ防止）
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
-  const draftRef = useRef(null)   // ドラッグ中の矢印 {x1,y1,x2,y2}（相対0-1）
+  const overlayRef = useRef(null)  // 投影（latlng⇔px変換）取得用 OverlayView
+  const draftRef = useRef(null)    // ドラッグ中の矢印（ピクセル座標 {x1,y1,x2,y2}）
   const [status, setStatus] = useState('loading')
-  const fixed = !!mapView
+  const [drawMode, setDrawMode] = useState(false)  // 矢印描画モード（地図をロックして描く）
+  // 最新値を非同期コールバック（OverlayView.draw / idle）から参照するための ref
+  const arrowsRef = useRef(arrows); arrowsRef.current = arrows
+  const onViewRef = useRef(onMapViewChange); onViewRef.current = onMapViewChange
 
   const doGeocode = (addr) => {
     const g = geocoderRef.current
@@ -997,6 +1001,23 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       cv.width = Math.round(r.width); cv.height = Math.round(r.height)
     }
   }
+  // 緯度経度 → コンテナ内ピクセル（投影が未準備なら null）
+  const latLngToPx = (lat, lng) => {
+    const ov = overlayRef.current
+    const proj = ov && ov.getProjection && ov.getProjection()
+    if (!proj || !window.google) return null
+    const p = proj.fromLatLngToContainerPixel(new window.google.maps.LatLng(lat, lng))
+    return p ? { x: p.x, y: p.y } : null
+  }
+  // コンテナ内ピクセル → 緯度経度
+  const pxToLatLng = (x, y) => {
+    const ov = overlayRef.current
+    const proj = ov && ov.getProjection && ov.getProjection()
+    if (!proj || !window.google) return null
+    const ll = proj.fromContainerPixelToLatLng(new window.google.maps.Point(x, y))
+    return ll ? { lat: ll.lat(), lng: ll.lng() } : null
+  }
+
   const redraw = () => {
     const cv = canvasRef.current
     if (!cv) return
@@ -1004,32 +1025,37 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     const ctx = cv.getContext('2d')
     const w = cv.width, h = cv.height
     ctx.clearRect(0, 0, w, h)
-    if (!fixed) return   // 固定中以外は矢印を描かない（地図移動時に取り残さない）
-    for (const a of (arrows || [])) drawArrow(ctx, a.x1 * w, a.y1 * h, a.x2 * w, a.y2 * h, w)
+    // 矢印は緯度経度で保持 → 現在の地図位置・ズームに合わせて投影し描画（パン/ズームに追従）
+    for (const a of (arrowsRef.current || [])) {
+      if (typeof a.lat1 !== 'number' || typeof a.lat2 !== 'number') continue  // 旧形式は無視
+      const p1 = latLngToPx(a.lat1, a.lng1), p2 = latLngToPx(a.lat2, a.lng2)
+      if (p1 && p2) drawArrow(ctx, p1.x, p1.y, p2.x, p2.y, w)
+    }
     const d = draftRef.current
-    if (d) drawArrow(ctx, d.x1 * w, d.y1 * h, d.x2 * w, d.y2 * h, w)
+    if (d) drawArrow(ctx, d.x1, d.y1, d.x2, d.y2, w)
   }
-  useEffect(() => { redraw() }, [arrows, fixed])
+  useEffect(() => { redraw() }, [arrows, drawMode])
   useEffect(() => {
     const on = () => redraw()
     window.addEventListener('resize', on)
     return () => window.removeEventListener('resize', on)
-  }, [arrows])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const relPos = (e) => {
+  const relPx = (e) => {
     const r = canvasRef.current.getBoundingClientRect()
-    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
+    return { x: (e.clientX - r.left) / r.width * canvasRef.current.width, y: (e.clientY - r.top) / r.height * canvasRef.current.height }
   }
   const onDown = (e) => {
-    if (!fixed) return
+    if (!drawMode) return
     e.preventDefault()
-    const p = relPos(e)
+    const p = relPx(e)
     draftRef.current = { x1: p.x, y1: p.y, x2: p.x, y2: p.y }
     try { canvasRef.current.setPointerCapture(e.pointerId) } catch {}
   }
   const onMove = (e) => {
     if (!draftRef.current) return
-    const p = relPos(e)
+    const p = relPx(e)
     draftRef.current.x2 = p.x; draftRef.current.y2 = p.y
     redraw()
   }
@@ -1038,26 +1064,22 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     draftRef.current = null
     if (!d) return
     const dist = Math.hypot(d.x2 - d.x1, d.y2 - d.y1)
-    if (dist > 0.02) onArrowsChange([...(arrows || []), d])  // 短すぎる線は無視
-    else redraw()
+    if (dist > 8) {   // 短すぎる線は無視（8px）
+      const a = pxToLatLng(d.x1, d.y1), b = pxToLatLng(d.x2, d.y2)
+      if (a && b) onArrowsChange([...(arrowsRef.current || []), { lat1: a.lat, lng1: a.lng, lat2: b.lat, lng2: b.lng }])
+      else redraw()
+    } else redraw()
   }
   const undoArrow = () => onArrowsChange((arrows || []).slice(0, -1))
-  const clearArrows = () => onArrowsChange([])
+  const clearArrows = () => { if (window.confirm('矢印をすべて消去しますか？')) onArrowsChange([]) }
 
-  const toggleFix = () => {
-    const m = mapRef.current
-    if (!m) return
-    if (fixed) {
-      // 固定解除すると地図を動かせるようになり矢印の位置が無意味になるため確認のうえ消す
-      if ((arrows || []).length && !window.confirm('固定を解除すると、描いた矢印は削除されます。よろしいですか？')) return
-      onMapViewChange(null)
-      if ((arrows || []).length) onArrowsChange([])
-      applyLock(false)
-    } else {
-      const c = m.getCenter()
-      onMapViewChange({ lat: c.lat(), lng: c.lng(), zoom: m.getZoom() })
-      applyLock(true)
-    }
+  // 矢印描画モードのオン/オフ（オン中だけ地図をロックして描きやすくする）
+  const toggleDraw = () => {
+    setDrawMode(d => {
+      const next = !d
+      applyLock(next)
+      return next
+    })
   }
 
   useEffect(() => {
@@ -1065,12 +1087,15 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     loadGoogleMaps().then(maps => {
       if (cancelled || !mapEl.current) return
       geocoderRef.current = new maps.Geocoder()
-      const start = mapView ? { lat: mapView.lat, lng: mapView.lng } : { lat: 35.681236, lng: 139.767125 }
-      mapRef.current = new maps.Map(mapEl.current, {
-        center: start, zoom: mapView ? mapView.zoom : 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+      // 保存済みの地図ビューがあればその位置・ズームで開く（矢印を正しく重ねるため）
+      const hasView = mapView && typeof mapView.lat === 'number'
+      const start = hasView ? { lat: mapView.lat, lng: mapView.lng } : { lat: 35.681236, lng: 139.767125 }
+      const map = new maps.Map(mapEl.current, {
+        center: start, zoom: hasView ? mapView.zoom : 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
         gestureHandling: 'cooperative',
       })
-      markerRef.current = new maps.Marker({ map: mapRef.current, position: start, draggable: true })
+      mapRef.current = map
+      markerRef.current = new maps.Marker({ map, position: start, draggable: true })
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current.getPosition()
         geocoderRef.current.geocode({ location: pos }, (res, st) => {
@@ -1078,10 +1103,24 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
           if (addr) { selfSetRef.current = addr; onAddressChange(addr) }
         })
       })
+
+      // 投影取得用の OverlayView。draw() が地図のパン/ズーム毎に呼ばれるので矢印を追従描画
+      const ov = new maps.OverlayView()
+      ov.onAdd = () => {}
+      ov.onRemove = () => {}
+      ov.draw = () => redraw()
+      ov.setMap(map)
+      overlayRef.current = ov
+
+      // 地図が動いたら現在のビュー（中心・ズーム）を保存して矢印位置の基準を最新化
+      const saveView = () => {
+        const c = map.getCenter()
+        if (c) onViewRef.current({ lat: c.lat(), lng: c.lng(), zoom: map.getZoom() })
+      }
+      map.addListener('idle', saveView)
+
       setStatus('')
-      if (mapView) {
-        applyLock(true)   // 既に固定済みのデータ → ロック状態で開く
-      } else {
+      if (!hasView) {
         doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
       }
       requestAnimationFrame(redraw)
@@ -1094,13 +1133,14 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
 
   useEffect(() => {
     if (!geocoderRef.current) return
-    if (fixed) return                            // 固定中は住所変更で地図を動かさない
+    if (drawMode) return                         // 描画中は住所変更で地図を動かさない
+    if ((arrowsRef.current || []).length) return // 矢印がある＝位置確定済み。勝手に動かさない
     if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
     const target = (address && address.trim()) ? address : DEFAULT_SITE_ADDRESS
     const t = setTimeout(() => doGeocode(target), 800)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, fixed])
+  }, [address, drawMode])
 
   return (
     <div>
@@ -1109,31 +1149,27 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
         <canvas
           ref={canvasRef}
           className="sitemap-arrows"
-          style={{ pointerEvents: fixed ? 'auto' : 'none', cursor: fixed ? 'crosshair' : 'default' }}
+          style={{ pointerEvents: drawMode ? 'auto' : 'none', cursor: drawMode ? 'crosshair' : 'default' }}
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
           onPointerCancel={onUp}
         />
-        {fixed && (
-          <div className="sitemap-badge">📌 固定中 — 地図上をドラッグで矢印を描けます</div>
+        {drawMode && (
+          <div className="sitemap-badge">✏️ 描画モード — 地図上をドラッグで矢印を描けます</div>
         )}
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
-        <button type="button" onClick={toggleFix} disabled={status !== ''}
-          style={{ border: '1.5px solid #0f3060', background: fixed ? '#0f3060' : '#fff', color: fixed ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-          {fixed ? '🔓 固定を解除' : '📌 縮尺と位置を固定'}
+        <button type="button" onClick={toggleDraw} disabled={status !== ''}
+          style={{ border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          {drawMode ? '✓ 描画を終える' : '✏️ 矢印を描く'}
         </button>
-        {fixed && (
-          <>
-            <button type="button" onClick={undoArrow} disabled={!(arrows || []).length}
-              style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
-            <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
-              style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
-            <span style={{ fontSize: 11, color: '#6b7a8d' }}>矢印 {(arrows || []).length} 本</span>
-          </>
-        )}
+        <button type="button" onClick={undoArrow} disabled={!(arrows || []).length}
+          style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
+        <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
+          style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
+        <span style={{ fontSize: 11, color: '#6b7a8d' }}>矢印 {(arrows || []).length} 本</span>
       </div>
 
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
@@ -1141,7 +1177,9 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
       {status === 'error' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図の読み込みに失敗しました</div>}
       <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
-        {fixed ? '📍 縮尺・位置を固定し、矢印を描けます（解除すると地図を動かせますが、矢印は消えます）' : '📍 ピンをドラッグすると現場住所が更新されます。位置が決まったら「縮尺と位置を固定」を押してください'}
+        {drawMode
+          ? '✏️ 地図上をドラッグして矢印を描きます。描き終えたら「描画を終える」を押すと地図を動かせます'
+          : '📍 ピンをドラッグで現場住所を調整。矢印は「矢印を描く」から追加でき、地図を動かしても同じ場所に追従します'}
       </div>
     </div>
   )
