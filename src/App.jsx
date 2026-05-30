@@ -888,11 +888,18 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
   )
 }
 
-// 選択チップ（単一 / 複数）
-function Chips({ options, value, multi, onChange, big }) {
-  const isOn = (o) => multi ? (value || []).includes(o) : value === o
+// 選択チップ（単一 / 配列複数 multi / 文字列複数 multiStr）
+// multiStr: 値は "4t・7t" のような・連結文字列。保存形式を文字列のまま複数選択にできる。
+function Chips({ options, value, multi, multiStr, onChange, big }) {
+  const strList = () => String(value || '').split('・').map(s => s.trim()).filter(Boolean)
+  const isOn = (o) => multiStr ? strList().includes(o) : multi ? (value || []).includes(o) : value === o
   const toggle = (o) => {
-    if (multi) {
+    if (multiStr) {
+      const cur = strList()
+      const next = cur.includes(o) ? cur.filter(x => x !== o) : [...cur, o]
+      // options の並び順を保って連結（4t→7t→大型）
+      onChange(options.filter(op => next.includes(op)).join('・'))
+    } else if (multi) {
       const cur = value || []
       onChange(cur.includes(o) ? cur.filter(x => x !== o) : [...cur, o])
     } else {
@@ -1409,6 +1416,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     } catch (e) { alert('エラー: ' + e.message) }
   }
 
+  // 商社名プルダウン候補：既存出荷で入力された商社名を重複なしで集める
+  const tradingOptions = Array.from(new Set(
+    shipments.map(s => (s.tradingCompany || '').trim()).filter(Boolean)
+  )).sort()
+
   const filtered = shipments.filter(s => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -1450,7 +1462,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
-                <input className="f" style={redIf('tradingCompany')} type="text" value={form.tradingCompany} onChange={set('tradingCompany')} />
+                <input className="f" style={redIf('tradingCompany')} list="tradingList" value={form.tradingCompany} onChange={set('tradingCompany')} placeholder="入力して選択" />
+                <datalist id="tradingList">
+                  {tradingOptions.map(t => <option key={t} value={t} />)}
+                </datalist>
               </div>
             </div>
 
@@ -1481,7 +1496,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
                 <div>
                   <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} big />
+                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} multiStr big />
                 </div>
                 <div className="inline" style={{ justifyContent: 'flex-end' }}>
                   <input className="num" type="number" min="0" inputMode="numeric" value={form.truckCount} onChange={set('truckCount')} />
@@ -1490,7 +1505,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
-                  <div className="cell" style={{ flex: '0 0 52%' }}>
+                  <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
                     <div className="haigou3" style={redIf('mixCode')}>
                       <div className="hgcol">
@@ -1509,20 +1524,20 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       </div>
                     </div>
                   </div>
-                  <div className="cell" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                     <div className="lbl">セメント種</div>
                     <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} big />
                   </div>
                 </div>
                 <div className="subrow">
-                  <div className="cell m3" style={{ flex: '0 0 52%', justifyContent: 'center' }}>
+                  <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, justifyContent: 'center' }}>
                     <div className="inline" style={{ justifyContent: 'center' }}>
                       <input type="number" min="0" step="0.01" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={set('volume')} />
                       <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
                     </div>
                     <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
                   </div>
-                  <div className="cell" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                     <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
                   </div>
                 </div>

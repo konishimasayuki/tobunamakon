@@ -56,8 +56,9 @@ input, textarea, select { font-family: inherit; }
 .denpyo .haigou { width:100%; font-size:90px; font-weight:700; margin-top:6px; line-height:1.1; text-align:center; }
 /* 車種チップ大きく・m³大きく */
 .denpyo .chips.big .chip { font-size:20px; padding:5px 14px; }
-.denpyo .m3 input[type="number"] { font-size:30px; width:78px; }
+.denpyo .m3 input[type="number"] { font-size:30px; width:78px; max-width:55%; min-width:0; }
 .denpyo .m3 .unit { font-size:20px; }
+.denpyo .m3 .inline { max-width:100%; min-width:0; }
 /* 配合：2桁×3フィールド（各数値の上に小さく特記事項） */
 .denpyo .haigou3 { display:flex; align-items:flex-end; justify-content:center; gap:6px; margin-top:2px; }
 .denpyo .haigou3 .hgsep { font-size:38px; font-weight:700; color:#111; align-self:flex-end; line-height:1; }
