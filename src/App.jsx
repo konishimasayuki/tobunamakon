@@ -143,7 +143,7 @@ function parseCSV(text) {
 // スタイル
 // ============================================================
 const S = {
-  loginRoot:  { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f3060 0%, #1a4d8f 50%, #1a6a9f 100%)' },
+  loginRoot:  { minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f3060 0%, #1a4d8f 50%, #1a6a9f 100%)' },
   loginCard:  { background: '#fff', borderRadius: 16, padding: '40px 36px', width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' },
   loginLogo:  { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32, paddingBottom: 24, borderBottom: '2px solid #f0f2f5' },
   company:    { fontSize: 18, fontWeight: 700, color: '#1a2332', lineHeight: 1.3 },
@@ -154,15 +154,15 @@ const S = {
   input:      { padding: '10px 14px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 15, outline: 'none', color: '#1a2332' },
   error:      { background: '#fef2f2', color: '#c0392b', padding: '10px 14px', borderRadius: 8, fontSize: 13, border: '1px solid #fecaca' },
   loginBtn:   { background: 'linear-gradient(135deg, #1a4d8f, #1a6a9f)', color: '#fff', border: 'none', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 4 },
-  appRoot:    { display: 'flex', height: '100vh', overflow: 'hidden' },
+  appRoot:    { display: 'flex', height: '100dvh', overflow: 'hidden' },
   sidebar:    { width: 200, background: '#0f3060', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' },
+  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)' },
   coName:     { color: '#fff', fontWeight: 700, fontSize: 13, lineHeight: 1.3 },
   syName:     { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 },
   nav:        { flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 },
   navItem:    { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left', width: '100%' },
   navActive:  { background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 600 },
-  sideFoot:   { padding: '10px 14px 14px', borderTop: '1px solid rgba(255,255,255,0.1)' },
+  sideFoot:   { padding: '10px 14px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.1)' },
   userName:   { color: '#fff', fontWeight: 600, fontSize: 12 },
   userRole:   { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 1 },
   logoutBtn:  { width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, padding: '6px 0', fontSize: 11, fontWeight: 500, cursor: 'pointer', marginTop: 8 },
@@ -207,14 +207,41 @@ const S = {
   warnTag:    { display: 'inline-block', background: '#fff8f0', color: '#e8821a', border: '1px solid #f5c070', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
   skipTag:    { display: 'inline-block', background: '#f4f6f9', color: '#6b7a8d', border: '1px solid #dde3ed', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
   overlay2:   { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 998 },
-  hamburger:  { background: 'none', border: 'none', color: '#1a2332', fontSize: 22, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 },
+  hamburger:  { background: 'none', border: 'none', color: '#1a2332', fontSize: 24, cursor: 'pointer', padding: '6px 10px', lineHeight: 1 },
+  grid1:      { display: 'grid', gridTemplateColumns: '1fr', gap: 12 },
 }
+
+// ============================================================
+// レスポンシブ用フック（モバイル/タブレット判定）
+// ============================================================
+const MOBILE_BP = 768   // これ未満をモバイル扱い（iPhone / 縦持ちスマホ）
+
+function useIsMobile(bp = MOBILE_BP) {
+  const [mobile, setMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < bp
+  )
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < bp)
+    check()
+    window.addEventListener('resize', check)
+    window.addEventListener('orientationchange', check)
+    return () => {
+      window.removeEventListener('resize', check)
+      window.removeEventListener('orientationchange', check)
+    }
+  }, [bp])
+  return mobile
+}
+
+// iOS でフォーカス時の自動ズームを防ぐため、モバイルでは入力欄を 16px 以上にする
+const noZoom = (style, mobile) => (mobile ? { ...style, fontSize: 16 } : style)
 
 // ============================================================
 // ログイン画面
 // ============================================================
 function LoginPage() {
   const { login } = useAuth()
+  const isMobile = useIsMobile()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
@@ -230,8 +257,8 @@ function LoginPage() {
   }
 
   return (
-    <div style={S.loginRoot}>
-      <div style={S.loginCard}>
+    <div style={{ ...S.loginRoot, padding: 16 }}>
+      <div style={{ ...S.loginCard, padding: isMobile ? '28px 22px' : '40px 36px' }}>
         <div style={S.loginLogo}>
           <div style={{ fontSize: 36 }}>🏗</div>
           <div>
@@ -242,11 +269,11 @@ function LoginPage() {
         <form onSubmit={handleSubmit} style={S.form}>
           <div style={S.field}>
             <label style={S.label}>ユーザー名</label>
-            <input style={S.input} type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="username" autoComplete="username" required />
+            <input style={noZoom(S.input, isMobile)} type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="username" autoComplete="username" required />
           </div>
           <div style={S.field}>
             <label style={S.label}>パスワード</label>
-            <input style={S.input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
+            <input style={noZoom(S.input, isMobile)} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
           </div>
           {error && <div style={S.error}>{error}</div>}
           <button style={{ ...S.loginBtn, opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
@@ -263,10 +290,11 @@ function LoginPage() {
 // フォームフィールド部品
 // ============================================================
 function Field({ label, value, onChange, required, type = 'text', fullWidth = false }) {
+  const isMobile = useIsMobile()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gridColumn: fullWidth ? '1 / -1' : undefined }}>
       <label style={S.smLabel}>{label}</label>
-      <input style={S.smInput} type={type} value={value} onChange={onChange} required={required} />
+      <input style={noZoom(S.smInput, isMobile)} type={type} value={value} onChange={onChange} required={required} />
     </div>
   )
 }
@@ -277,6 +305,7 @@ function Field({ label, value, onChange, required, type = 'text', fullWidth = fa
 const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '' }
 
 function CustomerModal({ customer, onSave, onClose }) {
+  const isMobile = useIsMobile()
   const [form, setForm]       = useState(emptyForm)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -311,12 +340,12 @@ function CustomerModal({ customer, onSave, onClose }) {
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={S.modalForm}>
-          <div style={S.grid3}>
+          <div style={isMobile ? S.grid1 : S.grid3}>
             <Field label="顧客コード"    value={form.customerCode}    onChange={set('customerCode')} />
             <Field label="会社名 *"      value={form.companyName}     onChange={set('companyName')}     required />
             <Field label="会社名（カナ）" value={form.companyNameKana} onChange={set('companyNameKana')} />
           </div>
-          <div style={S.grid2}>
+          <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="電話番号" value={form.phone}         onChange={set('phone')}         type="tel" />
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
@@ -428,6 +457,7 @@ function ImportModal({ onClose, onDone }) {
 const emptyEmpForm = { employeeId: '', name: '', lineId: '', type: 'office' }
 
 function EmployeeModal({ employee, onSave, onClose }) {
+  const isMobile = useIsMobile()
   const [form, setForm]       = useState(emptyEmpForm)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -460,16 +490,16 @@ function EmployeeModal({ employee, onSave, onClose }) {
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={S.modalForm}>
-          <div style={S.grid2}>
+          <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="従業員ID" value={form.employeeId} onChange={set('employeeId')} />
             <Field label="氏名 *"   value={form.name}       onChange={set('name')} required />
           </div>
-          <div style={S.grid2}>
+          <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="LINE ID" value={form.lineId} onChange={set('lineId')} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={S.smLabel}>種別 *</label>
               <select
-                style={{ ...S.smInput, cursor: 'pointer' }}
+                style={{ ...noZoom(S.smInput, isMobile), cursor: 'pointer' }}
                 value={form.type}
                 onChange={set('type')}
                 required
@@ -504,6 +534,7 @@ const EMP_TYPE_COLORS = {
 
 function EmployeesPage() {
   const { user } = useAuth()
+  const isMobile = useIsMobile()
   const [employees, setEmployees]         = useState([])
   const [loading, setLoading]             = useState(true)
   const [search, setSearch]               = useState('')
@@ -564,7 +595,7 @@ function EmployeesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={S.toolbar}>
-        <input style={S.search} placeholder="🔍  ID・氏名・種別などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <input style={noZoom(S.search, isMobile)} placeholder="🔍  ID・氏名・種別などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         <button style={S.addBtn} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 従業員追加</button>
       </div>
       <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
@@ -574,7 +605,7 @@ function EmployeesPage() {
       ) : filtered.length === 0 ? (
         <div style={S.empty}>{search ? '検索結果がありません' : '従業員が登録されていません'}</div>
       ) : (
-        <div style={S.tableWrap}>
+        <div className="tw-scroll" style={S.tableWrap}>
           <table style={S.table}>
             <colgroup>{cols.map((c, i) => <col key={i} style={{ width: c.w }} />)}</colgroup>
             <thead>
@@ -630,6 +661,7 @@ function EmployeesPage() {
 // ============================================================
 function CustomersPage() {
   const { user } = useAuth()
+  const isMobile = useIsMobile()
   const [customers, setCustomers]         = useState([])
   const [loading, setLoading]             = useState(true)
   const [search, setSearch]               = useState('')
@@ -693,7 +725,7 @@ function CustomersPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={S.toolbar}>
-        <input style={S.search} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <input style={noZoom(S.search, isMobile)} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         <button style={S.exportBtn} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
         <button style={S.importBtn} onClick={() => setImportOpen(true)}>📤 インポート</button>
         <button style={S.addBtn}    onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
@@ -705,7 +737,7 @@ function CustomersPage() {
       ) : filtered.length === 0 ? (
         <div style={S.empty}>{search ? '検索結果がありません' : '顧客が登録されていません'}</div>
       ) : (
-        <div style={S.tableWrap}>
+        <div className="tw-scroll" style={S.tableWrap}>
           <table style={S.table}>
             <colgroup>{cols.map((c, i) => <col key={i} style={{ width: c.w }} />)}</colgroup>
             <thead>
@@ -964,6 +996,7 @@ function SiteMap({ address, onAddressChange }) {
 }
 
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed }) {
+  const isMobile = useIsMobile()
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
   const [customers, setCustomers]   = useState([])
@@ -1129,7 +1162,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   return (
     <div ref={topRef} style={{ height: '100%', overflow: 'auto' }}>
       {/* 手配伝票フォーム */}
-      <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
+      <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', justifyContent: 'center' }}>
           <div className="sheet" style={{ flex: '1 1 460px', minWidth: 0, margin: 0, zoom: 0.8 }}>
@@ -1291,7 +1324,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 一覧 */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={S.toolbar}>
-          <input style={S.search} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+          <input style={noZoom(S.search, isMobile)} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
 
@@ -1300,7 +1333,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         ) : filtered.length === 0 ? (
           <div style={S.empty}>{search ? '検索結果がありません' : '出荷登録がありません'}</div>
         ) : (
-          <div style={S.tableWrap}>
+          <div className="tw-scroll" style={S.tableWrap}>
             <table style={S.table}>
               <thead>
                 <tr>
@@ -1360,6 +1393,7 @@ const SCHEDULE_FIELD_LABELS = {
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
+  const isMobile = useIsMobile()
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1486,11 +1520,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   return (
     <div style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
-      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44 }}>
-        <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '0.35em' }}>出荷予定表</div>
-        <div style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
+      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: isMobile ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+        <div style={{ textAlign: 'center', fontSize: isMobile ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: isMobile ? '0.15em' : '0.35em' }}>出荷予定表</div>
+        <div style={isMobile
+          ? { display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, color: '#111' }
+          : { position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+            style={{ fontSize: isMobile ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           {isPopup
             ? <button type="button" onClick={() => window.close()}
@@ -1580,7 +1616,7 @@ function useShipments() {
 const RPT = {
   wrap: { height: '100%', overflow: 'auto', padding: 18 },
   head: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 },
-  date: { padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 14 },
+  date: { padding: '6px 10px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 16 },
   table: { borderCollapse: 'collapse', width: '100%', fontSize: 13 },
   th: { border: '1px solid #cfd6e0', background: '#f4f6f9', padding: '5px 8px', fontWeight: 700, whiteSpace: 'nowrap' },
   td: { border: '1px solid #e3e8ef', padding: '5px 8px' },
@@ -1779,7 +1815,7 @@ function SettingsPage() {
   }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
 
-  const inp = { padding: '8px 10px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 14, width: '100%', boxSizing: 'border-box' }
+  const inp = { padding: '9px 11px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 16, width: '100%', boxSizing: 'border-box' }
   const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 620, marginBottom: 18 }
 
   return (
@@ -1839,13 +1875,16 @@ const TABS = [
 function Layout({ children, activeTab, onTabChange }) {
   const { user, logout } = useAuth()
   const [open, setOpen]   = useState(false)
-  const [isPC, setIsPC]   = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768)
+  const isMobile = useIsMobile()
+  const isPC = !isMobile
 
+  // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
-    const check = () => setIsPC(window.innerWidth >= 768)
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+    if (isMobile && open) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [isMobile, open])
 
   const closeSidebar = () => setOpen(false)
 
@@ -1907,8 +1946,8 @@ function Layout({ children, activeTab, onTabChange }) {
           </div>
           <nav style={S.nav}>
             {TABS.map(tab => (
-              <button key={tab.id} style={{ ...S.navItem, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
-                <span style={{ fontSize: 15 }}>{tab.icon}</span>{tab.label}
+              <button key={tab.id} style={{ ...S.navItem, padding: '13px 12px', fontSize: 15, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
+                <span style={{ fontSize: 17 }}>{tab.icon}</span>{tab.label}
               </button>
             ))}
           </nav>
@@ -1922,11 +1961,11 @@ function Layout({ children, activeTab, onTabChange }) {
       )}
 
       <main style={{ ...S.main, width: '100%' }}>
-        <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 8, padding: isMobile ? '10px 12px' : '14px 20px', paddingTop: isMobile ? 'calc(10px + env(safe-area-inset-top))' : 14 }}>
           {!isPC && (
-            <button style={S.hamburger} onClick={() => setOpen(true)}>☰</button>
+            <button style={S.hamburger} onClick={() => setOpen(true)} aria-label="メニュー">☰</button>
           )}
-          <h1 style={S.pageTitle}>{TABS.find(t => t.id === activeTab)?.icon}{' '}{TABS.find(t => t.id === activeTab)?.label}</h1>
+          <h1 style={{ ...S.pageTitle, fontSize: isMobile ? 16 : 17 }}>{TABS.find(t => t.id === activeTab)?.icon}{' '}{TABS.find(t => t.id === activeTab)?.label}</h1>
         </div>
         <div style={S.content}>{children}</div>
       </main>
@@ -1955,7 +1994,7 @@ function AppInner() {
   }, [isPopup, view])
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f4f6f9' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#f4f6f9' }}>
       <div style={{ color: '#6b7a8d', fontSize: 15 }}>読み込み中...</div>
     </div>
   )
@@ -1975,7 +2014,7 @@ function AppInner() {
     : null
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div style={{ height: '100vh', overflow: 'auto', background: '#fff' }}>{page}</div>
+  if (isPopup) return <div style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
 
   return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }

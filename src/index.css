@@ -1,14 +1,24 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif;
   background: #f4f6f9;
   color: #1a2332;
   font-size: 14px;
   line-height: 1.6;
+  -webkit-tap-highlight-color: rgba(0,0,0,0.06);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
-button { cursor: pointer; font-family: inherit; }
+button { cursor: pointer; font-family: inherit; touch-action: manipulation; }
 input, textarea, select { font-family: inherit; }
+/* スクロール領域は慣性スクロールを有効化（iOS） */
+.tw-scroll, .schedule { -webkit-overflow-scrolling: touch; }
+/* モバイルでは一覧テーブルを横スクロール可能に（PCは従来どおり折り返さず省略表示） */
+@media (max-width: 767px) {
+  .tw-scroll { overflow-x: auto !important; }
+}
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #f4f6f9; }
 ::-webkit-scrollbar-thumb { background: #c0c8d4; border-radius: 3px; }
