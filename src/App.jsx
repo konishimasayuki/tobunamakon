@@ -974,8 +974,6 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   const draftRef = useRef(null)    // ドラッグ中の矢印（ピクセル座標 {x1,y1,x2,y2}）
   const [status, setStatus] = useState('loading')
   const [drawMode, setDrawMode] = useState(false)  // 矢印描画モード（地図をロックして描く）
-  const [pinLock, setPinLock] = useState(false)    // ピン（マーカー）の位置を固定
-  const [viewLock, setViewLock] = useState(false)  // 縮尺・位置（パン/ズーム）を固定
   // 最新値を非同期コールバック（OverlayView.draw / idle）から参照するための ref
   const arrowsRef = useRef(arrows); arrowsRef.current = arrows
   const onViewRef = useRef(onMapViewChange); onViewRef.current = onMapViewChange
@@ -1006,24 +1004,21 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     })
   }
 
-  // 地図の操作状態を各トグルから合成して反映
-  // - viewLock または描画中は地図のパン/ズームを禁止
-  // - pinLock または描画中はマーカーをドラッグ不可
+  // 描画モード中だけ地図のパン/ズーム・ピンドラッグをロックする
   const applyLock = (opts = {}) => {
     const m = mapRef.current
     if (!m) return
-    const vLock = (opts.view ?? viewLock) || (opts.draw ?? drawMode)
-    const pLock = (opts.pin ?? pinLock) || (opts.draw ?? drawMode)
+    const lock = opts.draw ?? drawMode
     m.setOptions({
-      gestureHandling: vLock ? 'none' : 'cooperative',
-      zoomControl: !vLock,
-      draggable: !vLock,
-      scrollwheel: !vLock,
-      disableDoubleClickZoom: vLock,
-      keyboardShortcuts: !vLock,
-      clickableIcons: !vLock,
+      gestureHandling: lock ? 'none' : 'cooperative',
+      zoomControl: !lock,
+      draggable: !lock,
+      scrollwheel: !lock,
+      disableDoubleClickZoom: lock,
+      keyboardShortcuts: !lock,
+      clickableIcons: !lock,
     })
-    if (markerRef.current) markerRef.current.setDraggable(!pLock)
+    if (markerRef.current) markerRef.current.setDraggable(!lock)
   }
 
   // ===== 矢印キャンバス =====
@@ -1544,7 +1539,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             </div>
           </div>
           </FitToWidth>
-          <div style={{ flex: stacked ? '0 0 auto' : '1 1 auto', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+          <div style={{ flex: stacked ? '0 0 auto' : '1 1 340px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
             <SiteMap
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
