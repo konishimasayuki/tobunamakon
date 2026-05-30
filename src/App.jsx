@@ -1444,7 +1444,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 3, alignItems: 'stretch', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 28, alignItems: 'stretch', justifyContent: 'center' }}>
           <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '0 0 644px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
@@ -1590,7 +1590,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             </div>
           </div>
           </FitToWidth>
-          <div style={{ flex: stacked ? '0 0 auto' : '1 1 340px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+          <div style={{ flex: stacked ? '0 0 auto' : '0 0 560px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
             <SiteMap
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
@@ -1799,11 +1799,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // モーダル編集：構造化パッチ（patch=実データ、changed=変更フィールド名）を一括保存
   const saveStructured = async (s, patch, changedKeys) => {
     const merged = { ...s, ...patch }
+    // 業者名が空だとAPIが400を返すため、空なら元の値を温存して保存失敗を防ぐ
+    if (!String(merged.companyName || '').trim()) merged.companyName = s.companyName || ''
+    if (!String(merged.date || '').trim()) merged.date = s.date
     const changedFields = Array.from(new Set([...(Array.isArray(s.changedFields) ? s.changedFields : []), ...changedKeys]))
     try {
       const res = await api.put(`/api/shipments/${s.id}`, { ...merged, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
-    } catch (e) { alert('保存エラー: ' + e.message); throw e }
+    } catch (e) { alert('保存に失敗しました: ' + e.message); throw e }
   }
 
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
@@ -1878,7 +1881,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const cellTimes = (s) => {
     const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
       .map(x => String(x ?? '').trim()).filter(Boolean)
-    const cls = 'sc-in big center sc-timeitem' + (isChanged(s, 'times') ? ' changed' : '')
+    const cls = 'sc-in sc-timeitem' + (isChanged(s, 'times') ? ' changed' : '')
     const saveAll = (container) => {
       const inputs = Array.from(container.querySelectorAll('input.sc-timeitem'))
       saveField(s, 'times', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
@@ -1889,8 +1892,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
         {items.map((t, i) => (
           <Fragment key={i}>
             {i > 0 && <span className="sc-timesep">〜</span>}
-            <input ref={fitRef} className={cls} defaultValue={t} placeholder={i === 0 ? '時間' : ''}
-              onInput={e => fitOne(e.target)} onBlur={e => saveAll(e.target.closest('.sc-times'))} />
+            <input className={cls} defaultValue={t} placeholder={i === 0 ? '時間' : ''}
+              size={5} onBlur={e => saveAll(e.target.closest('.sc-times'))} />
           </Fragment>
         ))}
       </div>
@@ -1956,8 +1959,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {row.map((nm) => {
               const i = idx++
               return (
-                <input key={i} ref={fitRef} className={cls} defaultValue={nm}
-                  placeholder={i === 0 ? '担当' : ''} onInput={e => fitOne(e.target)} />
+                <input key={i} className={cls} defaultValue={nm}
+                  placeholder={i === 0 ? '担当' : ''} />
               )
             })}
           </div>
