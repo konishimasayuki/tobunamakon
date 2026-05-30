@@ -1685,6 +1685,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -1766,6 +1767,22 @@ function SchedulePage({ onEditShipment, isPopup }) {
       const res = await api.put(`/api/shipments/${s.id}`, { ...updated, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
     } catch (e) { alert('保存エラー: ' + e.message) }
+  }
+
+  // モーダル編集：複数フィールドを一括保存し、変更フィールドを赤表示に記録する
+  const saveFields = async (s, edits) => {
+    let merged = { ...s }
+    const changed = new Set(Array.isArray(s.changedFields) ? s.changedFields : [])
+    for (const [f, raw] of Object.entries(edits)) {
+      if (raw === getVal(s, f)) continue           // 変化なしはスキップ
+      merged = applyField(merged, f, raw)
+      changed.add(f)
+    }
+    const changedFields = Array.from(changed)
+    try {
+      const res = await api.put(`/api/shipments/${s.id}`, { ...merged, changedFields })
+      setAll(arr => arr.map(x => x.id === res.id ? res : x))
+    } catch (e) { alert('保存エラー: ' + e.message); throw e }
   }
 
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
@@ -2018,7 +2035,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
-                    <button type="button" onClick={() => openEditWindow(s)}
+                    <button type="button" onClick={() => setEditModal(s)}
                       style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
                     <button type="button" onClick={() => sendLine(s)}
                       style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
@@ -2108,6 +2125,76 @@ function SchedulePage({ onEditShipment, isPopup }) {
         )}
       </div>
       )}
+      {editModal && (
+        <ScheduleEditModal
+          shipment={editModal}
+          getVal={getVal}
+          onClose={() => setEditModal(null)}
+          onSave={async (edits) => { await saveFields(editModal, edits); setEditModal(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// スマホ予定表の編集モーダル。更新で差分保存→閉じると予定表に戻り変更が赤文字反映される。
+function ScheduleEditModal({ shipment, getVal, onClose, onSave }) {
+  const [f, setF] = useState({
+    times: getVal(shipment, 'times'),
+    companyName: getVal(shipment, 'companyName'),
+    tradingCompany: getVal(shipment, 'tradingCompany'),
+    siteName: getVal(shipment, 'siteName'),
+    vehicleType: getVal(shipment, 'vehicleType'),
+    mixCode: getVal(shipment, 'mixCode'),
+    volume: getVal(shipment, 'volume'),
+    drivers: getVal(shipment, 'drivers'),
+    notes: getVal(shipment, 'notes'),
+    siteContact: getVal(shipment, 'siteContact'),
+  })
+  const [saving, setSaving] = useState(false)
+  const upd = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target.value }))
+  const submit = async () => {
+    setSaving(true)
+    try { await onSave(f) } catch { setSaving(false) }
+  }
+  const lblS = { fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 4, display: 'block' }
+  const inS = { width: '100%', fontSize: 16, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, fontFamily: 'inherit', color: '#111' }
+  const row = (label, key, opts = {}) => (
+    <div style={{ marginBottom: 12 }}>
+      <label style={lblS}>{label}</label>
+      {opts.area
+        ? <textarea value={f[key]} onChange={upd(key)} rows={opts.rows || 2} style={{ ...inS, resize: 'vertical' }} placeholder={opts.ph || ''} />
+        : <input value={f[key]} onChange={upd(key)} style={inS} inputMode={opts.inputMode} placeholder={opts.ph || ''} />}
+      {opts.hint && <div style={{ fontSize: 11, color: '#8a97a6', marginTop: 3 }}>{opts.hint}</div>}
+    </div>
+  )
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
+          <button type="button" onClick={onClose} disabled={saving}
+            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+        </div>
+        {row('時間（複数は改行）', 'times', { area: true, rows: 2, hint: '例: 08:00 / 10:00（改行または / 区切り）' })}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {row('業者名', 'companyName')}
+          {row('商社名', 'tradingCompany')}
+        </div>
+        {row('現場名', 'siteName')}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          {row('車種', 'vehicleType')}
+          {row('配合', 'mixCode')}
+          {row('量', 'volume', { inputMode: 'decimal', hint: '?で不確定' })}
+        </div>
+        {row('担当（複数は改行）', 'drivers', { area: true, rows: 2 })}
+        {row('備考', 'notes', { area: true, rows: 2, hint: '複数は / 区切り' })}
+        {row('現場連絡先', 'siteContact', { inputMode: 'tel' })}
+        <button type="button" onClick={submit} disabled={saving}
+          style={{ width: '100%', marginTop: 6, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+          {saving ? '更新中…' : '更新'}
+        </button>
+      </div>
     </div>
   )
 }
