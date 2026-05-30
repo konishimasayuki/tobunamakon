@@ -1004,6 +1004,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     const ctx = cv.getContext('2d')
     const w = cv.width, h = cv.height
     ctx.clearRect(0, 0, w, h)
+    if (!fixed) return   // 固定中以外は矢印を描かない（地図移動時に取り残さない）
     for (const a of (arrows || [])) drawArrow(ctx, a.x1 * w, a.y1 * h, a.x2 * w, a.y2 * h, w)
     const d = draftRef.current
     if (d) drawArrow(ctx, d.x1 * w, d.y1 * h, d.x2 * w, d.y2 * h, w)
@@ -1047,7 +1048,10 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     const m = mapRef.current
     if (!m) return
     if (fixed) {
+      // 固定解除すると地図を動かせるようになり矢印の位置が無意味になるため確認のうえ消す
+      if ((arrows || []).length && !window.confirm('固定を解除すると、描いた矢印は削除されます。よろしいですか？')) return
       onMapViewChange(null)
+      if ((arrows || []).length) onArrowsChange([])
       applyLock(false)
     } else {
       const c = m.getCenter()
@@ -1137,7 +1141,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
       {status === 'error' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図の読み込みに失敗しました</div>}
       <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
-        {fixed ? '📍 縮尺・位置を固定し、矢印を描けます（解除すると地図を再び動かせます）' : '📍 ピンをドラッグすると現場住所が更新されます。位置が決まったら「縮尺と位置を固定」を押してください'}
+        {fixed ? '📍 縮尺・位置を固定し、矢印を描けます（解除すると地図を動かせますが、矢印は消えます）' : '📍 ピンをドラッグすると現場住所が更新されます。位置が決まったら「縮尺と位置を固定」を押してください'}
       </div>
     </div>
   )
