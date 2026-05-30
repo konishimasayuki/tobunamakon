@@ -1883,7 +1883,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
     const items = times.length ? times : ['']
     return (
-      <div className="sc-times" key={'times' + (isChanged(s, 'times') ? '_c' : '') + '_n' + items.length}>
+      <div className={'sc-times' + (items.length === 1 ? ' single' : '')} key={'times' + (isChanged(s, 'times') ? '_c' : '') + '_n' + items.length}>
         {items.map((t, i) => (
           <Fragment key={i}>
             {i > 0 && <span className="sc-timesep">〜</span>}
