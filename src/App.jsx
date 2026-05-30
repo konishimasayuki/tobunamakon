@@ -1563,7 +1563,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
                 <td>{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</td>
-                <td>{cell(s, 'volume', '', { center: true })}</td>
+                <td>{cell(s, 'volume', '', { center: true, big: true })}</td>
                 <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
                 <td>{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
@@ -1673,7 +1673,7 @@ function DashboardPage() {
 function WeeklySchedulePage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const { all, loading } = useShipments()
-  const ms = mondayOf(date)
+  const ms = new Date(date)   // 選択日（既定は本日）を左端に7日分表示
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
   const todayStr = new Date().toISOString().slice(0, 10)
   return (
@@ -1793,6 +1793,7 @@ function SettingsPage() {
   const [data, setData] = useState({ users: [], hasToken: false, hasSecret: false })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [usersOpen, setUsersOpen] = useState(false)
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -1839,18 +1840,27 @@ function SettingsPage() {
       </div>
 
       <div style={box}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>登録済みLINEユーザー（友だち追加時に自動登録）</h3>
-          <button onClick={load} style={S.editBtn}>🔄 更新</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: usersOpen ? 10 : 0, gap: 8 }}>
+          <button
+            onClick={() => setUsersOpen(o => !o)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#1a2332', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: 12, color: '#6b7a8d', width: 12, display: 'inline-block' }}>{usersOpen ? '▼' : '▶'}</span>
+            登録済みLINEユーザー（友だち追加時に自動登録）
+            <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7a8d' }}>{(data.users || []).length}件</span>
+          </button>
+          {usersOpen && <button onClick={load} style={S.editBtn}>🔄 更新</button>}
         </div>
-        {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
-          : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
-            : data.users.map((u) => (
-              <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
-                <span style={{ fontSize: 13 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11 }}>{u.userId}</span></span>
-                <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
-              </div>
-            ))}
+        {usersOpen && (
+          loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+            : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
+              : data.users.map((u) => (
+                <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
+                  <span style={{ fontSize: 13 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11 }}>{u.userId}</span></span>
+                  <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                </div>
+              ))
+        )}
       </div>
     </div>
   )
@@ -1986,9 +1996,9 @@ function AppInner() {
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
 
-  // 編集ポップアップ（別ウィンドウ）は1分ごとに自動更新（予定表ビューは除く）
+  // 別ウィンドウ（編集ポップアップ・出荷予定表とも）は1分ごとに自動更新
   useEffect(() => {
-    if (!isPopup || view === 'schedule') return
+    if (!isPopup) return
     const t = setInterval(() => window.location.reload(), 60000)
     return () => clearInterval(t)
   }, [isPopup, view])
