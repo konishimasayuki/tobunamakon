@@ -123,8 +123,9 @@ input, textarea, select { font-family: inherit; }
 /* ===== 出荷予定表（縦持ち＝スマホ/iPhone/iPad）カード表示 ===== */
 .sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; max-width:100%; overflow-x:hidden; }
 .sc-card { border:1px solid #d8dee8; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.07); padding:12px 14px; max-width:100%; overflow:hidden; box-sizing:border-box; }
-.sc-card-head { display:flex; align-items:flex-end; gap:10px; padding-bottom:8px; margin-bottom:4px; border-bottom:2px solid #eef0f4; }
-.sc-card-head .sc-time { flex:0 0 auto; max-width:60%; }
+.sc-card-head { display:flex; align-items:center; gap:10px; padding-bottom:8px; margin-bottom:4px; border-bottom:2px solid #eef0f4; }
+.sc-card-head .sc-time { flex:0 0 auto; max-width:42%; display:flex; align-items:center; }
+.sc-card-head .sc-times.single .sc-timeitem { font-size:30px; font-weight:700; }
 /* 時刻：2つ以上は横並び＋間に「〜」 */
 .schedule .sc-times { display:flex; align-items:center; gap:2px; flex-wrap:nowrap; }
 .schedule .sc-times .sc-timeitem { width:auto; flex:0 1 auto; min-width:2.5em; }
@@ -151,10 +152,11 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-site { padding-top:8px; }
 .sc-card .sc-site .sc-val { text-align:center; }
 .sc-card .sc-site .sc-in { font-size:24px; font-weight:700; text-align:center; }
-/* 車種：大きく＋右に台数（中くらい） */
-.sc-card .sc-veh { display:flex; align-items:baseline; justify-content:center; gap:3px; min-width:0; }
-.sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; min-width:0; }
-.sc-card .sc-truck { font-size:15px; font-weight:700; color:#3a4a5c; white-space:nowrap; flex:0 0 auto; }
+/* 車種：中央に大きく、台数は右側中央にバッジ的に絶対配置 */
+.sc-card .sc-vehbox { position:relative; }
+.sc-card .sc-veh { display:flex; align-items:center; justify-content:center; width:100%; min-width:0; }
+.sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; min-width:0; text-align:center; }
+.sc-card .sc-truck { position:absolute; top:50%; right:8px; transform:translateY(-50%); font-size:15px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
 /* 量：数字・記号を大きく */
 .sc-card .sc-volbox .sc-in { font-size:28px; font-weight:700; }
 /* 担当ブロック：1人=特大、2人以上=各行に並べる */
