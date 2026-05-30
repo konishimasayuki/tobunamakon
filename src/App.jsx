@@ -2002,6 +2002,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
+      {isPopup ? (
+        /* 別ウィンドウ: 日付（左）・タイトル（中央）・閉じる（右）を重ならない1行に */
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto' }}>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+            <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', flex: '1 1 auto', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>出荷予定表</div>
+          <button type="button" onClick={() => window.close()}
+            style={{ flex: '0 0 auto', border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+        </div>
+      ) : (
       <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
         <div style={{ textAlign: 'center', fontSize: compact ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: compact ? '0.15em' : '0.35em' }}>出荷予定表</div>
         <div style={compact
@@ -2010,13 +2023,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
-          {isPopup
-            ? <button type="button" onClick={() => window.close()}
-                style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
-            : <button type="button" onClick={openScheduleWindow}
-                style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>}
+          <button type="button" onClick={openScheduleWindow}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>
         </div>
       </div>
+      )}
       {compact ? (
         <div className="schedule sc-cards">
           {loading ? (
@@ -2073,8 +2084,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
             </button>
           </div>
         </div>
-      ) : (
-      <div className={'schedule' + (isPopup ? ' popup-view' : '')} style={{ overflowX: isPopup ? 'visible' : 'auto', padding: isPopup ? '0 0 24px' : '0 16px 24px' }}>
+      ) : (() => {
+        const inner = (<>
         <table>
           <colgroup>
             <col style={{ width: '10%' }} />
