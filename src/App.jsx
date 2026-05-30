@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment } from 'react'
 
 // ============================================================
 // 定数
@@ -143,7 +143,7 @@ function parseCSV(text) {
 // スタイル
 // ============================================================
 const S = {
-  loginRoot:  { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f3060 0%, #1a4d8f 50%, #1a6a9f 100%)' },
+  loginRoot:  { minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f3060 0%, #1a4d8f 50%, #1a6a9f 100%)' },
   loginCard:  { background: '#fff', borderRadius: 16, padding: '40px 36px', width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' },
   loginLogo:  { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32, paddingBottom: 24, borderBottom: '2px solid #f0f2f5' },
   company:    { fontSize: 18, fontWeight: 700, color: '#1a2332', lineHeight: 1.3 },
@@ -154,15 +154,15 @@ const S = {
   input:      { padding: '10px 14px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 15, outline: 'none', color: '#1a2332' },
   error:      { background: '#fef2f2', color: '#c0392b', padding: '10px 14px', borderRadius: 8, fontSize: 13, border: '1px solid #fecaca' },
   loginBtn:   { background: 'linear-gradient(135deg, #1a4d8f, #1a6a9f)', color: '#fff', border: 'none', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 4 },
-  appRoot:    { display: 'flex', height: '100vh', overflow: 'hidden' },
+  appRoot:    { display: 'flex', height: '100dvh', overflow: 'hidden' },
   sidebar:    { width: 200, background: '#0f3060', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' },
+  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)' },
   coName:     { color: '#fff', fontWeight: 700, fontSize: 13, lineHeight: 1.3 },
   syName:     { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 },
   nav:        { flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 },
   navItem:    { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left', width: '100%' },
   navActive:  { background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 600 },
-  sideFoot:   { padding: '10px 14px 14px', borderTop: '1px solid rgba(255,255,255,0.1)' },
+  sideFoot:   { padding: '10px 14px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.1)' },
   userName:   { color: '#fff', fontWeight: 600, fontSize: 12 },
   userRole:   { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 1 },
   logoutBtn:  { width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, padding: '6px 0', fontSize: 11, fontWeight: 500, cursor: 'pointer', marginTop: 8 },
@@ -207,7 +207,64 @@ const S = {
   warnTag:    { display: 'inline-block', background: '#fff8f0', color: '#e8821a', border: '1px solid #f5c070', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
   skipTag:    { display: 'inline-block', background: '#f4f6f9', color: '#6b7a8d', border: '1px solid #dde3ed', borderRadius: 5, padding: '2px 9px', fontSize: 12, fontWeight: 600, marginRight: 6 },
   overlay2:   { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 998 },
-  hamburger:  { background: 'none', border: 'none', color: '#1a2332', fontSize: 22, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 },
+  hamburger:  { background: 'none', border: 'none', color: '#1a2332', fontSize: 24, cursor: 'pointer', padding: '6px 10px', lineHeight: 1 },
+  grid1:      { display: 'grid', gridTemplateColumns: '1fr', gap: 12 },
+}
+
+// ============================================================
+// レスポンシブ用フック（モバイル/タブレット判定）
+// ============================================================
+const MOBILE_BP = 768   // これ未満をモバイル扱い（iPhone / 縦持ちスマホ）
+
+function useIsMobile(bp = MOBILE_BP) {
+  const [mobile, setMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < bp
+  )
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < bp)
+    check()
+    window.addEventListener('resize', check)
+    window.addEventListener('orientationchange', check)
+    return () => {
+      window.removeEventListener('resize', check)
+      window.removeEventListener('orientationchange', check)
+    }
+  }, [bp])
+  return mobile
+}
+
+// iOS でフォーカス時の自動ズームを防ぐため、モバイルでは入力欄を 16px 以上にする
+const noZoom = (style, mobile) => (mobile ? { ...style, fontSize: 16 } : style)
+
+// 子要素を「自然な横幅(width)」で描画し、親の幅に収まるよう縮小する。
+// iOS で確実に効く transform:scale を使い、縮小後の高さも詰めて余白を出さない。
+function FitToWidth({ width = 700, max = 1, children, style }) {
+  const outer = useRef(null)
+  const inner = useRef(null)
+  const [scale, setScale] = useState(max)
+  const [h, setH] = useState(undefined)
+  useLayoutEffect(() => {
+    const calc = () => {
+      if (!outer.current || !inner.current) return
+      const avail = outer.current.clientWidth
+      if (avail <= 0) return
+      const s = Math.min(max, avail / width)
+      setScale(s)
+      setH(inner.current.offsetHeight * s)   // 実高さ×倍率（transformは offsetHeight に影響しない）
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    if (outer.current) ro.observe(outer.current)
+    if (inner.current) ro.observe(inner.current)
+    window.addEventListener('orientationchange', calc)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(calc)
+    return () => { ro.disconnect(); window.removeEventListener('orientationchange', calc) }
+  }, [width, max])
+  return (
+    <div ref={outer} style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', height: h, ...style }}>
+      <div ref={inner} style={{ width, transform: `scale(${scale})`, transformOrigin: 'top left' }}>{children}</div>
+    </div>
+  )
 }
 
 // ============================================================
@@ -215,6 +272,7 @@ const S = {
 // ============================================================
 function LoginPage() {
   const { login } = useAuth()
+  const isMobile = useIsMobile()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
@@ -230,8 +288,8 @@ function LoginPage() {
   }
 
   return (
-    <div style={S.loginRoot}>
-      <div style={S.loginCard}>
+    <div style={{ ...S.loginRoot, padding: 16 }}>
+      <div style={{ ...S.loginCard, padding: isMobile ? '28px 22px' : '40px 36px' }}>
         <div style={S.loginLogo}>
           <div style={{ fontSize: 36 }}>🏗</div>
           <div>
@@ -242,11 +300,11 @@ function LoginPage() {
         <form onSubmit={handleSubmit} style={S.form}>
           <div style={S.field}>
             <label style={S.label}>ユーザー名</label>
-            <input style={S.input} type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="username" autoComplete="username" required />
+            <input style={noZoom(S.input, isMobile)} type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="username" autoComplete="username" required />
           </div>
           <div style={S.field}>
             <label style={S.label}>パスワード</label>
-            <input style={S.input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
+            <input style={noZoom(S.input, isMobile)} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
           </div>
           {error && <div style={S.error}>{error}</div>}
           <button style={{ ...S.loginBtn, opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
@@ -263,10 +321,11 @@ function LoginPage() {
 // フォームフィールド部品
 // ============================================================
 function Field({ label, value, onChange, required, type = 'text', fullWidth = false }) {
+  const isMobile = useIsMobile()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gridColumn: fullWidth ? '1 / -1' : undefined }}>
       <label style={S.smLabel}>{label}</label>
-      <input style={S.smInput} type={type} value={value} onChange={onChange} required={required} />
+      <input style={noZoom(S.smInput, isMobile)} type={type} value={value} onChange={onChange} required={required} />
     </div>
   )
 }
@@ -277,6 +336,7 @@ function Field({ label, value, onChange, required, type = 'text', fullWidth = fa
 const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '' }
 
 function CustomerModal({ customer, onSave, onClose }) {
+  const isMobile = useIsMobile()
   const [form, setForm]       = useState(emptyForm)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -311,12 +371,12 @@ function CustomerModal({ customer, onSave, onClose }) {
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={S.modalForm}>
-          <div style={S.grid3}>
+          <div style={isMobile ? S.grid1 : S.grid3}>
             <Field label="顧客コード"    value={form.customerCode}    onChange={set('customerCode')} />
             <Field label="会社名 *"      value={form.companyName}     onChange={set('companyName')}     required />
             <Field label="会社名（カナ）" value={form.companyNameKana} onChange={set('companyNameKana')} />
           </div>
-          <div style={S.grid2}>
+          <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="電話番号" value={form.phone}         onChange={set('phone')}         type="tel" />
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
@@ -428,6 +488,7 @@ function ImportModal({ onClose, onDone }) {
 const emptyEmpForm = { employeeId: '', name: '', lineId: '', type: 'office' }
 
 function EmployeeModal({ employee, onSave, onClose }) {
+  const isMobile = useIsMobile()
   const [form, setForm]       = useState(emptyEmpForm)
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -460,16 +521,16 @@ function EmployeeModal({ employee, onSave, onClose }) {
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={S.modalForm}>
-          <div style={S.grid2}>
+          <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="従業員ID" value={form.employeeId} onChange={set('employeeId')} />
             <Field label="氏名 *"   value={form.name}       onChange={set('name')} required />
           </div>
-          <div style={S.grid2}>
+          <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="LINE ID" value={form.lineId} onChange={set('lineId')} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={S.smLabel}>種別 *</label>
               <select
-                style={{ ...S.smInput, cursor: 'pointer' }}
+                style={{ ...noZoom(S.smInput, isMobile), cursor: 'pointer' }}
                 value={form.type}
                 onChange={set('type')}
                 required
@@ -504,6 +565,7 @@ const EMP_TYPE_COLORS = {
 
 function EmployeesPage() {
   const { user } = useAuth()
+  const isMobile = useIsMobile()
   const [employees, setEmployees]         = useState([])
   const [loading, setLoading]             = useState(true)
   const [search, setSearch]               = useState('')
@@ -564,7 +626,7 @@ function EmployeesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={S.toolbar}>
-        <input style={S.search} placeholder="🔍  ID・氏名・種別などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <input style={noZoom(S.search, isMobile)} placeholder="🔍  ID・氏名・種別などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         <button style={S.addBtn} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 従業員追加</button>
       </div>
       <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
@@ -574,7 +636,7 @@ function EmployeesPage() {
       ) : filtered.length === 0 ? (
         <div style={S.empty}>{search ? '検索結果がありません' : '従業員が登録されていません'}</div>
       ) : (
-        <div style={S.tableWrap}>
+        <div className="tw-scroll" style={S.tableWrap}>
           <table style={S.table}>
             <colgroup>{cols.map((c, i) => <col key={i} style={{ width: c.w }} />)}</colgroup>
             <thead>
@@ -630,6 +692,7 @@ function EmployeesPage() {
 // ============================================================
 function CustomersPage() {
   const { user } = useAuth()
+  const isMobile = useIsMobile()
   const [customers, setCustomers]         = useState([])
   const [loading, setLoading]             = useState(true)
   const [search, setSearch]               = useState('')
@@ -693,7 +756,7 @@ function CustomersPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={S.toolbar}>
-        <input style={S.search} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <input style={noZoom(S.search, isMobile)} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         <button style={S.exportBtn} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
         <button style={S.importBtn} onClick={() => setImportOpen(true)}>📤 インポート</button>
         <button style={S.addBtn}    onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
@@ -705,7 +768,7 @@ function CustomersPage() {
       ) : filtered.length === 0 ? (
         <div style={S.empty}>{search ? '検索結果がありません' : '顧客が登録されていません'}</div>
       ) : (
-        <div style={S.tableWrap}>
+        <div className="tw-scroll" style={S.tableWrap}>
           <table style={S.table}>
             <colgroup>{cols.map((c, i) => <col key={i} style={{ width: c.w }} />)}</colgroup>
             <thead>
@@ -779,6 +842,8 @@ const emptyShipForm = {
   drivers: [],
   notes: [{ text: '', important: false }],
   driverMessages: [{ text: '', important: false }],
+  mapView: null,        // 固定した地図の {lat,lng,zoom}（null=未固定）
+  mapArrows: [],         // 矢印 [{x1,y1,x2,y2}]（相対座標0-1）
 }
 
 // テキストをマス内に収めるよう自動縮小
@@ -793,11 +858,48 @@ function fitText(ta) {
   }
 }
 
-// 選択チップ（単一 / 複数）
-function Chips({ options, value, multi, onChange, big }) {
-  const isOn = (o) => multi ? (value || []).includes(o) : value === o
+// 横幅に収まるよう文字サイズを自動縮小する input（現場名・現場住所など）。
+// プレースホルダ（透かし）も実テキストと同じく縮小される（同じ要素の font-size を縮めるため）。
+function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style }) {
+  const ref = useRef(null)
+  const fit = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.fontSize = baseSize + 'px'
+    let size = baseSize, guard = 0
+    // 入力が空のときはプレースホルダ幅で測る
+    while (el.scrollWidth > el.clientWidth + 1 && size > min && guard < 60) {
+      size -= 0.5; el.style.fontSize = size + 'px'; guard++
+    }
+  }
+  useLayoutEffect(() => { requestAnimationFrame(fit) })
+  useEffect(() => {
+    const on = () => requestAnimationFrame(fit)
+    window.addEventListener('resize', on)
+    window.addEventListener('orientationchange', on)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fit))
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <input ref={ref} className={className} type={type} value={value}
+      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
+      placeholder={placeholder} style={style} />
+  )
+}
+
+// 選択チップ（単一 / 配列複数 multi / 文字列複数 multiStr）
+// multiStr: 値は "4t・7t" のような・連結文字列。保存形式を文字列のまま複数選択にできる。
+function Chips({ options, value, multi, multiStr, onChange, big }) {
+  const strList = () => String(value || '').split('・').map(s => s.trim()).filter(Boolean)
+  const isOn = (o) => multiStr ? strList().includes(o) : multi ? (value || []).includes(o) : value === o
   const toggle = (o) => {
-    if (multi) {
+    if (multiStr) {
+      const cur = strList()
+      const next = cur.includes(o) ? cur.filter(x => x !== o) : [...cur, o]
+      // options の並び順を保って連結（4t→7t→大型）
+      onChange(options.filter(op => next.includes(op)).join('・'))
+    } else if (multi) {
       const cur = value || []
       onChange(cur.includes(o) ? cur.filter(x => x !== o) : [...cur, o])
     } else {
@@ -883,13 +985,41 @@ function extractCoords(s) {
   return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
 }
 
-function SiteMap({ address, onAddressChange }) {
+// canvas に矢印を1本描く（line + 矢じり）
+function drawArrow(ctx, x1, y1, x2, y2, w) {
+  const head = Math.max(10, Math.min(w * 0.04, 26))
+  const ang = Math.atan2(y2 - y1, x2 - x1)
+  ctx.lineWidth = Math.max(3, Math.min(w * 0.012, 8))
+  ctx.strokeStyle = '#e8211c'
+  ctx.fillStyle = '#e8211c'
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x2, y2)
+  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6))
+  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6))
+  ctx.closePath(); ctx.fill()
+}
+
+// 地図のデフォルト縮尺（16からホイール4回ズームイン=20、そこから2回ズームアウト=18）
+const DEFAULT_MAP_ZOOM = 18
+
+function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange, actions }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
   const geocoderRef = useRef(null)
   const selfSetRef = useRef('')   // 地図側で設定した住所値（ループ防止）
+  const wrapRef = useRef(null)
+  const canvasRef = useRef(null)
+  const overlayRef = useRef(null)  // 投影（latlng⇔px変換）取得用 OverlayView
+  const draftRef = useRef(null)    // ドラッグ中の矢印（ピクセル座標 {x1,y1,x2,y2}）
   const [status, setStatus] = useState('loading')
+  const [drawMode, setDrawMode] = useState(false)  // 矢印描画モード（地図をロックして描く）
+  // 最新値を非同期コールバック（OverlayView.draw / idle）から参照するための ref
+  const arrowsRef = useRef(arrows); arrowsRef.current = arrows
+  const onViewRef = useRef(onMapViewChange); onViewRef.current = onMapViewChange
 
   const doGeocode = (addr) => {
     const g = geocoderRef.current
@@ -899,7 +1029,7 @@ function SiteMap({ address, onAddressChange }) {
     if (c && window.google) {
       const loc = new window.google.maps.LatLng(c.lat, c.lng)
       mapRef.current.setCenter(loc)
-      mapRef.current.setZoom(16)
+      mapRef.current.setZoom(DEFAULT_MAP_ZOOM)
       markerRef.current.setPosition(loc)
       setStatus('')
       return
@@ -908,7 +1038,7 @@ function SiteMap({ address, onAddressChange }) {
       if (st === 'OK' && res[0]) {
         const loc = res[0].geometry.location
         mapRef.current.setCenter(loc)
-        mapRef.current.setZoom(16)
+        mapRef.current.setZoom(DEFAULT_MAP_ZOOM)
         markerRef.current.setPosition(loc)
         setStatus('')
       } else {
@@ -917,17 +1047,127 @@ function SiteMap({ address, onAddressChange }) {
     })
   }
 
+  // 描画モード中だけ地図のパン/ズーム・ピンドラッグをロックする
+  const applyLock = (opts = {}) => {
+    const m = mapRef.current
+    if (!m) return
+    const lock = opts.draw ?? drawMode
+    m.setOptions({
+      gestureHandling: lock ? 'none' : 'cooperative',
+      zoomControl: !lock,
+      draggable: !lock,
+      scrollwheel: !lock,
+      disableDoubleClickZoom: lock,
+      keyboardShortcuts: !lock,
+      clickableIcons: !lock,
+    })
+    if (markerRef.current) markerRef.current.setDraggable(!lock)
+  }
+
+  // ===== 矢印キャンバス =====
+  const sizeCanvas = () => {
+    const cv = canvasRef.current, wrap = wrapRef.current
+    if (!cv || !wrap) return
+    const r = wrap.getBoundingClientRect()
+    if (cv.width !== Math.round(r.width) || cv.height !== Math.round(r.height)) {
+      cv.width = Math.round(r.width); cv.height = Math.round(r.height)
+    }
+  }
+  // 緯度経度 → コンテナ内ピクセル（投影が未準備なら null）
+  const latLngToPx = (lat, lng) => {
+    const ov = overlayRef.current
+    const proj = ov && ov.getProjection && ov.getProjection()
+    if (!proj || !window.google) return null
+    const p = proj.fromLatLngToContainerPixel(new window.google.maps.LatLng(lat, lng))
+    return p ? { x: p.x, y: p.y } : null
+  }
+  // コンテナ内ピクセル → 緯度経度
+  const pxToLatLng = (x, y) => {
+    const ov = overlayRef.current
+    const proj = ov && ov.getProjection && ov.getProjection()
+    if (!proj || !window.google) return null
+    const ll = proj.fromContainerPixelToLatLng(new window.google.maps.Point(x, y))
+    return ll ? { lat: ll.lat(), lng: ll.lng() } : null
+  }
+
+  const redraw = () => {
+    const cv = canvasRef.current
+    if (!cv) return
+    sizeCanvas()
+    const ctx = cv.getContext('2d')
+    const w = cv.width, h = cv.height
+    ctx.clearRect(0, 0, w, h)
+    // 矢印は緯度経度で保持 → 現在の地図位置・ズームに合わせて投影し描画（パン/ズームに追従）
+    for (const a of (arrowsRef.current || [])) {
+      if (typeof a.lat1 !== 'number' || typeof a.lat2 !== 'number') continue  // 旧形式は無視
+      const p1 = latLngToPx(a.lat1, a.lng1), p2 = latLngToPx(a.lat2, a.lng2)
+      if (p1 && p2) drawArrow(ctx, p1.x, p1.y, p2.x, p2.y, w)
+    }
+    const d = draftRef.current
+    if (d) drawArrow(ctx, d.x1, d.y1, d.x2, d.y2, w)
+  }
+  useEffect(() => { redraw() }, [arrows, drawMode])
+  useEffect(() => {
+    const on = () => redraw()
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const relPx = (e) => {
+    const r = canvasRef.current.getBoundingClientRect()
+    return { x: (e.clientX - r.left) / r.width * canvasRef.current.width, y: (e.clientY - r.top) / r.height * canvasRef.current.height }
+  }
+  const onDown = (e) => {
+    if (!drawMode) return
+    e.preventDefault()
+    const p = relPx(e)
+    draftRef.current = { x1: p.x, y1: p.y, x2: p.x, y2: p.y }
+    try { canvasRef.current.setPointerCapture(e.pointerId) } catch {}
+  }
+  const onMove = (e) => {
+    if (!draftRef.current) return
+    const p = relPx(e)
+    draftRef.current.x2 = p.x; draftRef.current.y2 = p.y
+    redraw()
+  }
+  const onUp = () => {
+    const d = draftRef.current
+    draftRef.current = null
+    if (!d) return
+    const dist = Math.hypot(d.x2 - d.x1, d.y2 - d.y1)
+    if (dist > 8) {   // 短すぎる線は無視（8px）
+      const a = pxToLatLng(d.x1, d.y1), b = pxToLatLng(d.x2, d.y2)
+      if (a && b) onArrowsChange([...(arrowsRef.current || []), { lat1: a.lat, lng1: a.lng, lat2: b.lat, lng2: b.lng }])
+      else redraw()
+    } else redraw()
+  }
+  const undoArrow = () => onArrowsChange((arrows || []).slice(0, -1))
+  const clearArrows = () => { if (window.confirm('矢印をすべて消去しますか？')) onArrowsChange([]) }
+
+  // 矢印描画モードのオン/オフ（オン中だけ地図をロックして描きやすくする）
+  const toggleDraw = () => {
+    setDrawMode(d => {
+      const next = !d
+      applyLock({ draw: next })
+      return next
+    })
+  }
+
   useEffect(() => {
     let cancelled = false
     loadGoogleMaps().then(maps => {
       if (cancelled || !mapEl.current) return
       geocoderRef.current = new maps.Geocoder()
-      const center = { lat: 35.681236, lng: 139.767125 }
-      mapRef.current = new maps.Map(mapEl.current, {
-        center, zoom: 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+      // 保存済みの地図ビューがあればその位置・ズームで開く（矢印を正しく重ねるため）
+      const hasView = mapView && typeof mapView.lat === 'number'
+      const start = hasView ? { lat: mapView.lat, lng: mapView.lng } : { lat: 35.681236, lng: 139.767125 }
+      const map = new maps.Map(mapEl.current, {
+        center: start, zoom: hasView ? mapView.zoom : DEFAULT_MAP_ZOOM, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
         gestureHandling: 'cooperative',
       })
-      markerRef.current = new maps.Marker({ map: mapRef.current, position: center, draggable: true })
+      mapRef.current = map
+      markerRef.current = new maps.Marker({ map, position: start, draggable: true })
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current.getPosition()
         geocoderRef.current.geocode({ location: pos }, (res, st) => {
@@ -935,35 +1175,91 @@ function SiteMap({ address, onAddressChange }) {
           if (addr) { selfSetRef.current = addr; onAddressChange(addr) }
         })
       })
+
+      // 投影取得用の OverlayView。draw() が地図のパン/ズーム毎に呼ばれるので矢印を追従描画
+      const ov = new maps.OverlayView()
+      ov.onAdd = () => {}
+      ov.onRemove = () => {}
+      ov.draw = () => redraw()
+      ov.setMap(map)
+      overlayRef.current = ov
+
+      // 地図が動いたら現在のビュー（中心・ズーム）を保存して矢印位置の基準を最新化
+      const saveView = () => {
+        const c = map.getCenter()
+        if (c) onViewRef.current({ lat: c.lat(), lng: c.lng(), zoom: map.getZoom() })
+      }
+      map.addListener('idle', saveView)
+
       setStatus('')
-      doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
+      if (!hasView) {
+        doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
+      }
+      requestAnimationFrame(redraw)
     }).catch(err => {
       if (!cancelled) setStatus(err.message === 'NO_KEY' ? 'nokey' : 'error')
     })
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (!geocoderRef.current) return
+    if (drawMode) return                         // 描画中は住所変更で地図を動かさない
+    if ((arrowsRef.current || []).length) return // 矢印がある＝位置確定済み。勝手に動かさない
     if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
     const target = (address && address.trim()) ? address : DEFAULT_SITE_ADDRESS
     const t = setTimeout(() => doGeocode(target), 800)
     return () => clearTimeout(t)
-  }, [address])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, drawMode])
 
   return (
     <div>
-      <div ref={mapEl} className="sitemap-canvas" />
+      <div ref={wrapRef} style={{ position: 'relative' }}>
+        <div ref={mapEl} className="sitemap-canvas" />
+        <canvas
+          ref={canvasRef}
+          className="sitemap-arrows"
+          style={{ pointerEvents: drawMode ? 'auto' : 'none', cursor: drawMode ? 'crosshair' : 'default' }}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+        />
+        {drawMode && (
+          <div className="sitemap-badge">✏️ 描画モード — 地図上をドラッグで矢印を描けます</div>
+        )}
+      </div>
+
+      <div className="map-actions">
+        <button type="button" onClick={toggleDraw} disabled={status !== ''}
+          style={{ border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060' }}>
+          {drawMode ? '✓ 描画終了' : '✏️ 矢印'}
+        </button>
+        <button type="button" onClick={undoArrow} disabled={!(arrows || []).length}
+          style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ 戻す</button>
+        <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
+          style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 消去</button>
+        {actions}
+      </div>
+
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
       {status === 'notfound' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>住所が見つかりませんでした。ピンを動かして調整してください。</div>}
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
       {status === 'error' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図の読み込みに失敗しました</div>}
-      <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>📍 ピンをドラッグすると現場住所が更新されます</div>
+      {drawMode && (
+        <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
+          ✏️ 地図上をドラッグして矢印を描きます。描き終えたら「描画を終える」を押すと地図を動かせます
+        </div>
+      )}
     </div>
   )
 }
 
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed }) {
+  const isMobile = useIsMobile()
+  const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
   const [customers, setCustomers]   = useState([])
@@ -975,7 +1271,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
+  const [page, setPage]             = useState(0)
   const topRef = useRef(null)
+  const PAGE_SIZE = 10
 
   const load = useCallback(async () => {
     try {
@@ -1055,6 +1353,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
     notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
     driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
+    mapView: s.mapView || null,
+    mapArrows: Array.isArray(s.mapArrows) ? s.mapArrows : [],
   })
 
   const startEdit = (s) => {
@@ -1116,12 +1416,25 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     } catch (e) { alert('エラー: ' + e.message) }
   }
 
+  // 商社名プルダウン候補：既存出荷で入力された商社名を重複なしで集める
+  const tradingOptions = Array.from(new Set(
+    shipments.map(s => (s.tradingCompany || '').trim()).filter(Boolean)
+  )).sort()
+
   const filtered = shipments.filter(s => {
     if (!search) return true
     const q = search.toLowerCase()
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
+  // 直近に登録したものを一番上に（登録日時の新しい順）
+  const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  // 10件ずつページング
+  const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
+  const curPage = Math.min(page, pageCount - 1)
+  const pageRows = sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
+  // 検索が変わったら1ページ目へ
+  useEffect(() => { setPage(0) }, [search])
 
   // 予定表で変更された項目を赤く表示
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
@@ -1129,10 +1442,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   return (
     <div ref={topRef} style={{ height: '100%', overflow: 'auto' }}>
       {/* 手配伝票フォーム */}
-      <div className="denpyo" style={{ padding: '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
+      <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', justifyContent: 'center' }}>
-          <div className="sheet" style={{ flex: '1 1 460px', minWidth: 0, margin: 0, zoom: 0.8 }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 3, alignItems: 'stretch', justifyContent: 'center' }}>
+          <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '0 0 644px', minWidth: 0 }}>
+          <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
@@ -1148,7 +1462,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
-                <input className="f" style={redIf('tradingCompany')} type="text" value={form.tradingCompany} onChange={set('tradingCompany')} />
+                <input className="f" style={redIf('tradingCompany')} list="tradingList" value={form.tradingCompany} onChange={set('tradingCompany')} placeholder="入力して選択" />
+                <datalist id="tradingList">
+                  {tradingOptions.map(t => <option key={t} value={t} />)}
+                </datalist>
               </div>
             </div>
 
@@ -1162,13 +1479,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl" style={redIf('siteName')}>現 場 名</div>
-                    <input className="f" style={redIf('siteName')} type="text" value={form.siteName} onChange={set('siteName')} />
+                    <FitField value={form.siteName} onChange={set('siteName')} style={redIf('siteName')} />
                   </div>
                 </div>
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">現 場 住 所</div>
-                    <textarea className="f" rows={1} value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
+                    <FitField value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
                   </div>
                 </div>
               </div>
@@ -1179,7 +1496,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
                 <div>
                   <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} big />
+                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} multiStr big />
                 </div>
                 <div className="inline" style={{ justifyContent: 'flex-end' }}>
                   <input className="num" type="number" min="0" inputMode="numeric" value={form.truckCount} onChange={set('truckCount')} />
@@ -1188,7 +1505,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
-                  <div className="cell" style={{ flex: '0 0 59%' }}>
+                  <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
                     <div className="haigou3" style={redIf('mixCode')}>
                       <div className="hgcol">
@@ -1207,21 +1524,21 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       </div>
                     </div>
                   </div>
-                  <div className="cell" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                     <div className="lbl">セメント種</div>
-                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} />
+                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} big />
                   </div>
                 </div>
                 <div className="subrow">
-                  <div className="cell m3" style={{ flex: '0 0 59%', justifyContent: 'center' }}>
+                  <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, justifyContent: 'center' }}>
                     <div className="inline" style={{ justifyContent: 'center' }}>
                       <input type="number" min="0" step="0.01" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={set('volume')} />
                       <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
                     </div>
                     <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
                   </div>
-                  <div className="cell" style={{ flex: 1 }}>
-                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} />
+                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
+                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
                   </div>
                 </div>
               </div>
@@ -1229,12 +1546,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 5段: 連絡先 / 現場連絡先（ラベル左・入力右） */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <div className="lbl" style={{ marginBottom: 0 }}>連 絡 先</div>
+              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em' }}>連 絡 先</div>
                 <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
               </div>
-              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <div className="lbl" style={{ marginBottom: 0, ...redIf('siteContact') }}>現 場 連 絡 先</div>
+              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em', ...redIf('siteContact') }}>現 場 連 絡 先</div>
                 <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} />
               </div>
             </div>
@@ -1249,8 +1566,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 32%' }}>
-                <div className="lbl" style={redIf('drivers')}>担 当 ド ラ イ バ ー（最大4）</div>
+              <div className="cell" style={{ flex: '0 0 30%' }}>
+                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー（最大4）</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
                   {form.drivers.map((d, i) => (
                     <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
@@ -1267,22 +1584,32 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 )}
               </div>
               <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl">ド ラ イ バ ー へ の 連 絡</div>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>ドライバーへの連絡</div>
                 <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={2} height={80} addLabel="＋ 段落を追加" />
               </div>
             </div>
           </div>
-          <div style={{ flex: '1 1 340px', minWidth: 280 }}>
-            <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
+          </FitToWidth>
+          <div style={{ flex: stacked ? '0 0 auto' : '1 1 340px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+            <SiteMap
+              address={form.siteAddress}
+              onAddressChange={(a) => setVal('siteAddress', a)}
+              mapView={form.mapView}
+              onMapViewChange={(v) => setVal('mapView', v)}
+              arrows={form.mapArrows}
+              onArrowsChange={(a) => setVal('mapArrows', a)}
+              actions={
+                <>
+                  <button type="button" style={{ border: '1.5px solid #dde3ed', background: '#f4f6f9', color: '#3a4a5c', fontWeight: 600 }} onClick={handleReset}>{editing ? '新規に戻す' : 'リセット'}</button>
+                  <button type="submit" style={{ border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', fontWeight: 600, opacity: saving ? 0.7 : 1 }} disabled={saving}>
+                    {saving ? (editing ? '更新中…' : '登録中…') : (editing ? '更新' : '登録')}
+                  </button>
+                </>
+              }
+            />
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
             {editing && editChanged.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {editChanged.map(f => SCHEDULE_FIELD_LABELS[f] || f).join('・')}</div>}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
-            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-              <button type="button" style={S.cancelBtn} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
-              <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
-                {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
-              </button>
-            </div>
           </div>
           </div>
         </form>
@@ -1291,16 +1618,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 一覧 */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={S.toolbar}>
-          <input style={S.search} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+          <input style={noZoom(S.search, isMobile)} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
+        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
 
         {loading ? (
           <div style={S.empty}>読み込み中...</div>
         ) : filtered.length === 0 ? (
           <div style={S.empty}>{search ? '検索結果がありません' : '出荷登録がありません'}</div>
         ) : (
-          <div style={S.tableWrap}>
+          <div className="tw-scroll" style={{ ...S.tableWrap, overflowX: 'auto' }}>
             <table style={S.table}>
               <thead>
                 <tr>
@@ -1310,7 +1637,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(s => (
+                {pageRows.map(s => (
                   <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => startEdit(s)}>
                     <td style={S.td}>{s.date}</td>
                     <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
@@ -1331,6 +1658,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '12px 16px' }}>
+            <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={curPage === 0}
+              style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage === 0 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage === 0 ? 'default' : 'pointer' }}>← 戻る</button>
+            <span style={{ fontSize: 13, color: '#3a4a5c' }}>{curPage + 1} / {pageCount} ページ</span>
+            <button type="button" onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={curPage >= pageCount - 1}
+              style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage >= pageCount - 1 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage >= pageCount - 1 ? 'default' : 'pointer' }}>次へ →</button>
           </div>
         )}
       </div>
@@ -1360,9 +1697,19 @@ const SCHEDULE_FIELD_LABELS = {
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
+  // 出荷予定表は縦持ち（スマホ・iPhone・iPad）前提。横スクロールのテーブルではなく
+  // 1件=1カードの縦リストで表示する。PC・横向き（>=1025px）のみ従来テーブル。
+  const isMobile = useIsMobile(1025)
+  // 別ウィンドウ（isPopup）では幅に関わらず常にPC版テーブルを表示する。
+  // → スマホで「別ウィンドウで開く」を押すと、横画面でPCレイアウトの予定表が出る。
+  const compact = isMobile && !isPopup
+  // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
+  const popupNarrow = useIsMobile(880)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
+  const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -1370,10 +1717,49 @@ function SchedulePage({ onEditShipment, isPopup }) {
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
+  }, [])
+
+  // 差分更新：別ウィンドウ（閲覧専用）では1分ごとに再取得し、変更があった伝票だけ差し替える。
+  // 全画面 reload しないのでスクロール位置やピンチズーム状態を保ったまま最新化できる。
+  const mergeDiff = useCallback((fresh) => {
+    setAll(prev => {
+      if (!Array.isArray(fresh)) return prev
+      const byId = new Map(prev.map(s => [s.id, s]))
+      let changed = fresh.length !== prev.length
+      const next = fresh.map(f => {
+        const old = byId.get(f.id)
+        if (old && JSON.stringify(old) === JSON.stringify(f)) return old  // 変化なし→参照維持で再描画抑制
+        changed = true
+        return f
+      })
+      return changed ? next : prev
+    })
+  }, [])
+  useEffect(() => {
+    if (!isPopup) return
+    const t = setInterval(async () => {
+      try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 一時的な失敗は無視 */ }
+    }, 60000)
+    return () => clearInterval(t)
+  }, [isPopup, mergeDiff])
 
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
+  // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
+  const timeToMin = (t) => {
+    const str = String(t || '').trim()
+    if (!str) return 100000
+    const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
+    if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+    if (str.includes('午前')) return 11 * 60 + 59   // 11:59
+    if (str.includes('午後')) return 23 * 60 + 59   // 23:59
+    const h = str.match(/(\d{1,2})\s*時/)
+    if (h) return parseInt(h[1], 10) * 60
+    return 99999   // 解析できない文字 → 空欄の手前
+  }
   const rows = all.filter(s => s.date === date)
-    .sort((a, b) => String(firstT(a)).localeCompare(String(firstT(b))))
+    .sort((a, b) => timeToMin(firstT(a)) - timeToMin(firstT(b)) || String(firstT(a)).localeCompare(String(firstT(b))))
 
   const isChanged = (s, f) => Array.isArray(s.changedFields) && s.changedFields.includes(f)
 
@@ -1381,9 +1767,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     switch (f) {
       case 'drivers': {
         const names = Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
+        // 1人=1行、2人=各人1行ずつ（2行）、3人以降=2人ごとに改行
+        if (names.length <= 2) return names.join('\n')
         const lines = []
         for (let i = 0; i < names.length; i += 2) lines.push(names.slice(i, i + 2).join('・'))
-        return lines.join('\n')   // 2人ごとに改行
+        return lines.join('\n')
       }
       case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
@@ -1408,7 +1796,40 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('保存エラー: ' + e.message) }
   }
 
+  // モーダル編集：構造化パッチ（patch=実データ、changed=変更フィールド名）を一括保存
+  const saveStructured = async (s, patch, changedKeys) => {
+    const merged = { ...s, ...patch }
+    const changedFields = Array.from(new Set([...(Array.isArray(s.changedFields) ? s.changedFields : []), ...changedKeys]))
+    try {
+      const res = await api.put(`/api/shipments/${s.id}`, { ...merged, changedFields })
+      setAll(arr => arr.map(x => x.id === res.id ? res : x))
+    } catch (e) { alert('保存エラー: ' + e.message); throw e }
+  }
+
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
+
+  // ===== セル文字の自動リサイズ（見切れたら改行ではなくフォントを縮小して収める）=====
+  const fitEls = useRef(new Set())
+  const fitOne = (el) => {
+    if (!el || !el.isConnected) return
+    el.style.fontSize = ''                 // いったんCSSの基準サイズ（clamp）に戻す
+    const base = parseFloat(getComputedStyle(el).fontSize) || 16
+    let size = base, guard = 0
+    // 横（および textarea の縦）がはみ出す間、収まるまで縮める
+    const over = () => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+    while (over() && size > 8 && guard < 80) { size -= 0.5; el.style.fontSize = size + 'px'; guard++ }
+  }
+  const fitAll = () => fitEls.current.forEach(el => { if (el && el.isConnected) fitOne(el); else fitEls.current.delete(el) })
+  const fitRef = (el) => { if (el) { fitEls.current.add(el); requestAnimationFrame(() => fitOne(el)) } }
+  useLayoutEffect(() => { requestAnimationFrame(() => requestAnimationFrame(fitAll)) })
+  useEffect(() => {
+    const on = () => requestAnimationFrame(fitAll)
+    window.addEventListener('resize', on)
+    window.addEventListener('orientationchange', on)
+    // Webフォント（Noto Sans JP）読み込み完了後に再計測（読み込み前は幅がずれて見切れるため）
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fitAll))
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
+  }, [])
 
   const cell = (s, f, ph, opts = {}) => {
     const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
@@ -1416,14 +1837,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
       + (isChanged(s, f) ? ' changed' : '')
       + (opts.center ? ' center' : '')
       + (opts.big ? ' big' : '')
+      + (opts.xl ? ' xl' : '')
       + (opts.tokki ? ' tokki' : '')
       + (imp ? ' imp' : (opts.plain ? ' plain' : ''))
     return (
       <input
         key={f + (isChanged(s, f) ? '_c' : '') + (imp ? '_i' : '')}
+        ref={fitRef}
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
+        onInput={e => fitOne(e.target)}
         onBlur={e => saveField(s, f, e.target.value)}
       />
     )
@@ -1439,12 +1863,106 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return (
       <textarea
         key={f + (isChanged(s, f) ? '_c' : '') + '_r' + rows}
+        ref={fitRef}
         className={cls}
         rows={rows}
         defaultValue={v}
         placeholder={ph || ''}
+        onInput={e => fitOne(e.target)}
         onBlur={e => saveField(s, f, e.target.value)}
       />
+    )
+  }
+
+  // 時刻（スマホカード用）：2つ以上あるときは横並びにして間に「〜」を入れる
+  const cellTimes = (s) => {
+    const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
+      .map(x => String(x ?? '').trim()).filter(Boolean)
+    const cls = 'sc-in big center sc-timeitem' + (isChanged(s, 'times') ? ' changed' : '')
+    const saveAll = (container) => {
+      const inputs = Array.from(container.querySelectorAll('input.sc-timeitem'))
+      saveField(s, 'times', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
+    }
+    const items = times.length ? times : ['']
+    return (
+      <div className={'sc-times' + (items.length === 1 ? ' single' : '')} key={'times' + (isChanged(s, 'times') ? '_c' : '') + '_n' + items.length}>
+        {items.map((t, i) => (
+          <Fragment key={i}>
+            {i > 0 && <span className="sc-timesep">〜</span>}
+            <input ref={fitRef} className={cls} defaultValue={t} placeholder={i === 0 ? '時間' : ''}
+              onInput={e => fitOne(e.target)} onBlur={e => saveAll(e.target.closest('.sc-times'))} />
+          </Fragment>
+        ))}
+      </div>
+    )
+  }
+
+  // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
+  // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
+  const cellDrivers = (s, opts = {}) => {
+    const v = getVal(s, 'drivers')               // 2人ごとに改行された文字列
+    let lines = v ? v.split('\n') : ['']
+    if (opts.oneEach) {                           // 各行をさらに分解して1人=1行に
+      const names = (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : []))
+        .map(x => String(x ?? '').trim()).filter(Boolean)
+      lines = names.length ? names : ['']
+    }
+    const display = lines.length ? lines : ['']
+    const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '')
+    const saveAll = (container) => {
+      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
+      const joined = inputs.map(i => i.value.trim()).filter(Boolean).join('\n')
+      saveField(s, 'drivers', joined)
+    }
+    return (
+      <div className="sc-drivers" key={'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + display.length}>
+        {display.map((line, i) => (
+          <input
+            key={i}
+            ref={fitRef}
+            className={cls}
+            defaultValue={line}
+            placeholder={i === 0 ? '担当' : ''}
+            onInput={e => fitOne(e.target)}
+            onBlur={e => saveAll(e.target.closest('.sc-drivers'))}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  // 担当（スマホカード用）：1人=大きく1段、2人=2段（各1人）、3人以上=2人ずつ（3人＝上2・下1）
+  const cellDriversCard = (s) => {
+    const names = (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : []))
+      .map(x => String(x ?? '').trim()).filter(Boolean)
+    const n = names.length
+    const rows = []
+    if (n <= 2) names.forEach(nm => rows.push([nm]))
+    else for (let i = 0; i < n; i += 2) rows.push(names.slice(i, i + 2))
+    if (rows.length === 0) rows.push([''])
+    const single = n <= 1
+    const changed = isChanged(s, 'drivers')
+    const cls = 'sc-in sc-driverline' + (changed ? ' changed' : '') + (single ? ' xbig' : ' big')
+    const saveAll = (container) => {
+      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
+      saveField(s, 'drivers', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
+    }
+    let idx = 0
+    return (
+      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}
+        onBlur={e => saveAll(e.currentTarget)}>
+        {rows.map((row, ri) => (
+          <div className="sc-drv-row" key={ri}>
+            {row.map((nm) => {
+              const i = idx++
+              return (
+                <input key={i} ref={fitRef} className={cls} defaultValue={nm}
+                  placeholder={i === 0 ? '担当' : ''} onInput={e => fitOne(e.target)} />
+              )
+            })}
+          </div>
+        ))}
+      </div>
     )
   }
 
@@ -1485,21 +2003,91 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
-      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44 }}>
-        <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '0.35em' }}>出荷予定表</div>
-        <div style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
+    <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
+      {isPopup ? (
+        /* 別ウィンドウ: タイトルを画面中央に絶対配置し、日付(左)/閉じる(右)を両端に重ねる */
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', position: 'relative', zIndex: 1 }}>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+            <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
+          </div>
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
+          <button type="button" onClick={() => window.close()}
+            style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+        </div>
+      ) : (
+      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+        <div style={{ textAlign: 'center', fontSize: compact ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: compact ? '0.15em' : '0.35em' }}>出荷予定表</div>
+        <div style={compact
+          ? { display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, color: '#111' }
+          : { position: 'absolute', left: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+            style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
-          {isPopup
-            ? <button type="button" onClick={() => window.close()}
-                style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
-            : <button type="button" onClick={openScheduleWindow}
-                style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>}
+          <button type="button" onClick={openScheduleWindow}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>
         </div>
       </div>
-      <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>
+      )}
+      {compact ? (
+        <div className="schedule sc-cards">
+          {loading ? (
+            <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
+          ) : rows.length === 0 ? (
+            <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
+          ) : (
+            <>
+              {rows.map(s => (
+                <div className="sc-card" key={s.id}>
+                  {/* 時刻 | 業者名（上）/ 商社名（下） */}
+                  <div className="sc-card-head">
+                    <div className="sc-time">{cellTimes(s)}</div>
+                    <div className="sc-names">
+                      <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
+                      <div className="sc-trading">{cell(s, 'tradingCompany', '商社名')}</div>
+                    </div>
+                  </div>
+                  {/* 現場名（中央・大きく） */}
+                  <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
+                  {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
+                  <div className="sc-grid2">
+                    <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
+                    <div className="sc-box sc-vehbox"><span className="sc-lbl">車種</span>
+                      <div className="sc-veh">
+                        {cell(s, 'vehicleType', '', { center: true, big: true })}
+                        {s.truckCount ? <span className="sc-truck">{s.truckCount}台</span> : null}
+                      </div>
+                    </div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
+                    <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                  </div>
+                  {/* 備考（横並び） */}
+                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
+                  {/* 現場連絡先 */}
+                  <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
+                  <div className="sc-card-actions">
+                    <button type="button" onClick={() => setEditModal(s)}
+                      style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
+                    <button type="button" onClick={() => sendLine(s)}
+                      style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize: 12, color: '#6b7a8d', padding: '4px 2px' }}>
+                黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
+              </div>
+            </>
+          )}
+          <div style={{ marginTop: 8, textAlign: 'right' }}>
+            <button type="button" onClick={resetReds}
+              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>
+              🧹 変更(赤)をリセット（デバッグ）
+            </button>
+          </div>
+        </div>
+      ) : (() => {
+        const inner = (<>
         <table>
           <colgroup>
             <col style={{ width: '10%' }} />
@@ -1510,14 +2098,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <col style={{ width: '12%' }} />
             <col style={{ width: '9%' }} />
             <col style={{ width: '16%' }} />
-            <col style={{ width: '8%' }} />
+            {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
-              <th>編集</th>
+              {!isPopup && <th>編集</th>}
             </tr>
           </thead>
           <tbody>
@@ -1525,18 +2113,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
-                <td>{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</td>
-                <td>{cell(s, 'volume', '', { center: true })}</td>
-                <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
-                <td>{cellMulti(s, 'times', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <button type="button" onClick={() => openEditWindow(s)}
-                    style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                  <button type="button" onClick={() => sendLine(s)}
-                    style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
+                <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
+                <td className="sc-nowrap">
+                  {cell(s, 'mixCode', '', { center: true, big: true })}
+                  {(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? (
+                    <div className="sc-mixnotes">
+                      <span>{s.mixNotes[0] || ''}</span><span>{s.mixNotes[1] || ''}</span><span>{s.mixNotes[2] || ''}</span>
+                    </div>
+                  ) : null}
                 </td>
+                <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
+                <td>{cellDrivers(s, { big: true })}</td>
+                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
+                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
+                {!isPopup && (
+                  <td style={{ textAlign: 'center' }}>
+                    <button type="button" onClick={() => openEditWindow(s)}
+                      style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
+                    <button type="button" onClick={() => sendLine(s)}
+                      style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -1546,16 +2143,234 @@ function SchedulePage({ onEditShipment, isPopup }) {
         ) : rows.length === 0 ? (
           <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
         ) : (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d' }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', padding: isPopup ? '8px 8px 0' : 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
         )}
-        <div style={{ marginTop: 16, textAlign: 'right' }}>
-          <button type="button" onClick={resetReds}
-            style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
-            🧹 変更(赤)をリセット（デバッグ）
-          </button>
+        {!isPopup && (
+          <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <button type="button" onClick={resetReds}
+              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
+              🧹 変更(赤)をリセット（デバッグ）
+            </button>
+          </div>
+        )}
+        </>)
+        if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
+        // 別ウィンドウ: 画面が表の基準幅(860px)より広ければ幅100%で画面いっぱいに（PC）、
+        // 狭ければ FitToWidth で縮小して横スクロールを出さない（スマホ縦）。
+        return popupNarrow
+          ? <FitToWidth width={860} max={1} style={{ padding: '4px 0 24px' }}>
+              <div className="schedule popup-view" style={{ width: 860 }}>{inner}</div>
+            </FitToWidth>
+          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{inner}</div>
+      })()}
+      {editModal && (
+        <ScheduleEditModal
+          shipment={editModal}
+          driverOptions={drivers}
+          onClose={() => setEditModal(null)}
+          onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// スマホ予定表の編集モーダル。更新で差分保存→閉じると予定表に戻り変更が赤文字反映される。
+function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
+  const s = shipment
+  // --- 構造化した初期状態を伝票から組み立てる ---
+  const initTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
+    .map(x => String(x ?? '')).filter(x => x.trim() !== '')
+  const initDrivers = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []))
+    .map(d => ({ id: d.id || '', name: d.name }))
+  const [times, setTimes] = useState(initTimes.length ? initTimes : [''])
+  const [companyName, setCompanyName] = useState(s.companyName || '')
+  const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
+  const [siteName, setSiteName] = useState(s.siteName || '')
+  const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
+  const [truckCount, setTruckCount] = useState((s.truckCount ?? '') === '' ? '' : String(s.truckCount))
+  const [mixParts, setMixParts] = useState(() => {
+    const p = String(s.mixCode || '').split('-')
+    return [p[0] || '', p[1] || '', p[2] || '']
+  })
+  const [mixNotes, setMixNotes] = useState(() => {
+    const n = Array.isArray(s.mixNotes) ? s.mixNotes : []
+    return [n[0] || '', n[1] || '', n[2] || '']
+  })
+  const [volume, setVolume] = useState(s.volume == null ? '' : String(s.volume))
+  const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
+  const [drivers, setDrivers] = useState(initDrivers)
+  const [notes, setNotes] = useState(Array.isArray(s.notes) ? s.notes.map(n => n.text).join('\n') : '')
+  const [siteContact, setSiteContact] = useState(s.siteContact || '')
+  const [saving, setSaving] = useState(false)
+
+  // 時間：行ごとに編集／追加／削除（最大2）
+  const setTime = (i, v) => setTimes(ts => ts.map((t, idx) => idx === i ? v : t))
+  const addTime = () => setTimes(ts => ts.length < 2 ? [...ts, ''] : ts)
+  const delTime = (i) => setTimes(ts => ts.length > 1 ? ts.filter((_, idx) => idx !== i) : [''])
+  // 配合：3セクション（各2桁）＋各セクションの特記
+  const setMixPart = (i, v) => setMixParts(p => p.map((x, idx) => idx === i ? v : x))
+  const setMixNote = (i, v) => setMixNotes(n => n.map((x, idx) => idx === i ? v : x))
+
+  // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）
+  const vehList = vehicleType.split('・').map(x => x.trim()).filter(Boolean)
+  const toggleVeh = (o) => {
+    const next = vehList.includes(o) ? vehList.filter(x => x !== o) : [...vehList, o]
+    setVehicleType(VEHICLE_TYPES.filter(v => next.includes(v)).join('・'))
+  }
+
+  // 担当：最大4人。選択肢から追加／チップで削除
+  const addDriver = (e) => {
+    const d = driverOptions.find(x => x.id === e.target.value)
+    if (d && drivers.length < 4 && !drivers.some(x => x.id === d.id)) setDrivers(ds => [...ds, { id: d.id, name: d.name }])
+    e.target.value = ''
+  }
+  const removeDriver = (i) => setDrivers(ds => ds.filter((_, idx) => idx !== i))
+
+  const submit = async () => {
+    setSaving(true)
+    // 構造化パッチを作り、元と異なるフィールドだけ changed に積む
+    const cleanTimes = times.map(t => t.trim()).filter(Boolean)
+    // 配合：3セクションを - 連結（末尾の空欄は落とす）。特記は3要素配列で保持
+    const mixCode = mixParts.map(p => p.trim()).join('-').replace(/-+$/, '')
+    const mixNotesClean = mixNotes.map(n => n.trim())
+    const patch = {
+      times: cleanTimes,
+      companyName, tradingCompany, siteName,
+      vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
+      drivers: drivers.map(d => ({ id: d.id, name: d.name })),
+      notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
+      siteContact,
+    }
+    const changed = []
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+    const origTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+    if (!eq(origTimes, cleanTimes)) changed.push('times')
+    if ((s.companyName || '') !== companyName) changed.push('companyName')
+    if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
+    if ((s.siteName || '') !== siteName) changed.push('siteName')
+    if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
+    if (String(s.truckCount ?? '') !== String(truckCount)) changed.push('truckCount')
+    const origMixNotes = (Array.isArray(s.mixNotes) ? s.mixNotes : []).map(n => String(n || '').trim())
+    if ((s.mixCode || '') !== mixCode || !eq(origMixNotes.slice(0, 3), mixNotesClean.filter((_, i) => i < 3))) changed.push('mixCode')
+    if (String(s.volume ?? '') !== String(volume) || !!s.volumeUncertain !== volumeUncertain) changed.push('volume')
+    if (!eq(initDrivers, patch.drivers)) changed.push('drivers')
+    if (!eq(Array.isArray(s.notes) ? s.notes.map(n => n.text) : [], patch.notes.map(n => n.text))) changed.push('notes')
+    if ((s.siteContact || '') !== siteContact) changed.push('siteContact')
+    try { await onSave(patch, changed) } catch { setSaving(false) }
+  }
+
+  const lblS = { fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 4, display: 'block' }
+  const inS = { width: '100%', fontSize: 16, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, fontFamily: 'inherit', color: '#111', boxSizing: 'border-box' }
+  const chip = (on) => ({ border: on ? '1.5px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 0', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center' })
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'sticky', top: 0, background: '#fff', paddingBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
+          <button type="button" onClick={onClose} disabled={saving}
+            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
+
+        {/* 時間：行ごとにコンパクトに。各行に時刻＋削除、下に追加ボタン */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={lblS}>時間（最大2・上から順）</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {times.map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, color: '#8a97a6', width: 18, flex: '0 0 auto' }}>{i + 1}</span>
+                <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1 }} />
+                {times.length > 1 && (
+                  <button type="button" onClick={() => delTime(i)}
+                    style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {times.length < 2 && (
+            <button type="button" onClick={addTime}
+              style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div><label style={lblS}>業者名</label><input value={companyName} onChange={e => setCompanyName(e.target.value)} style={inS} /></div>
+          <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
+        </div>
+        <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
+
+        {/* 車種（3種複数選択）＋台数 */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>車種（複数選択可）・台数</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, flex: 1 }}>
+              {VEHICLE_TYPES.map(o => (
+                <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
+              <input value={truckCount} onChange={e => setTruckCount(e.target.value)} inputMode="numeric" placeholder="台数"
+                style={{ ...inS, width: 64, textAlign: 'center', padding: '9px 4px' }} />
+              <span style={{ fontSize: 14, color: '#3a4a5c' }}>台</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>配合（各セクションに特記可）</label>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+            {[0, 1, 2].map(i => (
+              <Fragment key={i}>
+                {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input value={mixNotes[i]} onChange={e => setMixNote(i, e.target.value)} placeholder="特記"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                  <input value={mixParts[i]} onChange={e => setMixPart(i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
+                </div>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>量（m³）</label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input value={volume} onChange={e => setVolume(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
+            <button type="button" onClick={() => setVolumeUncertain(v => !v)}
+              style={{ flex: '0 0 auto', border: volumeUncertain ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: volumeUncertain ? '#c0392b' : '#fff', color: volumeUncertain ? '#fff' : '#8a97a6', borderRadius: 8, width: 42, height: 40, fontSize: 18, fontWeight: 700, cursor: 'pointer' }} title="不確定マーク">?</button>
+          </div>
+        </div>
+
+        {/* 担当（最大4人・選択） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>担当ドライバー（最大4人）</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: drivers.length ? 6 : 0 }}>
+            {drivers.map((d, i) => (
+              <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1.5px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 8, padding: '6px 10px', fontSize: 14, fontWeight: 600 }}>
+                {d.name}
+                <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            ))}
+          </div>
+          {drivers.length < 4 && (
+            <select onChange={addDriver} defaultValue="" style={{ ...inS, cursor: 'pointer' }}>
+              <option value="">＋ ドライバーを追加</option>
+              {driverOptions.filter(e => !drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 12 }}><label style={lblS}>備考（複数は改行）</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inS, resize: 'vertical' }} /></div>
+        <div style={{ marginBottom: 6 }}><label style={lblS}>現場連絡先</label><input value={siteContact} onChange={e => setSiteContact(e.target.value)} inputMode="tel" style={inS} /></div>
+
+        <button type="button" onClick={submit} disabled={saving}
+          style={{ width: '100%', marginTop: 8, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+          {saving ? '更新中…' : '更新'}
+        </button>
       </div>
     </div>
   )
@@ -1580,7 +2395,7 @@ function useShipments() {
 const RPT = {
   wrap: { height: '100%', overflow: 'auto', padding: 18 },
   head: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 },
-  date: { padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 14 },
+  date: { padding: '6px 10px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 16 },
   table: { borderCollapse: 'collapse', width: '100%', fontSize: 13 },
   th: { border: '1px solid #cfd6e0', background: '#f4f6f9', padding: '5px 8px', fontWeight: 700, whiteSpace: 'nowrap' },
   td: { border: '1px solid #e3e8ef', padding: '5px 8px' },
@@ -1637,7 +2452,7 @@ function DashboardPage() {
 function WeeklySchedulePage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const { all, loading } = useShipments()
-  const ms = mondayOf(date)
+  const ms = new Date(date)   // 選択日（既定は本日）を左端に7日分表示
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
   const todayStr = new Date().toISOString().slice(0, 10)
   return (
@@ -1753,10 +2568,12 @@ function AssignPage() {
 }
 
 function SettingsPage() {
+  const isMobile = useIsMobile()
   const [token, setToken] = useState('')
-  const [data, setData] = useState({ users: [], hasToken: false, hasSecret: false })
+  const [data, setData] = useState({ users: [], groups: [], activeGroupCount: 0, hasToken: false, hasSecret: false })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [usersOpen, setUsersOpen] = useState(false)
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -1777,9 +2594,16 @@ function SettingsPage() {
     if (!window.confirm('このLINEユーザーを削除しますか？')) return
     try { await api.del(`/api/line?userId=${encodeURIComponent(userId)}`); load() } catch (e) { alert(e.message) }
   }
+  const delGroup = async (groupId) => {
+    if (!window.confirm('このグループを一覧から削除しますか？')) return
+    try { await api.del(`/api/line?groupId=${encodeURIComponent(groupId)}`); load() } catch (e) { alert(e.message) }
+  }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
+  const copyText = (t) => { navigator.clipboard?.writeText(t); alert('コピーしました\n' + t) }
+  const fmtDT = (s) => { const d = new Date(s); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+  const VIA_LABELS = { join: '招待', message: 'メッセージ' }
 
-  const inp = { padding: '8px 10px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 14, width: '100%', boxSizing: 'border-box' }
+  const inp = { padding: '9px 11px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 16, width: '100%', boxSizing: 'border-box' }
   const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 620, marginBottom: 18 }
 
   return (
@@ -1802,19 +2626,58 @@ function SettingsPage() {
         </div>
       </div>
 
-      <div style={box}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>登録済みLINEユーザー（友だち追加時に自動登録）</h3>
-          <button onClick={load} style={S.editBtn}>🔄 更新</button>
+      <div style={{ ...box, maxWidth: 980 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: usersOpen ? 12 : 0, gap: 8 }}>
+          <button
+            onClick={() => setUsersOpen(o => !o)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#1a2332', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: 12, color: '#6b7a8d', width: 12, display: 'inline-block' }}>{usersOpen ? '▼' : '▶'}</span>
+            登録済みLINEユーザー・グループ（友だち追加・グループ招待時に自動登録）
+            <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7a8d' }}>ユーザー{(data.users || []).length}・グループ{data.activeGroupCount || 0}</span>
+          </button>
+          {usersOpen && <button onClick={load} style={S.editBtn}>🔄 更新</button>}
         </div>
-        {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
-          : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
-            : data.users.map((u) => (
-              <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
-                <span style={{ fontSize: 13 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11 }}>{u.userId}</span></span>
-                <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
-              </div>
-            ))}
+        {usersOpen && (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18 }}>
+            {/* 左：登録済みユーザー */}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 8 }}>👤 ユーザー <span style={{ fontWeight: 400, color: '#9aa7b5' }}>{(data.users || []).length}件</span></div>
+              {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+                : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
+                  : data.users.map((u) => (
+                    <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
+                      <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
+                      <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                    </div>
+                  ))}
+            </div>
+            {/* 右：登録済みグループ（グループID） */}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 8 }}>👥 グループID <span style={{ fontWeight: 400, color: '#9aa7b5' }}>参加中{data.activeGroupCount || 0}件</span></div>
+              {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+                : (data.groups || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ取得がありません（公式アカウントをグループに招待すると自動で登録されます）</div>
+                  : data.groups.map((g) => {
+                    const left = g.status === 'left'
+                    return (
+                      <div key={g.groupId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4', opacity: left ? 0.5 : 1 }}>
+                        <span style={{ fontSize: 13, minWidth: 0 }}>
+                          <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: left ? '#9aa7b5' : '#1a8f5a', border: `1px solid ${left ? '#d8dee8' : '#a0dca0'}`, background: left ? '#f4f6f9' : '#f0f9f0', borderRadius: 4, padding: '1px 6px', marginRight: 6 }}>{left ? '退出済み' : '参加中'}</span>
+                          <span style={{ color: '#6b7a8d', fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>{g.groupId}</span>
+                          <span style={{ display: 'block', color: '#9aa7b5', fontSize: 10, marginTop: 2 }}>
+                            {g.sourceType === 'room' ? '複数人' : 'グループ'}・{VIA_LABELS[g.acquiredVia] || g.acquiredVia}取得・初回 {fmtDT(g.firstSeenAt)}・最終 {fmtDT(g.lastSeenAt)}
+                          </span>
+                        </span>
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <button onClick={() => copyText(g.groupId)} style={S.editBtn}>コピー</button>
+                          <button onClick={() => delGroup(g.groupId)} style={S.delBtn}>削除</button>
+                        </span>
+                      </div>
+                    )
+                  })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1839,13 +2702,16 @@ const TABS = [
 function Layout({ children, activeTab, onTabChange }) {
   const { user, logout } = useAuth()
   const [open, setOpen]   = useState(false)
-  const [isPC, setIsPC]   = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768)
+  const isMobile = useIsMobile()
+  const isPC = !isMobile
 
+  // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
-    const check = () => setIsPC(window.innerWidth >= 768)
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+    if (isMobile && open) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [isMobile, open])
 
   const closeSidebar = () => setOpen(false)
 
@@ -1907,8 +2773,8 @@ function Layout({ children, activeTab, onTabChange }) {
           </div>
           <nav style={S.nav}>
             {TABS.map(tab => (
-              <button key={tab.id} style={{ ...S.navItem, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
-                <span style={{ fontSize: 15 }}>{tab.icon}</span>{tab.label}
+              <button key={tab.id} style={{ ...S.navItem, padding: '13px 12px', fontSize: 15, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
+                <span style={{ fontSize: 17 }}>{tab.icon}</span>{tab.label}
               </button>
             ))}
           </nav>
@@ -1922,11 +2788,11 @@ function Layout({ children, activeTab, onTabChange }) {
       )}
 
       <main style={{ ...S.main, width: '100%' }}>
-        <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 8, padding: isMobile ? '10px 12px' : '14px 20px', paddingTop: isMobile ? 'calc(10px + env(safe-area-inset-top))' : 14 }}>
           {!isPC && (
-            <button style={S.hamburger} onClick={() => setOpen(true)}>☰</button>
+            <button style={S.hamburger} onClick={() => setOpen(true)} aria-label="メニュー">☰</button>
           )}
-          <h1 style={S.pageTitle}>{TABS.find(t => t.id === activeTab)?.icon}{' '}{TABS.find(t => t.id === activeTab)?.label}</h1>
+          <h1 style={{ ...S.pageTitle, fontSize: isMobile ? 16 : 17 }}>{TABS.find(t => t.id === activeTab)?.icon}{' '}{TABS.find(t => t.id === activeTab)?.label}</h1>
         </div>
         <div style={S.content}>{children}</div>
       </main>
@@ -1947,15 +2813,11 @@ function AppInner() {
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
 
-  // 編集ポップアップ（別ウィンドウ）は1分ごとに自動更新（予定表ビューは除く）
-  useEffect(() => {
-    if (!isPopup || view === 'schedule') return
-    const t = setInterval(() => window.location.reload(), 60000)
-    return () => clearInterval(t)
-  }, [isPopup, view])
+  // 別ウィンドウの自動更新は SchedulePage 内で差分更新（再取得して変更分のみ反映）する。
+  // 全画面 reload は入力内容やスクロール位置が失われるため行わない。
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f4f6f9' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#f4f6f9' }}>
       <div style={{ color: '#6b7a8d', fontSize: 15 }}>読み込み中...</div>
     </div>
   )
@@ -1975,7 +2837,7 @@ function AppInner() {
     : null
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div style={{ height: '100vh', overflow: 'auto', background: '#fff' }}>{page}</div>
+  if (isPopup) return <div style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
 
   return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }

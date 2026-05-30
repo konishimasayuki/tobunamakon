@@ -54,3 +54,28 @@ npx vercel dev   # APIも含めてローカル起動
 | admin | ✅ | ✅ | ✅ | ✅ |
 | manager | ✅ | ✅ | ✅ | ❌ |
 | staff | ✅ | ✅ | ❌ | ❌ |
+
+## LINE グループID取得
+
+公式アカウント（Bot）が参加したグループの groupId を Webhook 経由で自動取得し、
+設定画面の「登録済みLINEユーザー・グループ」に表示する。
+
+### 事前設定（必須）
+
+LINE Developers コンソール → 対象チャネル → [Messaging API設定] で
+**「グループトーク・複数人トークへの参加を許可する」を ON** にする。
+OFF のままだと Bot を招待しても即退出し、groupId を取得できない。
+
+### 取得の仕組み
+
+| イベント | 動作 |
+|---------|------|
+| `join`（招待された） | groupId を `active` で登録（主軸・ほぼ全自動） |
+| グループ内 `message` | 未登録なら補完登録、登録済みなら最終確認日時を更新 |
+| グループ内で「ID」と送信 | Bot が groupId を返信（確認用・無料の reply） |
+| `leave`（退出・削除） | 該当 groupId を `left`（退出済み）に更新 |
+
+- groupId 取得は **Webhook での都度記録が唯一の手段**（一覧取得APIは存在しない）。
+- upsert 設計のため同一イベントの再送・重複でも 1 レコードに集約（冪等）。
+- **未認証アカウントでも groupId は取得可能**。
+- データは Redis ハッシュ `line:groups`（groupId → レコードJSON）に保存。
