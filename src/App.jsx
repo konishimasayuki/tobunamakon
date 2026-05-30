@@ -946,6 +946,8 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   const draftRef = useRef(null)    // ドラッグ中の矢印（ピクセル座標 {x1,y1,x2,y2}）
   const [status, setStatus] = useState('loading')
   const [drawMode, setDrawMode] = useState(false)  // 矢印描画モード（地図をロックして描く）
+  const [pinLock, setPinLock] = useState(false)    // ピン（マーカー）の位置を固定
+  const [viewLock, setViewLock] = useState(false)  // 縮尺・位置（パン/ズーム）を固定
   // 最新値を非同期コールバック（OverlayView.draw / idle）から参照するための ref
   const arrowsRef = useRef(arrows); arrowsRef.current = arrows
   const onViewRef = useRef(onMapViewChange); onViewRef.current = onMapViewChange
@@ -976,20 +978,24 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     })
   }
 
-  // 地図の操作ロック（縮尺・位置の固定）
-  const applyLock = (lock) => {
+  // 地図の操作状態を各トグルから合成して反映
+  // - viewLock または描画中は地図のパン/ズームを禁止
+  // - pinLock または描画中はマーカーをドラッグ不可
+  const applyLock = (opts = {}) => {
     const m = mapRef.current
     if (!m) return
+    const vLock = (opts.view ?? viewLock) || (opts.draw ?? drawMode)
+    const pLock = (opts.pin ?? pinLock) || (opts.draw ?? drawMode)
     m.setOptions({
-      gestureHandling: lock ? 'none' : 'cooperative',
-      zoomControl: !lock,
-      draggable: !lock,
-      scrollwheel: !lock,
-      disableDoubleClickZoom: lock,
-      keyboardShortcuts: !lock,
-      clickableIcons: !lock,
+      gestureHandling: vLock ? 'none' : 'cooperative',
+      zoomControl: !vLock,
+      draggable: !vLock,
+      scrollwheel: !vLock,
+      disableDoubleClickZoom: vLock,
+      keyboardShortcuts: !vLock,
+      clickableIcons: !vLock,
     })
-    if (markerRef.current) markerRef.current.setDraggable(!lock)
+    if (markerRef.current) markerRef.current.setDraggable(!pLock)
   }
 
   // ===== 矢印キャンバス =====
@@ -1077,7 +1083,23 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   const toggleDraw = () => {
     setDrawMode(d => {
       const next = !d
-      applyLock(next)
+      applyLock({ draw: next })
+      return next
+    })
+  }
+  // ピン（マーカー）の位置を固定
+  const togglePinLock = () => {
+    setPinLock(v => {
+      const next = !v
+      applyLock({ pin: next })
+      return next
+    })
+  }
+  // 縮尺・位置（パン/ズーム）を固定
+  const toggleViewLock = () => {
+    setViewLock(v => {
+      const next = !v
+      applyLock({ view: next })
       return next
     })
   }
@@ -1161,6 +1183,14 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
+        <button type="button" onClick={togglePinLock} disabled={status !== '' || drawMode}
+          style={{ border: '1.5px solid #0f3060', background: pinLock ? '#0f3060' : '#fff', color: pinLock ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: drawMode ? 'default' : 'pointer', opacity: drawMode ? 0.5 : 1 }}>
+          {pinLock ? '📌 ピン固定中' : '📍 ピンを固定'}
+        </button>
+        <button type="button" onClick={toggleViewLock} disabled={status !== '' || drawMode}
+          style={{ border: '1.5px solid #0f3060', background: viewLock ? '#0f3060' : '#fff', color: viewLock ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: drawMode ? 'default' : 'pointer', opacity: drawMode ? 0.5 : 1 }}>
+          {viewLock ? '🔒 縮尺・位置固定中' : '🔓 縮尺と位置を固定'}
+        </button>
         <button type="button" onClick={toggleDraw} disabled={status !== ''}
           style={{ border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
           {drawMode ? '✓ 描画を終える' : '✏️ 矢印を描く'}
