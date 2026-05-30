@@ -962,7 +962,7 @@ function drawArrow(ctx, x1, y1, x2, y2, w) {
 // 地図のデフォルト縮尺（従来16から、マウスホイール4回分ズームインした縮尺）
 const DEFAULT_MAP_ZOOM = 20
 
-function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange }) {
+function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange, actions }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
@@ -1115,22 +1115,6 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       return next
     })
   }
-  // ピン（マーカー）の位置を固定
-  const togglePinLock = () => {
-    setPinLock(v => {
-      const next = !v
-      applyLock({ pin: next })
-      return next
-    })
-  }
-  // 縮尺・位置（パン/ズーム）を固定
-  const toggleViewLock = () => {
-    setViewLock(v => {
-      const next = !v
-      applyLock({ view: next })
-      return next
-    })
-  }
 
   useEffect(() => {
     let cancelled = false
@@ -1211,14 +1195,6 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
-        <button type="button" onClick={togglePinLock} disabled={status !== '' || drawMode}
-          style={{ border: '1.5px solid #0f3060', background: pinLock ? '#0f3060' : '#fff', color: pinLock ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: drawMode ? 'default' : 'pointer', opacity: drawMode ? 0.5 : 1 }}>
-          {pinLock ? '📌 ピン固定中' : '📍 ピンを固定'}
-        </button>
-        <button type="button" onClick={toggleViewLock} disabled={status !== '' || drawMode}
-          style={{ border: '1.5px solid #0f3060', background: viewLock ? '#0f3060' : '#fff', color: viewLock ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: drawMode ? 'default' : 'pointer', opacity: drawMode ? 0.5 : 1 }}>
-          {viewLock ? '🔒 縮尺・位置固定中' : '🔓 縮尺と位置を固定'}
-        </button>
         <button type="button" onClick={toggleDraw} disabled={status !== ''}
           style={{ border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
           {drawMode ? '✓ 描画を終える' : '✏️ 矢印を描く'}
@@ -1227,18 +1203,18 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
           style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
         <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
           style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
-        <span style={{ fontSize: 11, color: '#6b7a8d' }}>矢印 {(arrows || []).length} 本</span>
+        {actions && <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', alignItems: 'center' }}>{actions}</div>}
       </div>
 
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
       {status === 'notfound' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>住所が見つかりませんでした。ピンを動かして調整してください。</div>}
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
       {status === 'error' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図の読み込みに失敗しました</div>}
-      <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
-        {drawMode
-          ? '✏️ 地図上をドラッグして矢印を描きます。描き終えたら「描画を終える」を押すと地図を動かせます'
-          : '📍 ピンをドラッグで現場住所を調整。矢印は「矢印を描く」から追加でき、地図を動かしても同じ場所に追従します'}
-      </div>
+      {drawMode && (
+        <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
+          ✏️ 地図上をドラッグして矢印を描きます。描き終えたら「描画を終える」を押すと地図を動かせます
+        </div>
+      )}
     </div>
   )
 }
@@ -1425,7 +1401,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: 16, alignItems: 'stretch', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: 12, alignItems: 'stretch', justifyContent: 'center' }}>
           <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '0 0 644px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
@@ -1576,16 +1552,18 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               onMapViewChange={(v) => setVal('mapView', v)}
               arrows={form.mapArrows}
               onArrowsChange={(a) => setVal('mapArrows', a)}
+              actions={
+                <>
+                  <button type="button" style={{ ...S.cancelBtn, padding: '8px 20px', fontSize: 14 }} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
+                  <button type="submit" style={{ ...S.saveBtn, padding: '8px 24px', fontSize: 14, opacity: saving ? 0.7 : 1 }} disabled={saving}>
+                    {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
+                  </button>
+                </>
+              }
             />
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
             {editing && editChanged.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {editChanged.map(f => SCHEDULE_FIELD_LABELS[f] || f).join('・')}</div>}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
-            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-              <button type="button" style={S.cancelBtn} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
-              <button type="submit" style={{ ...S.saveBtn, opacity: saving ? 0.7 : 1 }} disabled={saving}>
-                {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
-              </button>
-            </div>
           </div>
           </div>
         </form>

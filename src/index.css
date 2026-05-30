@@ -28,9 +28,9 @@ input, textarea, select { font-family: inherit; }
 .denpyo .sheet { max-width:720px; margin:0 auto; background:#fff; border:2px solid #111; overflow:hidden; }
 .denpyo .band { display:flex; border-bottom:1px solid #111; }
 .denpyo .band:last-child { border-bottom:none; }
-.denpyo .cell { border-right:1px solid #111; padding:6px; position:relative; min-height:46px; display:flex; flex-direction:column; }
+.denpyo .cell { border-right:1px solid #111; padding:3px 6px; position:relative; min-height:36px; display:flex; flex-direction:column; }
 .denpyo .cell:last-child { border-right:none; }
-.denpyo .lbl { font-size:13px; font-weight:700; letter-spacing:.18em; margin-bottom:2px; white-space:nowrap; }
+.denpyo .lbl { font-size:13px; font-weight:700; letter-spacing:.18em; margin-bottom:1px; white-space:nowrap; }
 .denpyo input.f, .denpyo textarea.f { border:none; outline:none; width:100%; background:transparent; font-family:inherit; font-size:15px; color:#111; padding:0; flex:1; }
 .denpyo textarea.f { resize:none; line-height:1.5; }
 .denpyo input.f::placeholder, .denpyo textarea.f::placeholder { color:#bbb; }
@@ -59,14 +59,14 @@ input, textarea, select { font-family: inherit; }
 .denpyo .m3 input[type="number"] { font-size:34px; width:104px; }
 .denpyo .m3 .unit { font-size:22px; }
 /* 配合：2桁×3フィールド（各数値の上に小さく特記事項） */
-.denpyo .haigou3 { display:flex; align-items:flex-end; justify-content:center; gap:6px; margin-top:6px; }
-.denpyo .haigou3 .hgsep { font-size:52px; font-weight:700; color:#111; align-self:flex-end; line-height:1; }
+.denpyo .haigou3 { display:flex; align-items:flex-end; justify-content:center; gap:6px; margin-top:2px; }
+.denpyo .haigou3 .hgsep { font-size:38px; font-weight:700; color:#111; align-self:flex-end; line-height:1; }
 .denpyo .haigou3 .hgcol { display:flex; flex-direction:column; align-items:center; }
 .denpyo .haigou3 .hgnote { width:3.4em; text-align:center; font-size:10px; color:#c81e1e; font-weight:700; border:none; border-bottom:1px dashed #e7a3a3; outline:none; background:transparent; font-family:inherit; padding:0 0 1px; }
 .denpyo .haigou3 .hgnote::placeholder { color:#e7a3a3; }
 .denpyo .haigou3 .hg { width:1.7em; text-align:center; border:none; border-bottom:3px solid #111; font-size:52px; font-weight:700; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
 /* 地図キャンバス（モバイルは低め＝全画面化を避ける） */
-.sitemap-canvas { width:100%; height:640px; border-radius:8px; background:#e8eaed; }
+.sitemap-canvas { width:100%; height:560px; border-radius:8px; background:#e8eaed; }
 @media (max-width:760px){ .sitemap-canvas { height:300px; } }
 /* 地図に重ねる矢印描画レイヤー（固定時のみ操作可） */
 .sitemap-arrows { position:absolute; inset:0; width:100%; height:100%; touch-action:none; border-radius:8px; }
