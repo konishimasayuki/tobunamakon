@@ -120,7 +120,11 @@ input, textarea, select { font-family: inherit; }
 .sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; }
 .sc-card { border:1px solid #d8dee8; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.07); padding:12px 14px; }
 .sc-card-head { display:flex; align-items:flex-end; gap:10px; padding-bottom:8px; margin-bottom:4px; border-bottom:2px solid #eef0f4; }
-.sc-card-head .sc-time { flex:0 0 auto; max-width:46%; }
+.sc-card-head .sc-time { flex:0 0 auto; max-width:60%; }
+/* 時刻：2つ以上は横並び＋間に「〜」 */
+.schedule .sc-times { display:flex; align-items:center; gap:2px; flex-wrap:nowrap; }
+.schedule .sc-times .sc-timeitem { width:auto; flex:0 1 auto; min-width:2.5em; }
+.schedule .sc-timesep { flex:0 0 auto; font-weight:700; color:#111; font-size:18px; padding:0 1px; }
 .sc-card-head .sc-company { flex:1; min-width:0; }
 .sc-card-head .sc-company .sc-in { font-size:20px; font-weight:700; }
 .sc-card .sc-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #f2f4f7; }

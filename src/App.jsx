@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment } from 'react'
 
 // ============================================================
 // 定数
@@ -235,6 +235,31 @@ function useIsMobile(bp = MOBILE_BP) {
 
 // iOS でフォーカス時の自動ズームを防ぐため、モバイルでは入力欄を 16px 以上にする
 const noZoom = (style, mobile) => (mobile ? { ...style, fontSize: 16 } : style)
+
+// 子要素を「自然な横幅(width)」で描画し、親の幅に収まるよう zoom で自動縮小する。
+// iPhone/iPad で帳票が横に見切れないようにするためのラッパー。
+function FitToWidth({ width = 700, max = 1, children, style }) {
+  const ref = useRef(null)
+  const [scale, setScale] = useState(max)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const calc = () => {
+      const avail = el.clientWidth
+      if (avail > 0) setScale(Math.min(max, avail / width))
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    ro.observe(el)
+    window.addEventListener('orientationchange', calc)
+    return () => { ro.disconnect(); window.removeEventListener('orientationchange', calc) }
+  }, [width, max])
+  return (
+    <div ref={ref} style={{ width: '100%', overflow: 'hidden', ...style }}>
+      <div style={{ width, zoom: scale }}>{children}</div>
+    </div>
+  )
+}
 
 // ============================================================
 // ログイン画面
@@ -1217,6 +1242,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
 
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed }) {
   const isMobile = useIsMobile()
+  const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
   const [customers, setCustomers]   = useState([])
@@ -1396,8 +1422,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', justifyContent: 'center' }}>
-          <div className="sheet" style={{ flex: '1 1 460px', minWidth: 0, margin: 0, zoom: 0.8 }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: stacked ? 'nowrap' : 'wrap', gap: 16, alignItems: stacked ? 'stretch' : 'flex-start', justifyContent: 'center' }}>
+          <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '1 1 460px', minWidth: 0 }}>
+          <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
@@ -1537,7 +1564,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
             </div>
           </div>
-          <div style={{ flex: '1 1 340px', minWidth: 280 }}>
+          </FitToWidth>
+          <div style={{ flex: stacked ? '0 0 auto' : '1 1 340px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
             <SiteMap
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
@@ -1775,10 +1803,39 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 時刻（スマホカード用）：2つ以上あるときは横並びにして間に「〜」を入れる
+  const cellTimes = (s) => {
+    const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
+      .map(x => String(x ?? '').trim()).filter(Boolean)
+    const cls = 'sc-in big center sc-timeitem' + (isChanged(s, 'times') ? ' changed' : '')
+    const saveAll = (container) => {
+      const inputs = Array.from(container.querySelectorAll('input.sc-timeitem'))
+      saveField(s, 'times', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
+    }
+    const items = times.length ? times : ['']
+    return (
+      <div className="sc-times" key={'times' + (isChanged(s, 'times') ? '_c' : '') + '_n' + items.length}>
+        {items.map((t, i) => (
+          <Fragment key={i}>
+            {i > 0 && <span className="sc-timesep">〜</span>}
+            <input ref={fitRef} className={cls} defaultValue={t} placeholder={i === 0 ? '時間' : ''}
+              onInput={e => fitOne(e.target)} onBlur={e => saveAll(e.target.closest('.sc-times'))} />
+          </Fragment>
+        ))}
+      </div>
+    )
+  }
+
   // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
+  // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
   const cellDrivers = (s, opts = {}) => {
     const v = getVal(s, 'drivers')               // 2人ごとに改行された文字列
-    const lines = v ? v.split('\n') : ['']
+    let lines = v ? v.split('\n') : ['']
+    if (opts.oneEach) {                           // 各行をさらに分解して1人=1行に
+      const names = (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : []))
+        .map(x => String(x ?? '').trim()).filter(Boolean)
+      lines = names.length ? names : ['']
+    }
     const display = lines.length ? lines : ['']
     const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '')
     const saveAll = (container) => {
@@ -1867,7 +1924,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               {rows.map(s => (
                 <div className="sc-card" key={s.id}>
                   <div className="sc-card-head">
-                    <div className="sc-time">{cellMulti(s, 'times', '時間', { big: true })}</div>
+                    <div className="sc-time">{cellTimes(s)}</div>
                     <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
                   </div>
                   <div className="sc-row"><span className="sc-lbl">商社</span><span className="sc-val">{cell(s, 'tradingCompany', '商社')}</span></div>
@@ -1877,7 +1934,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
                     <div className="sc-box"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
-                  <div className="sc-row"><span className="sc-lbl">担当</span><span className="sc-val">{cellDrivers(s, { big: true })}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">担当</span><span className="sc-val">{cellDrivers(s, { big: true, oneEach: true })}</span></div>
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
