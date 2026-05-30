@@ -124,12 +124,12 @@ input, textarea, select { font-family: inherit; }
 .sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; max-width:100%; overflow-x:hidden; }
 .sc-card { border:1px solid #d8dee8; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.07); padding:12px 14px; max-width:100%; overflow:hidden; box-sizing:border-box; }
 .sc-card-head { display:flex; align-items:center; gap:10px; padding-bottom:8px; margin-bottom:4px; border-bottom:2px solid #eef0f4; }
-.sc-card-head .sc-time { flex:0 0 30%; max-width:30%; display:flex; align-items:center; justify-content:flex-start; overflow:hidden; }
-.sc-card-head .sc-times.single .sc-timeitem { font-size:30px; font-weight:700; width:auto; text-align:left; }
-/* 時刻：2つ以上は横並び＋間に「〜」 */
-.schedule .sc-times { display:flex; align-items:center; gap:2px; flex-wrap:nowrap; min-width:0; }
-.schedule .sc-times .sc-timeitem { width:auto; flex:0 1 auto; min-width:0; text-align:left; }
-.schedule .sc-timesep { flex:0 0 auto; font-weight:700; color:#111; font-size:18px; padding:0 1px; }
+.sc-card-head .sc-time { flex:0 0 42%; max-width:42%; display:flex; align-items:center; justify-content:flex-start; overflow:hidden; }
+/* 時刻：1つなら大きく、2つは横並び＋間に「〜」（列幅に収まるようサイズ調整） */
+.schedule .sc-times { display:flex; align-items:center; gap:2px; flex-wrap:nowrap; min-width:0; width:100%; }
+.sc-card-head .sc-times .sc-timeitem { font-size:17px; font-weight:700; width:auto; flex:1 1 0; min-width:0; text-align:center; padding:0; }
+.sc-card-head .sc-times.single .sc-timeitem { font-size:30px; flex:0 0 auto; text-align:left; }
+.sc-card-head .sc-timesep { flex:0 0 auto; font-weight:700; color:#111; font-size:15px; padding:0; }
 /* 業者名（上）・商社名（下）の縦並び（中央寄せ） */
 .sc-card-head .sc-names { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
 .sc-card-head .sc-company .sc-in { font-size:20px; font-weight:700; text-align:center; }
@@ -154,9 +154,10 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-site .sc-in { font-size:24px; font-weight:700; text-align:center; }
 /* 車種：中央に大きく、台数は値の右側・縦中央にバッジ的に配置 */
 .sc-card .sc-vehbox { position:relative; }
-.sc-card .sc-veh { display:flex; align-items:center; justify-content:center; width:100%; min-width:0; }
+/* 7tは中央のまま固定。台数は中央から値の右へ少しだけ離して絶対配置 */
+.sc-card .sc-veh { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-width:0; }
 .sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; min-width:0; text-align:center; }
-.sc-card .sc-truck { position:absolute; left:10px; bottom:6px; font-size:14px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
+.sc-card .sc-truck { position:absolute; left:calc(50% + 1.3em); bottom:2px; font-size:14px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
 /* 量：数字・記号を大きく */
 .sc-card .sc-volbox .sc-in { font-size:28px; font-weight:700; }
 /* 担当ブロック：1人=特大、2人以上=各行に並べる */
