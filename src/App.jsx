@@ -1649,6 +1649,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 出荷予定表は縦持ち（スマホ・iPhone・iPad）前提。横スクロールのテーブルではなく
   // 1件=1カードの縦リストで表示する。PC・横向き（>=1025px）のみ従来テーブル。
   const isMobile = useIsMobile(1025)
+  // 別ウィンドウ（isPopup）では幅に関わらず常にPC版テーブルを表示する。
+  // → スマホで「別ウィンドウで開く」を押すと、横画面でPCレイアウトの予定表が出る。
+  const compact = isMobile && !isPopup
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1908,23 +1911,23 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
-      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: isMobile ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-        <div style={{ textAlign: 'center', fontSize: isMobile ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: isMobile ? '0.15em' : '0.35em' }}>出荷予定表</div>
-        <div style={isMobile
+    <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
+      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+        <div style={{ textAlign: 'center', fontSize: compact ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: compact ? '0.15em' : '0.35em' }}>出荷予定表</div>
+        <div style={compact
           ? { display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, color: '#111' }
           : { position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ fontSize: isMobile ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+            style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           {isPopup
             ? <button type="button" onClick={() => window.close()}
                 style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
-            : !isMobile && <button type="button" onClick={openScheduleWindow}
+            : <button type="button" onClick={openScheduleWindow}
                 style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>}
         </div>
       </div>
-      {isMobile ? (
+      {compact ? (
         <div className="schedule sc-cards">
           {loading ? (
             <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
