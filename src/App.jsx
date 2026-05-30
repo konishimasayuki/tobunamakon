@@ -852,6 +852,36 @@ function fitText(ta) {
   }
 }
 
+// 横幅に収まるよう文字サイズを自動縮小する input（現場名・現場住所など）。
+// プレースホルダ（透かし）も実テキストと同じく縮小される（同じ要素の font-size を縮めるため）。
+function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style }) {
+  const ref = useRef(null)
+  const fit = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.fontSize = baseSize + 'px'
+    let size = baseSize, guard = 0
+    // 入力が空のときはプレースホルダ幅で測る
+    while (el.scrollWidth > el.clientWidth + 1 && size > min && guard < 60) {
+      size -= 0.5; el.style.fontSize = size + 'px'; guard++
+    }
+  }
+  useLayoutEffect(() => { requestAnimationFrame(fit) })
+  useEffect(() => {
+    const on = () => requestAnimationFrame(fit)
+    window.addEventListener('resize', on)
+    window.addEventListener('orientationchange', on)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fit))
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <input ref={ref} className={className} type={type} value={value}
+      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
+      placeholder={placeholder} style={style} />
+  )
+}
+
 // 選択チップ（単一 / 複数）
 function Chips({ options, value, multi, onChange, big }) {
   const isOn = (o) => multi ? (value || []).includes(o) : value === o
@@ -1428,13 +1458,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl" style={redIf('siteName')}>現 場 名</div>
-                    <input className="f" style={redIf('siteName')} type="text" value={form.siteName} onChange={set('siteName')} />
+                    <FitField value={form.siteName} onChange={set('siteName')} style={redIf('siteName')} />
                   </div>
                 </div>
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">現 場 住 所</div>
-                    <textarea className="f" rows={1} value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
+                    <FitField value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
                   </div>
                 </div>
               </div>
