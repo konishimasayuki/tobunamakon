@@ -1959,8 +1959,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {row.map((nm) => {
               const i = idx++
               return (
-                <input key={i} ref={fitRef} className={cls} defaultValue={nm}
-                  placeholder={i === 0 ? '担当' : ''} onInput={e => fitOne(e.target)} />
+                <input key={i} className={cls} defaultValue={nm}
+                  placeholder={i === 0 ? '担当' : ''} />
               )
             })}
           </div>
