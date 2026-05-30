@@ -2149,9 +2149,10 @@ function AppInner() {
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
 
-  // 別ウィンドウ（編集ポップアップ・出荷予定表とも）は1分ごとに自動更新
+  // 出荷予定表の別ウィンドウ（閲覧専用）のみ1分ごとに自動更新する。
+  // 編集ポップアップ（出荷登録/伝票編集）は入力中にリロードされ入力内容が消えるため自動更新しない。
   useEffect(() => {
-    if (!isPopup) return
+    if (!isPopup || view !== 'schedule') return
     const t = setInterval(() => window.location.reload(), 60000)
     return () => clearInterval(t)
   }, [isPopup, view])
