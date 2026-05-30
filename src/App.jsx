@@ -1156,7 +1156,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
+  const [page, setPage]             = useState(0)
   const topRef = useRef(null)
+  const PAGE_SIZE = 10
 
   const load = useCallback(async () => {
     try {
