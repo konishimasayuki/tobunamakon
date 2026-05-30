@@ -138,26 +138,26 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin:8px 0; }
 .sc-card .sc-box { border:1px solid #eef0f4; border-radius:8px; background:#fafbfc; padding:6px 4px 7px; text-align:center; min-height:60px; display:flex; flex-direction:column; justify-content:center; }
 .sc-card .sc-box .sc-lbl { display:block; flex:none; margin-bottom:2px; }
-/* 現場名は中央・大きく */
+/* カード内フォント（基準。各ブロックの個別指定が後段でこれを上書きする） */
+.sc-cards .sc-in { font-size:18px; }
+.sc-cards .sc-in.big { font-size:20px; }
+.sc-cards .sc-in.big.center { font-size:24px; }
+.sc-cards .sc-in.xbig { font-size:28px; font-weight:700; }
+/* 現場名は中央・大きく（枠幅に合わせ自動縮小されるので上限値） */
 .sc-card .sc-site { padding-top:8px; }
 .sc-card .sc-site .sc-val { text-align:center; }
-.sc-card .sc-site .sc-in { font-size:26px !important; font-weight:700; text-align:center; }
+.sc-card .sc-site .sc-in { font-size:24px; font-weight:700; text-align:center; }
 /* 車種：大きく＋右に台数（中くらい） */
-.sc-card .sc-veh { display:flex; align-items:baseline; justify-content:center; gap:3px; }
-.sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; }
-.sc-card .sc-truck { font-size:18px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
+.sc-card .sc-veh { display:flex; align-items:baseline; justify-content:center; gap:3px; min-width:0; }
+.sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; min-width:0; }
+.sc-card .sc-truck { font-size:15px; font-weight:700; color:#3a4a5c; white-space:nowrap; flex:0 0 auto; }
 /* 量：数字・記号を大きく */
-.sc-card .sc-volbox .sc-in { font-size:32px !important; font-weight:700; }
+.sc-card .sc-volbox .sc-in { font-size:28px; font-weight:700; }
 /* 担当ブロック：1人=特大、2人以上=各行に並べる */
 .sc-card .sc-drivers-card { display:flex; flex-direction:column; align-items:center; gap:2px; width:100%; }
-.sc-card .sc-drv-row { display:flex; justify-content:center; gap:8px; width:100%; }
-.sc-card .sc-drv-row .sc-driverline { width:auto; flex:0 1 auto; text-align:center; white-space:nowrap; }
+.sc-card .sc-drv-row { display:flex; justify-content:center; gap:8px; width:100%; min-width:0; }
+.sc-card .sc-drv-row .sc-driverline { width:auto; flex:0 1 auto; text-align:center; white-space:nowrap; min-width:0; }
 .sc-card .sc-card-actions { display:flex; gap:10px; margin-top:12px; }
-/* カード内フォント（数字・項目を大きく見やすく） */
-.sc-cards .sc-in { font-size:18px; }
-.sc-cards .sc-in.big { font-size:22px; }
-.sc-cards .sc-in.big.center { font-size:28px; }
-.sc-cards .sc-in.xbig { font-size:30px; font-weight:700; }
 
 /* ===== 出荷予定表 別ウィンドウ（閲覧専用・編集列なし） ===== */
 /* 通常の出荷予定表と同じ大きさ・フォントのまま、編集列を消して
