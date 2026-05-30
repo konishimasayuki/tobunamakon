@@ -811,6 +811,8 @@ const emptyShipForm = {
   drivers: [],
   notes: [{ text: '', important: false }],
   driverMessages: [{ text: '', important: false }],
+  mapView: null,        // 固定した地図の {lat,lng,zoom}（null=未固定）
+  mapArrows: [],         // 矢印 [{x1,y1,x2,y2}]（相対座標0-1）
 }
 
 // テキストをマス内に収めるよう自動縮小
@@ -915,13 +917,34 @@ function extractCoords(s) {
   return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
 }
 
-function SiteMap({ address, onAddressChange }) {
+// canvas に矢印を1本描く（line + 矢じり）
+function drawArrow(ctx, x1, y1, x2, y2, w) {
+  const head = Math.max(10, Math.min(w * 0.04, 26))
+  const ang = Math.atan2(y2 - y1, x2 - x1)
+  ctx.lineWidth = Math.max(3, Math.min(w * 0.012, 8))
+  ctx.strokeStyle = '#e8211c'
+  ctx.fillStyle = '#e8211c'
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x2, y2)
+  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6))
+  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6))
+  ctx.closePath(); ctx.fill()
+}
+
+function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
   const geocoderRef = useRef(null)
   const selfSetRef = useRef('')   // 地図側で設定した住所値（ループ防止）
+  const wrapRef = useRef(null)
+  const canvasRef = useRef(null)
+  const draftRef = useRef(null)   // ドラッグ中の矢印 {x1,y1,x2,y2}（相対0-1）
   const [status, setStatus] = useState('loading')
+  const fixed = !!mapView
 
   const doGeocode = (addr) => {
     const g = geocoderRef.current
@@ -949,17 +972,101 @@ function SiteMap({ address, onAddressChange }) {
     })
   }
 
+  // 地図の操作ロック（縮尺・位置の固定）
+  const applyLock = (lock) => {
+    const m = mapRef.current
+    if (!m) return
+    m.setOptions({
+      gestureHandling: lock ? 'none' : 'cooperative',
+      zoomControl: !lock,
+      draggable: !lock,
+      scrollwheel: !lock,
+      disableDoubleClickZoom: lock,
+      keyboardShortcuts: !lock,
+      clickableIcons: !lock,
+    })
+    if (markerRef.current) markerRef.current.setDraggable(!lock)
+  }
+
+  // ===== 矢印キャンバス =====
+  const sizeCanvas = () => {
+    const cv = canvasRef.current, wrap = wrapRef.current
+    if (!cv || !wrap) return
+    const r = wrap.getBoundingClientRect()
+    if (cv.width !== Math.round(r.width) || cv.height !== Math.round(r.height)) {
+      cv.width = Math.round(r.width); cv.height = Math.round(r.height)
+    }
+  }
+  const redraw = () => {
+    const cv = canvasRef.current
+    if (!cv) return
+    sizeCanvas()
+    const ctx = cv.getContext('2d')
+    const w = cv.width, h = cv.height
+    ctx.clearRect(0, 0, w, h)
+    for (const a of (arrows || [])) drawArrow(ctx, a.x1 * w, a.y1 * h, a.x2 * w, a.y2 * h, w)
+    const d = draftRef.current
+    if (d) drawArrow(ctx, d.x1 * w, d.y1 * h, d.x2 * w, d.y2 * h, w)
+  }
+  useEffect(() => { redraw() }, [arrows, fixed])
+  useEffect(() => {
+    const on = () => redraw()
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [arrows])
+
+  const relPos = (e) => {
+    const r = canvasRef.current.getBoundingClientRect()
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
+  }
+  const onDown = (e) => {
+    if (!fixed) return
+    e.preventDefault()
+    const p = relPos(e)
+    draftRef.current = { x1: p.x, y1: p.y, x2: p.x, y2: p.y }
+    try { canvasRef.current.setPointerCapture(e.pointerId) } catch {}
+  }
+  const onMove = (e) => {
+    if (!draftRef.current) return
+    const p = relPos(e)
+    draftRef.current.x2 = p.x; draftRef.current.y2 = p.y
+    redraw()
+  }
+  const onUp = () => {
+    const d = draftRef.current
+    draftRef.current = null
+    if (!d) return
+    const dist = Math.hypot(d.x2 - d.x1, d.y2 - d.y1)
+    if (dist > 0.02) onArrowsChange([...(arrows || []), d])  // 短すぎる線は無視
+    else redraw()
+  }
+  const undoArrow = () => onArrowsChange((arrows || []).slice(0, -1))
+  const clearArrows = () => onArrowsChange([])
+
+  const toggleFix = () => {
+    const m = mapRef.current
+    if (!m) return
+    if (fixed) {
+      onMapViewChange(null)
+      applyLock(false)
+    } else {
+      const c = m.getCenter()
+      onMapViewChange({ lat: c.lat(), lng: c.lng(), zoom: m.getZoom() })
+      applyLock(true)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     loadGoogleMaps().then(maps => {
       if (cancelled || !mapEl.current) return
       geocoderRef.current = new maps.Geocoder()
-      const center = { lat: 35.681236, lng: 139.767125 }
+      const start = mapView ? { lat: mapView.lat, lng: mapView.lng } : { lat: 35.681236, lng: 139.767125 }
       mapRef.current = new maps.Map(mapEl.current, {
-        center, zoom: 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+        center: start, zoom: mapView ? mapView.zoom : 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
         gestureHandling: 'cooperative',
       })
-      markerRef.current = new maps.Marker({ map: mapRef.current, position: center, draggable: true })
+      markerRef.current = new maps.Marker({ map: mapRef.current, position: start, draggable: true })
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current.getPosition()
         geocoderRef.current.geocode({ location: pos }, (res, st) => {
@@ -968,29 +1075,70 @@ function SiteMap({ address, onAddressChange }) {
         })
       })
       setStatus('')
-      doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
+      if (mapView) {
+        applyLock(true)   // 既に固定済みのデータ → ロック状態で開く
+      } else {
+        doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
+      }
+      requestAnimationFrame(redraw)
     }).catch(err => {
       if (!cancelled) setStatus(err.message === 'NO_KEY' ? 'nokey' : 'error')
     })
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (!geocoderRef.current) return
+    if (fixed) return                            // 固定中は住所変更で地図を動かさない
     if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
     const target = (address && address.trim()) ? address : DEFAULT_SITE_ADDRESS
     const t = setTimeout(() => doGeocode(target), 800)
     return () => clearTimeout(t)
-  }, [address])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, fixed])
 
   return (
     <div>
-      <div ref={mapEl} className="sitemap-canvas" />
+      <div ref={wrapRef} style={{ position: 'relative' }}>
+        <div ref={mapEl} className="sitemap-canvas" />
+        <canvas
+          ref={canvasRef}
+          className="sitemap-arrows"
+          style={{ pointerEvents: fixed ? 'auto' : 'none', cursor: fixed ? 'crosshair' : 'default' }}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+        />
+        {fixed && (
+          <div className="sitemap-badge">📌 固定中 — 地図上をドラッグで矢印を描けます</div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
+        <button type="button" onClick={toggleFix} disabled={status !== ''}
+          style={{ border: '1.5px solid #0f3060', background: fixed ? '#0f3060' : '#fff', color: fixed ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          {fixed ? '🔓 固定を解除' : '📌 縮尺と位置を固定'}
+        </button>
+        {fixed && (
+          <>
+            <button type="button" onClick={undoArrow} disabled={!(arrows || []).length}
+              style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
+            <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
+              style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
+            <span style={{ fontSize: 11, color: '#6b7a8d' }}>矢印 {(arrows || []).length} 本</span>
+          </>
+        )}
+      </div>
+
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
       {status === 'notfound' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>住所が見つかりませんでした。ピンを動かして調整してください。</div>}
       {status === 'nokey' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図APIキーが未設定です（Vercelに VITE_GMAPS_API_KEY を設定してください）</div>}
       {status === 'error' && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>地図の読み込みに失敗しました</div>}
-      <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>📍 ピンをドラッグすると現場住所が更新されます</div>
+      <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
+        {fixed ? '📍 縮尺・位置を固定し、矢印を描けます（解除すると地図を再び動かせます）' : '📍 ピンをドラッグすると現場住所が更新されます。位置が決まったら「縮尺と位置を固定」を押してください'}
+      </div>
     </div>
   )
 }
@@ -1088,6 +1236,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
     notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
     driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
+    mapView: s.mapView || null,
+    mapArrows: Array.isArray(s.mapArrows) ? s.mapArrows : [],
   })
 
   const startEdit = (s) => {
@@ -1306,7 +1456,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             </div>
           </div>
           <div style={{ flex: '1 1 340px', minWidth: 280 }}>
-            <SiteMap address={form.siteAddress} onAddressChange={(a) => setVal('siteAddress', a)} />
+            <SiteMap
+              address={form.siteAddress}
+              onAddressChange={(a) => setVal('siteAddress', a)}
+              mapView={form.mapView}
+              onMapViewChange={(v) => setVal('mapView', v)}
+              arrows={form.mapArrows}
+              onArrowsChange={(a) => setVal('mapArrows', a)}
+            />
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
             {editing && editChanged.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {editChanged.map(f => SCHEDULE_FIELD_LABELS[f] || f).join('・')}</div>}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}

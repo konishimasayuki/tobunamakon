@@ -68,6 +68,9 @@ input, textarea, select { font-family: inherit; }
 /* 地図キャンバス（モバイルは低め＝全画面化を避ける） */
 .sitemap-canvas { width:100%; height:560px; border-radius:8px; background:#e8eaed; }
 @media (max-width:760px){ .sitemap-canvas { height:300px; } }
+/* 地図に重ねる矢印描画レイヤー（固定時のみ操作可） */
+.sitemap-arrows { position:absolute; inset:0; width:100%; height:100%; touch-action:none; border-radius:8px; }
+.sitemap-badge { position:absolute; top:8px; left:8px; background:rgba(15,48,96,.88); color:#fff; font-size:11px; font-weight:600; padding:4px 9px; border-radius:6px; pointer-events:none; }
 .denpyo .memo-grid { display:grid; grid-template-columns:repeat(var(--memo-cols,2),1fr); grid-auto-rows:1fr; height:var(--memo-h,170px); border-top:1px solid #bbb; border-left:1px solid #bbb; margin-top:3px; width:100%; }
 .denpyo .memo-cell { min-height:0; overflow:hidden; border-right:1px solid #bbb; border-bottom:1px solid #bbb; position:relative; }
 .denpyo .memo-cell textarea { width:100%; height:100%; border:none; outline:none; resize:none; background:transparent; font-family:inherit; line-height:1.25; color:#111; box-sizing:border-box; padding:3px 36px 3px 6px; overflow:hidden; display:block; }
