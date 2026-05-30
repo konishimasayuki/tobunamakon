@@ -1703,6 +1703,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 別ウィンドウ（isPopup）では幅に関わらず常にPC版テーブルを表示する。
   // → スマホで「別ウィンドウで開く」を押すと、横画面でPCレイアウトの予定表が出る。
   const compact = isMobile && !isPopup
+  // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
+  const popupNarrow = useIsMobile(880)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2154,11 +2156,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
         )}
         </>)
-        return isPopup
+        if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
+        // 別ウィンドウ: 画面が表の基準幅(860px)より広ければ幅100%で画面いっぱいに（PC）、
+        // 狭ければ FitToWidth で縮小して横スクロールを出さない（スマホ縦）。
+        return popupNarrow
           ? <FitToWidth width={860} max={1} style={{ padding: '4px 0 24px' }}>
               <div className="schedule popup-view" style={{ width: 860 }}>{inner}</div>
             </FitToWidth>
-          : <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
+          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{inner}</div>
       })()}
       {editModal && (
         <ScheduleEditModal
