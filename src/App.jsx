@@ -1305,6 +1305,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
+  // 直近に登録したものを一番上に（登録日時の新しい順）
+  const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  // 10件ずつページング
+  const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
+  const curPage = Math.min(page, pageCount - 1)
+  const pageRows = sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
+  // 検索が変わったら1ページ目へ
+  useEffect(() => { setPage(0) }, [search])
 
   // 予定表で変更された項目を赤く表示
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
@@ -1483,14 +1491,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         <div style={S.toolbar}>
           <input style={noZoom(S.search, isMobile)} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
+        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
 
         {loading ? (
           <div style={S.empty}>読み込み中...</div>
         ) : filtered.length === 0 ? (
           <div style={S.empty}>{search ? '検索結果がありません' : '出荷登録がありません'}</div>
         ) : (
-          <div className="tw-scroll" style={S.tableWrap}>
+          <div className="tw-scroll" style={{ ...S.tableWrap, overflowX: 'auto' }}>
             <table style={S.table}>
               <thead>
                 <tr>
@@ -1500,7 +1508,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(s => (
+                {pageRows.map(s => (
                   <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => startEdit(s)}>
                     <td style={S.td}>{s.date}</td>
                     <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
@@ -1521,6 +1529,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '12px 16px' }}>
+            <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={curPage === 0}
+              style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage === 0 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage === 0 ? 'default' : 'pointer' }}>← 戻る</button>
+            <span style={{ fontSize: 13, color: '#3a4a5c' }}>{curPage + 1} / {pageCount} ページ</span>
+            <button type="button" onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={curPage >= pageCount - 1}
+              style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage >= pageCount - 1 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage >= pageCount - 1 ? 'default' : 'pointer' }}>次へ →</button>
           </div>
         )}
       </div>
@@ -1565,8 +1583,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
   useEffect(() => { load() }, [load])
 
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
+  // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
+  const timeToMin = (t) => {
+    const str = String(t || '').trim()
+    if (!str) return 100000
+    const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
+    if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+    if (str.includes('午前')) return 11 * 60 + 59   // 11:59
+    if (str.includes('午後')) return 23 * 60 + 59   // 23:59
+    const h = str.match(/(\d{1,2})\s*時/)
+    if (h) return parseInt(h[1], 10) * 60
+    return 99999   // 解析できない文字 → 空欄の手前
+  }
   const rows = all.filter(s => s.date === date)
-    .sort((a, b) => String(firstT(a)).localeCompare(String(firstT(b))))
+    .sort((a, b) => timeToMin(firstT(a)) - timeToMin(firstT(b)) || String(firstT(a)).localeCompare(String(firstT(b))))
 
   const isChanged = (s, f) => Array.isArray(s.changedFields) && s.changedFields.includes(f)
 
