@@ -1923,10 +1923,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <>
               {rows.map(s => (
                 <div className="sc-card" key={s.id}>
-                  {/* 時刻 | 業者名 */}
+                  {/* 時刻 | 業者名（左） / 商社（右） */}
                   <div className="sc-card-head">
                     <div className="sc-time">{cellTimes(s)}</div>
                     <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
+                    <div className="sc-trading">{cell(s, 'tradingCompany', '商社')}</div>
                   </div>
                   {/* 現場名 */}
                   <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
