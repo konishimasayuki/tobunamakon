@@ -1459,11 +1459,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
   const fitAll = () => fitEls.current.forEach(el => { if (el && el.isConnected) fitOne(el); else fitEls.current.delete(el) })
   const fitRef = (el) => { if (el) { fitEls.current.add(el); requestAnimationFrame(() => fitOne(el)) } }
-  useLayoutEffect(() => { requestAnimationFrame(fitAll) })
+  useLayoutEffect(() => { requestAnimationFrame(() => requestAnimationFrame(fitAll)) })
   useEffect(() => {
     const on = () => requestAnimationFrame(fitAll)
     window.addEventListener('resize', on)
     window.addEventListener('orientationchange', on)
+    // Webフォント（Noto Sans JP）読み込み完了後に再計測（読み込み前は幅がずれて見切れるため）
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fitAll))
     return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
   }, [])
 
@@ -1473,6 +1475,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       + (isChanged(s, f) ? ' changed' : '')
       + (opts.center ? ' center' : '')
       + (opts.big ? ' big' : '')
+      + (opts.xl ? ' xl' : '')
       + (opts.tokki ? ' tokki' : '')
       + (imp ? ' imp' : (opts.plain ? ' plain' : ''))
     return (
@@ -1506,6 +1509,34 @@ function SchedulePage({ onEditShipment, isPopup }) {
         onInput={e => fitOne(e.target)}
         onBlur={e => saveField(s, f, e.target.value)}
       />
+    )
+  }
+
+  // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
+  const cellDrivers = (s, opts = {}) => {
+    const v = getVal(s, 'drivers')               // 2人ごとに改行された文字列
+    const lines = v ? v.split('\n') : ['']
+    const display = lines.length ? lines : ['']
+    const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '')
+    const saveAll = (container) => {
+      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
+      const joined = inputs.map(i => i.value.trim()).filter(Boolean).join('\n')
+      saveField(s, 'drivers', joined)
+    }
+    return (
+      <div className="sc-drivers" key={'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + display.length}>
+        {display.map((line, i) => (
+          <input
+            key={i}
+            ref={fitRef}
+            className={cls}
+            defaultValue={line}
+            placeholder={i === 0 ? '担当' : ''}
+            onInput={e => fitOne(e.target)}
+            onBlur={e => saveAll(e.target.closest('.sc-drivers'))}
+          />
+        ))}
+      </div>
     )
   }
 
@@ -1583,7 +1614,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
                     <div className="sc-box"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
-                  <div className="sc-row"><span className="sc-lbl">担当</span><span className="sc-val">{cellMulti(s, 'drivers', '担当', { big: true })}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">担当</span><span className="sc-val">{cellDrivers(s, { big: true })}</span></div>
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
@@ -1633,7 +1664,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
-                <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
+                <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
                   {cell(s, 'mixCode', '', { center: true, big: true })}
                   {(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? (
@@ -1643,7 +1674,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   ) : null}
                 </td>
                 <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
-                <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
+                <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 {!isPopup && (
