@@ -1446,6 +1446,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
 
+  // ===== セル文字の自動リサイズ（見切れたら改行ではなくフォントを縮小して収める）=====
+  const fitEls = useRef(new Set())
+  const fitOne = (el) => {
+    if (!el || !el.isConnected) return
+    el.style.fontSize = ''                 // いったんCSSの基準サイズ（clamp）に戻す
+    const base = parseFloat(getComputedStyle(el).fontSize) || 16
+    let size = base, guard = 0
+    // 横（および textarea の縦）がはみ出す間、収まるまで縮める
+    const over = () => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+    while (over() && size > 8 && guard < 80) { size -= 0.5; el.style.fontSize = size + 'px'; guard++ }
+  }
+  const fitAll = () => fitEls.current.forEach(el => { if (el && el.isConnected) fitOne(el); else fitEls.current.delete(el) })
+  const fitRef = (el) => { if (el) { fitEls.current.add(el); requestAnimationFrame(() => fitOne(el)) } }
+  useLayoutEffect(() => { requestAnimationFrame(fitAll) })
+  useEffect(() => {
+    const on = () => requestAnimationFrame(fitAll)
+    window.addEventListener('resize', on)
+    window.addEventListener('orientationchange', on)
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
+  }, [])
+
   const cell = (s, f, ph, opts = {}) => {
     const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
     const cls = 'sc-in'
@@ -1457,9 +1478,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return (
       <input
         key={f + (isChanged(s, f) ? '_c' : '') + (imp ? '_i' : '')}
+        ref={fitRef}
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
+        onInput={e => fitOne(e.target)}
         onBlur={e => saveField(s, f, e.target.value)}
       />
     )
@@ -1475,10 +1498,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return (
       <textarea
         key={f + (isChanged(s, f) ? '_c' : '') + '_r' + rows}
+        ref={fitRef}
         className={cls}
         rows={rows}
         defaultValue={v}
         placeholder={ph || ''}
+        onInput={e => fitOne(e.target)}
         onBlur={e => saveField(s, f, e.target.value)}
       />
     )

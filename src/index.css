@@ -85,7 +85,9 @@ input, textarea, select { font-family: inherit; }
 .schedule { container-type:inline-size; }
 .schedule table { border-collapse:collapse; width:100%; min-width:0; font-family:'Noto Sans JP',sans-serif; table-layout:fixed; }
 .schedule th, .schedule td { border:1px solid #111; padding:2px 4px; vertical-align:middle; overflow:hidden; }
-.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:clamp(11px,1.5cqi,16px); text-align:center; white-space:nowrap; letter-spacing:0.06em; }
+/* 見出し行（業者名・商社など）は文字間に余白を設けて可読性を高める */
+.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:clamp(11px,1.5cqi,16px); text-align:center; white-space:nowrap; letter-spacing:0.18em; padding:6px 4px; line-height:1.7; }
+.schedule th > div { letter-spacing:0.18em; }
 .schedule td { height:36px; }
 .schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:clamp(12px,1.7cqi,18px); color:#111; font-weight:700; font-family:inherit; padding:2px 2px; }
 .schedule .sc-in::placeholder { color:#cbd2dc; font-weight:400; }
