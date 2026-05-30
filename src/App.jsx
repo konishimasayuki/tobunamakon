@@ -959,6 +959,9 @@ function drawArrow(ctx, x1, y1, x2, y2, w) {
   ctx.closePath(); ctx.fill()
 }
 
+// 地図のデフォルト縮尺（従来16から、マウスホイール4回分ズームインした縮尺）
+const DEFAULT_MAP_ZOOM = 20
+
 function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
@@ -985,7 +988,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
     if (c && window.google) {
       const loc = new window.google.maps.LatLng(c.lat, c.lng)
       mapRef.current.setCenter(loc)
-      mapRef.current.setZoom(16)
+      mapRef.current.setZoom(DEFAULT_MAP_ZOOM)
       markerRef.current.setPosition(loc)
       setStatus('')
       return
@@ -994,7 +997,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       if (st === 'OK' && res[0]) {
         const loc = res[0].geometry.location
         mapRef.current.setCenter(loc)
-        mapRef.current.setZoom(16)
+        mapRef.current.setZoom(DEFAULT_MAP_ZOOM)
         markerRef.current.setPosition(loc)
         setStatus('')
       } else {
@@ -1138,7 +1141,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       const hasView = mapView && typeof mapView.lat === 'number'
       const start = hasView ? { lat: mapView.lat, lng: mapView.lng } : { lat: 35.681236, lng: 139.767125 }
       const map = new maps.Map(mapEl.current, {
-        center: start, zoom: hasView ? mapView.zoom : 16, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+        center: start, zoom: hasView ? mapView.zoom : DEFAULT_MAP_ZOOM, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
         gestureHandling: 'cooperative',
       })
       mapRef.current = map
@@ -1422,8 +1425,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: stacked ? 'nowrap' : 'wrap', gap: 16, alignItems: stacked ? 'stretch' : 'flex-start', justifyContent: 'center' }}>
-          <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '1 1 460px', minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: 16, alignItems: 'stretch', justifyContent: 'center' }}>
+          <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '0 0 644px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
@@ -1565,7 +1568,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             </div>
           </div>
           </FitToWidth>
-          <div style={{ flex: stacked ? '0 0 auto' : '1 1 340px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+          <div style={{ flex: stacked ? '0 0 auto' : '1 1 auto', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
             <SiteMap
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
