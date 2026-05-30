@@ -1417,9 +1417,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     switch (f) {
       case 'drivers': {
         const names = Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
+        // 1人=1行、2人=各人1行ずつ（2行）、3人以降=2人ごとに改行
+        if (names.length <= 2) return names.join('\n')
         const lines = []
         for (let i = 0; i < names.length; i += 2) lines.push(names.slice(i, i + 2).join('・'))
-        return lines.join('\n')   // 2人ごとに改行
+        return lines.join('\n')
       }
       case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
