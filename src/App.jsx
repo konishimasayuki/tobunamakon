@@ -1860,6 +1860,41 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 担当（スマホカード用）：1人=大きく1段、2人=2段（各1人）、3人以上=2人ずつ（3人＝上2・下1）
+  const cellDriversCard = (s) => {
+    const names = (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : []))
+      .map(x => String(x ?? '').trim()).filter(Boolean)
+    const n = names.length
+    const rows = []
+    if (n <= 2) names.forEach(nm => rows.push([nm]))
+    else for (let i = 0; i < n; i += 2) rows.push(names.slice(i, i + 2))
+    if (rows.length === 0) rows.push([''])
+    const single = n <= 1
+    const changed = isChanged(s, 'drivers')
+    const cls = 'sc-in sc-driverline' + (changed ? ' changed' : '') + (single ? ' xbig' : ' big')
+    const saveAll = (container) => {
+      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
+      saveField(s, 'drivers', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
+    }
+    let idx = 0
+    return (
+      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}
+        onBlur={e => saveAll(e.currentTarget)}>
+        {rows.map((row, ri) => (
+          <div className="sc-drv-row" key={ri}>
+            {row.map((nm) => {
+              const i = idx++
+              return (
+                <input key={i} ref={fitRef} className={cls} defaultValue={nm}
+                  placeholder={i === 0 ? '担当' : ''} onInput={e => fitOne(e.target)} />
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const openEditWindow = (s) => {
     const url = `${window.location.pathname}?editShipment=${encodeURIComponent(s.id)}&popup=1`
     const w = window.open(url, '_blank', 'width=900,height=950,scrollbars=yes,resizable=yes')
@@ -1909,7 +1944,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           {isPopup
             ? <button type="button" onClick={() => window.close()}
                 style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
-            : <button type="button" onClick={openScheduleWindow}
+            : !isMobile && <button type="button" onClick={openScheduleWindow}
                 style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>}
         </div>
       </div>
@@ -1923,20 +1958,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <>
               {rows.map(s => (
                 <div className="sc-card" key={s.id}>
-                  {/* 時刻 | 業者名（左） / 商社（右） */}
+                  {/* 時刻 | 業者名（上）/ 商社名（下） */}
                   <div className="sc-card-head">
                     <div className="sc-time">{cellTimes(s)}</div>
-                    <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
-                    <div className="sc-trading">{cell(s, 'tradingCompany', '商社')}</div>
+                    <div className="sc-names">
+                      <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
+                      <div className="sc-trading">{cell(s, 'tradingCompany', '商社名')}</div>
+                    </div>
                   </div>
-                  {/* 現場名 */}
+                  {/* 現場名（中央・大きく） */}
                   <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
                   {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
                   <div className="sc-grid2">
-                    <div className="sc-box"><span className="sc-lbl">担当</span>{cellDrivers(s, { big: true, oneEach: true })}</div>
-                    <div className="sc-box"><span className="sc-lbl">車種</span>{cell(s, 'vehicleType', '', { center: true, big: true })}</div>
+                    <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
+                    <div className="sc-box sc-vehbox"><span className="sc-lbl">車種</span>
+                      <div className="sc-veh">
+                        {cell(s, 'vehicleType', '', { center: true, big: true })}
+                        {s.truckCount ? <span className="sc-truck">{s.truckCount}台</span> : null}
+                      </div>
+                    </div>
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
-                    <div className="sc-box"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                    <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
                   {/* 備考（横並び） */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
