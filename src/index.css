@@ -80,27 +80,31 @@ input, textarea, select { font-family: inherit; }
 .denpyo .addrow { margin-top:6px; border:1px dashed #999; background:#fafafa; border-radius:5px; font-size:13px; padding:5px 12px; cursor:pointer; font-family:'Noto Sans JP',sans-serif; color:#333; align-self:flex-start; }
 
 /* ===== 出荷予定表 ===== */
-.schedule table { border-collapse:collapse; width:100%; min-width:980px; font-family:'Noto Sans JP',sans-serif; }
-.schedule th, .schedule td { border:1px solid #111; padding:2px 6px; vertical-align:middle; }
-.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:15px; text-align:center; white-space:nowrap; letter-spacing:0.12em; }
+/* フォントはテーブル領域の幅に追従（clamp+cqi）。サイドバーで狭くなる通常画面でも
+   広い別ウィンドウでも、その実幅に合わせて自動伸縮し、改行も省略(…)もせず収める。 */
+.schedule { container-type:inline-size; }
+.schedule table { border-collapse:collapse; width:100%; min-width:0; font-family:'Noto Sans JP',sans-serif; table-layout:fixed; }
+.schedule th, .schedule td { border:1px solid #111; padding:2px 4px; vertical-align:middle; overflow:hidden; }
+.schedule th { background:#fafafa; color:#111; font-weight:700; font-size:clamp(11px,1.5cqi,16px); text-align:center; white-space:nowrap; letter-spacing:0.06em; }
 .schedule td { height:36px; }
-.schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:17px; color:#111; font-weight:700; font-family:inherit; padding:2px 3px; }
+.schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:clamp(12px,1.7cqi,18px); color:#111; font-weight:700; font-family:inherit; padding:2px 2px; }
 .schedule .sc-in::placeholder { color:#cbd2dc; font-weight:400; }
 .schedule .sc-in.center { text-align:center; }
 .schedule .sc-in.plain { font-weight:400; }
-.schedule .sc-in.big { font-size:22px; }
-/* 車種・量・時間・配合（数字）はさらに大きく見やすく */
-.schedule .sc-in.big.center { font-size:32px; }
+.schedule .sc-in.big { font-size:clamp(14px,2.1cqi,24px); }
+/* 車種・量・時間・配合（数字）はさらに大きく見やすく（テーブル幅に追従）。
+   係数は最も詰まる配合(12%に7桁)・量(7%)が改行も省略もせず収まる安全値。 */
+.schedule .sc-in.big.center { font-size:clamp(15px,2.4cqi,30px); }
 .schedule .sc-in.changed { color:#c81e1e; }
 .schedule .sc-in.imp { color:#c81e1e; font-weight:700; }
 .schedule textarea.sc-ta { resize:none; line-height:1.3; overflow:hidden; white-space:pre-wrap; display:block; }
 .schedule .sc-in.tokki { color:#c81e1e; font-weight:700; font-size:13px; border-top:1px dashed #e0c0c0; margin-top:1px; }
-/* 数字が入る列（車種・配合・量・時間）は改行させず四角に収める */
-.schedule td.sc-nowrap .sc-in { white-space:nowrap; text-overflow:ellipsis; }
+/* 数字が入る列（車種・配合・量・時間）は改行させず四角に収める（省略はしない） */
+.schedule td.sc-nowrap .sc-in { white-space:nowrap; text-overflow:clip; }
 .schedule td.sc-nowrap textarea.sc-ta { white-space:nowrap; }
 /* 配合の特記事項を配合の3フィールド（数字3つ）に合わせて3分割表示 */
 .schedule .sc-mixnotes { display:flex; width:100%; }
-.schedule .sc-mixnotes span { flex:1; text-align:center; font-size:12px; color:#c81e1e; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.schedule .sc-mixnotes span { flex:1; text-align:center; font-size:clamp(9px,0.85vw,13px); color:#c81e1e; font-weight:700; min-width:0; white-space:nowrap; }
 
 /* ===== 出荷予定表（縦持ち＝スマホ/iPhone/iPad）カード表示 ===== */
 .sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; }
