@@ -2003,16 +2003,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
-        /* 別ウィンドウ: 日付（左）・タイトル（中央）・閉じる（右）を重ならない1行に */
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto' }}>
+        /* 別ウィンドウ: タイトルを画面中央に絶対配置し、日付(左)/閉じる(右)を両端に重ねる */
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', position: 'relative', zIndex: 1 }}>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
             <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', flex: '1 1 auto', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>出荷予定表</div>
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
           <button type="button" onClick={() => window.close()}
-            style={{ flex: '0 0 auto', border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+            style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
         </div>
       ) : (
       <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
