@@ -1484,25 +1484,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
-  // 別ウィンドウ（閲覧専用）用：入力欄ではなく折り返し表示のテキストで見せる
-  const showVal = (s, f, opts = {}) => {
-    const v = getVal(s, f)
-    const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
-    const red = isChanged(s, f) || imp
-    const weak = opts.sub || (opts.plain && !imp)
-    return (
-      <div style={{
-        whiteSpace: 'pre-wrap',
-        overflowWrap: 'anywhere',
-        wordBreak: 'break-word',
-        color: red ? '#c81e1e' : (opts.sub ? '#555' : '#111'),
-        fontWeight: weak ? 400 : 700,
-        textAlign: opts.center ? 'center' : 'left',
-        lineHeight: 1.35,
-      }}>{v}</div>
-    )
-  }
-
   const openEditWindow = (s) => {
     const url = `${window.location.pathname}?editShipment=${encodeURIComponent(s.id)}&popup=1`
     const w = window.open(url, '_blank', 'width=900,height=950,scrollbars=yes,resizable=yes')
@@ -1623,35 +1604,33 @@ function SchedulePage({ onEditShipment, isPopup }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(s => (isPopup ? (
-              <tr key={s.id}>
-                <td>{showVal(s, 'companyName')}{showVal(s, 'tradingCompany', { sub: true })}</td>
-                <td>{showVal(s, 'siteName')}</td>
-                <td>{showVal(s, 'vehicleType', { center: true })}</td>
-                <td>{showVal(s, 'mixCode', { center: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 12, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</td>
-                <td>{showVal(s, 'volume', { center: true })}</td>
-                <td>{showVal(s, 'drivers')}</td>
-                <td>{showVal(s, 'times', { center: true })}</td>
-                <td>{showVal(s, 'notes', { plain: true })}{showVal(s, 'siteContact', { sub: true })}</td>
-              </tr>
-            ) : (
+            {rows.map(s => (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
-                <td>{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</td>
-                <td>{cell(s, 'volume', '', { center: true, big: true })}</td>
-                <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
-                <td>{cellMulti(s, 'times', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <button type="button" onClick={() => openEditWindow(s)}
-                    style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                  <button type="button" onClick={() => sendLine(s)}
-                    style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
+                <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true })}</td>
+                <td className="sc-nowrap">
+                  {cell(s, 'mixCode', '', { center: true, big: true })}
+                  {(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? (
+                    <div className="sc-mixnotes">
+                      <span>{s.mixNotes[0] || ''}</span><span>{s.mixNotes[1] || ''}</span><span>{s.mixNotes[2] || ''}</span>
+                    </div>
+                  ) : null}
                 </td>
+                <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
+                <td>{cellMulti(s, 'drivers', '', { big: true })}</td>
+                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
+                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
+                {!isPopup && (
+                  <td style={{ textAlign: 'center' }}>
+                    <button type="button" onClick={() => openEditWindow(s)}
+                      style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
+                    <button type="button" onClick={() => sendLine(s)}
+                      style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
+                  </td>
+                )}
               </tr>
-            )))}
+            ))}
           </tbody>
         </table>
         {loading ? (
