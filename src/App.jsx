@@ -959,8 +959,8 @@ function drawArrow(ctx, x1, y1, x2, y2, w) {
   ctx.closePath(); ctx.fill()
 }
 
-// 地図のデフォルト縮尺（従来16から、マウスホイール4回分ズームインした縮尺）
-const DEFAULT_MAP_ZOOM = 20
+// 地図のデフォルト縮尺（16からホイール4回ズームイン=20、そこから2回ズームアウト=18）
+const DEFAULT_MAP_ZOOM = 18
 
 function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange, actions }) {
   const mapEl = useRef(null)
@@ -1189,16 +1189,16 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
         )}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', marginTop: 6, width: '100%' }}>
         <button type="button" onClick={toggleDraw} disabled={status !== ''}
-          style={{ border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-          {drawMode ? '✓ 描画を終える' : '✏️ 矢印を描く'}
+          style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', fontWeight: 700, cursor: 'pointer' }}>
+          {drawMode ? '✓ 描画終了' : '✏️ 矢印を描く'}
         </button>
         <button type="button" onClick={undoArrow} disabled={!(arrows || []).length}
-          style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
+          style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
         <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
-          style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
-        {actions && <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', alignItems: 'center' }}>{actions}</div>}
+          style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
+        {actions}
       </div>
 
       {status === 'loading' && <div style={{ fontSize: 12, color: '#6b7a8d', marginTop: 4 }}>地図を読み込み中...</div>}
@@ -1396,7 +1396,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: 12, alignItems: 'stretch', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 3, alignItems: 'stretch', justifyContent: 'center' }}>
           <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '0 0 644px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
@@ -1475,7 +1475,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   </div>
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">セメント種</div>
-                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} />
+                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} big />
                   </div>
                 </div>
                 <div className="subrow">
@@ -1549,9 +1549,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               onArrowsChange={(a) => setVal('mapArrows', a)}
               actions={
                 <>
-                  <button type="button" style={{ ...S.cancelBtn, padding: '8px 20px', fontSize: 14 }} onClick={handleReset}>{editing ? '新規作成に戻す' : 'リセット'}</button>
-                  <button type="submit" style={{ ...S.saveBtn, padding: '8px 24px', fontSize: 14, opacity: saving ? 0.7 : 1 }} disabled={saving}>
-                    {saving ? (editing ? '更新中...' : '登録中...') : (editing ? '更新' : '登録')}
+                  <button type="button" style={{ ...S.cancelBtn, flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)' }} onClick={handleReset}>{editing ? '新規に戻す' : 'リセット'}</button>
+                  <button type="submit" style={{ ...S.saveBtn, flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', opacity: saving ? 0.7 : 1 }} disabled={saving}>
+                    {saving ? (editing ? '更新中…' : '登録中…') : (editing ? '更新' : '登録')}
                   </button>
                 </>
               }
@@ -1662,6 +1662,30 @@ function SchedulePage({ onEditShipment, isPopup }) {
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  // 差分更新：別ウィンドウ（閲覧専用）では1分ごとに再取得し、変更があった伝票だけ差し替える。
+  // 全画面 reload しないのでスクロール位置やピンチズーム状態を保ったまま最新化できる。
+  const mergeDiff = useCallback((fresh) => {
+    setAll(prev => {
+      if (!Array.isArray(fresh)) return prev
+      const byId = new Map(prev.map(s => [s.id, s]))
+      let changed = fresh.length !== prev.length
+      const next = fresh.map(f => {
+        const old = byId.get(f.id)
+        if (old && JSON.stringify(old) === JSON.stringify(f)) return old  // 変化なし→参照維持で再描画抑制
+        changed = true
+        return f
+      })
+      return changed ? next : prev
+    })
+  }, [])
+  useEffect(() => {
+    if (!isPopup) return
+    const t = setInterval(async () => {
+      try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 一時的な失敗は無視 */ }
+    }, 60000)
+    return () => clearInterval(t)
+  }, [isPopup, mergeDiff])
 
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
   // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
@@ -1916,7 +1940,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <div style={{ textAlign: 'center', fontSize: compact ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: compact ? '0.15em' : '0.35em' }}>出荷予定表</div>
         <div style={compact
           ? { display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, color: '#111' }
-          : { position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
+          : { position: 'absolute', left: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8, color: '#111' }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
@@ -2495,13 +2519,8 @@ function AppInner() {
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
 
-  // 出荷予定表の別ウィンドウ（閲覧専用）のみ1分ごとに自動更新する。
-  // 編集ポップアップ（出荷登録/伝票編集）は入力中にリロードされ入力内容が消えるため自動更新しない。
-  useEffect(() => {
-    if (!isPopup || view !== 'schedule') return
-    const t = setInterval(() => window.location.reload(), 60000)
-    return () => clearInterval(t)
-  }, [isPopup, view])
+  // 別ウィンドウの自動更新は SchedulePage 内で差分更新（再取得して変更分のみ反映）する。
+  // 全画面 reload は入力内容やスクロール位置が失われるため行わない。
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#f4f6f9' }}>

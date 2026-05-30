@@ -143,7 +143,7 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-site .sc-val { text-align:center; }
 .sc-card .sc-site .sc-in { font-size:26px !important; font-weight:700; text-align:center; }
 /* 車種：大きく＋右に台数（中くらい） */
-.sc-card .sc-veh { display:flex; align-items:baseline; justify-content:center; gap:4px; }
+.sc-card .sc-veh { display:flex; align-items:baseline; justify-content:center; gap:3px; }
 .sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; }
 .sc-card .sc-truck { font-size:18px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
 /* 量：数字・記号を大きく */
