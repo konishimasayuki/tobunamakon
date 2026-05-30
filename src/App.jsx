@@ -1707,6 +1707,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
+  const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -1714,6 +1715,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
+  }, [])
 
   // 差分更新：別ウィンドウ（閲覧専用）では1分ごとに再取得し、変更があった伝票だけ差し替える。
   // 全画面 reload しないのでスクロール位置やピンチズーム状態を保ったまま最新化できる。
@@ -1790,16 +1794,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('保存エラー: ' + e.message) }
   }
 
-  // モーダル編集：複数フィールドを一括保存し、変更フィールドを赤表示に記録する
-  const saveFields = async (s, edits) => {
-    let merged = { ...s }
-    const changed = new Set(Array.isArray(s.changedFields) ? s.changedFields : [])
-    for (const [f, raw] of Object.entries(edits)) {
-      if (raw === getVal(s, f)) continue           // 変化なしはスキップ
-      merged = applyField(merged, f, raw)
-      changed.add(f)
-    }
-    const changedFields = Array.from(changed)
+  // モーダル編集：構造化パッチ（patch=実データ、changed=変更フィールド名）を一括保存
+  const saveStructured = async (s, patch, changedKeys) => {
+    const merged = { ...s, ...patch }
+    const changedFields = Array.from(new Set([...(Array.isArray(s.changedFields) ? s.changedFields : []), ...changedKeys]))
     try {
       const res = await api.put(`/api/shipments/${s.id}`, { ...merged, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
@@ -2149,9 +2147,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
       {editModal && (
         <ScheduleEditModal
           shipment={editModal}
-          getVal={getVal}
+          driverOptions={drivers}
           onClose={() => setEditModal(null)}
-          onSave={async (edits) => { await saveFields(editModal, edits); setEditModal(null) }}
+          onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
         />
       )}
     </div>
@@ -2159,60 +2157,170 @@ function SchedulePage({ onEditShipment, isPopup }) {
 }
 
 // スマホ予定表の編集モーダル。更新で差分保存→閉じると予定表に戻り変更が赤文字反映される。
-function ScheduleEditModal({ shipment, getVal, onClose, onSave }) {
-  const [f, setF] = useState({
-    times: getVal(shipment, 'times'),
-    companyName: getVal(shipment, 'companyName'),
-    tradingCompany: getVal(shipment, 'tradingCompany'),
-    siteName: getVal(shipment, 'siteName'),
-    vehicleType: getVal(shipment, 'vehicleType'),
-    mixCode: getVal(shipment, 'mixCode'),
-    volume: getVal(shipment, 'volume'),
-    drivers: getVal(shipment, 'drivers'),
-    notes: getVal(shipment, 'notes'),
-    siteContact: getVal(shipment, 'siteContact'),
-  })
+function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
+  const s = shipment
+  // --- 構造化した初期状態を伝票から組み立てる ---
+  const initTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
+    .map(x => String(x ?? '')).filter(x => x.trim() !== '')
+  const initDrivers = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []))
+    .map(d => ({ id: d.id || '', name: d.name }))
+  const [times, setTimes] = useState(initTimes.length ? initTimes : [''])
+  const [companyName, setCompanyName] = useState(s.companyName || '')
+  const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
+  const [siteName, setSiteName] = useState(s.siteName || '')
+  const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
+  const [truckCount, setTruckCount] = useState((s.truckCount ?? '') === '' ? '' : String(s.truckCount))
+  const [mixCode, setMixCode] = useState(s.mixCode || '')
+  const [volume, setVolume] = useState(s.volume == null ? '' : String(s.volume))
+  const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
+  const [drivers, setDrivers] = useState(initDrivers)
+  const [notes, setNotes] = useState(Array.isArray(s.notes) ? s.notes.map(n => n.text).join('\n') : '')
+  const [siteContact, setSiteContact] = useState(s.siteContact || '')
   const [saving, setSaving] = useState(false)
-  const upd = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target.value }))
+
+  // 時間：行ごとに編集／追加／削除
+  const setTime = (i, v) => setTimes(ts => ts.map((t, idx) => idx === i ? v : t))
+  const addTime = () => setTimes(ts => ts.length < 4 ? [...ts, ''] : ts)
+  const delTime = (i) => setTimes(ts => ts.length > 1 ? ts.filter((_, idx) => idx !== i) : [''])
+
+  // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）
+  const vehList = vehicleType.split('・').map(x => x.trim()).filter(Boolean)
+  const toggleVeh = (o) => {
+    const next = vehList.includes(o) ? vehList.filter(x => x !== o) : [...vehList, o]
+    setVehicleType(VEHICLE_TYPES.filter(v => next.includes(v)).join('・'))
+  }
+
+  // 担当：最大4人。選択肢から追加／チップで削除
+  const addDriver = (e) => {
+    const d = driverOptions.find(x => x.id === e.target.value)
+    if (d && drivers.length < 4 && !drivers.some(x => x.id === d.id)) setDrivers(ds => [...ds, { id: d.id, name: d.name }])
+    e.target.value = ''
+  }
+  const removeDriver = (i) => setDrivers(ds => ds.filter((_, idx) => idx !== i))
+
   const submit = async () => {
     setSaving(true)
-    try { await onSave(f) } catch { setSaving(false) }
+    // 構造化パッチを作り、元と異なるフィールドだけ changed に積む
+    const cleanTimes = times.map(t => t.trim()).filter(Boolean)
+    const patch = {
+      times: cleanTimes,
+      companyName, tradingCompany, siteName,
+      vehicleType, truckCount, mixCode, volume, volumeUncertain,
+      drivers: drivers.map(d => ({ id: d.id, name: d.name })),
+      notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
+      siteContact,
+    }
+    const changed = []
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+    const origTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+    if (!eq(origTimes, cleanTimes)) changed.push('times')
+    if ((s.companyName || '') !== companyName) changed.push('companyName')
+    if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
+    if ((s.siteName || '') !== siteName) changed.push('siteName')
+    if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
+    if (String(s.truckCount ?? '') !== String(truckCount)) changed.push('truckCount')
+    if ((s.mixCode || '') !== mixCode) changed.push('mixCode')
+    if (String(s.volume ?? '') !== String(volume) || !!s.volumeUncertain !== volumeUncertain) changed.push('volume')
+    if (!eq(initDrivers, patch.drivers)) changed.push('drivers')
+    if (!eq(Array.isArray(s.notes) ? s.notes.map(n => n.text) : [], patch.notes.map(n => n.text))) changed.push('notes')
+    if ((s.siteContact || '') !== siteContact) changed.push('siteContact')
+    try { await onSave(patch, changed) } catch { setSaving(false) }
   }
+
   const lblS = { fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 4, display: 'block' }
-  const inS = { width: '100%', fontSize: 16, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, fontFamily: 'inherit', color: '#111' }
-  const row = (label, key, opts = {}) => (
-    <div style={{ marginBottom: 12 }}>
-      <label style={lblS}>{label}</label>
-      {opts.area
-        ? <textarea value={f[key]} onChange={upd(key)} rows={opts.rows || 2} style={{ ...inS, resize: 'vertical' }} placeholder={opts.ph || ''} />
-        : <input value={f[key]} onChange={upd(key)} style={inS} inputMode={opts.inputMode} placeholder={opts.ph || ''} />}
-      {opts.hint && <div style={{ fontSize: 11, color: '#8a97a6', marginTop: 3 }}>{opts.hint}</div>}
-    </div>
-  )
+  const inS = { width: '100%', fontSize: 16, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, fontFamily: 'inherit', color: '#111', boxSizing: 'border-box' }
+  const chip = (on) => ({ border: on ? '1.5px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 0', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center' })
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'sticky', top: 0, background: '#fff', paddingBottom: 4 }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
           <button type="button" onClick={onClose} disabled={saving}
             style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
-        {row('時間（複数は改行）', 'times', { area: true, rows: 2, hint: '例: 08:00 / 10:00（改行または / 区切り）' })}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {row('業者名', 'companyName')}
-          {row('商社名', 'tradingCompany')}
+
+        {/* 時間：行ごとにコンパクトに。各行に時刻＋削除、下に追加ボタン */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={lblS}>時間（最大4・上から順）</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {times.map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, color: '#8a97a6', width: 18, flex: '0 0 auto' }}>{i + 1}</span>
+                <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1 }} />
+                {times.length > 1 && (
+                  <button type="button" onClick={() => delTime(i)}
+                    style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {times.length < 4 && (
+            <button type="button" onClick={addTime}
+              style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
+          )}
         </div>
-        {row('現場名', 'siteName')}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          {row('車種', 'vehicleType')}
-          {row('配合', 'mixCode')}
-          {row('量', 'volume', { inputMode: 'decimal', hint: '?で不確定' })}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div><label style={lblS}>業者名</label><input value={companyName} onChange={e => setCompanyName(e.target.value)} style={inS} /></div>
+          <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
         </div>
-        {row('担当（複数は改行）', 'drivers', { area: true, rows: 2 })}
-        {row('備考', 'notes', { area: true, rows: 2, hint: '複数は / 区切り' })}
-        {row('現場連絡先', 'siteContact', { inputMode: 'tel' })}
+        <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
+
+        {/* 車種（3種複数選択）＋台数 */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>車種（複数選択可）・台数</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, flex: 1 }}>
+              {VEHICLE_TYPES.map(o => (
+                <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
+              <input value={truckCount} onChange={e => setTruckCount(e.target.value)} inputMode="numeric" placeholder="台数"
+                style={{ ...inS, width: 64, textAlign: 'center', padding: '9px 4px' }} />
+              <span style={{ fontSize: 14, color: '#3a4a5c' }}>台</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 配合・量（量は?トグル付き） */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div><label style={lblS}>配合</label><input value={mixCode} onChange={e => setMixCode(e.target.value)} style={inS} placeholder="例: 10-10-10" /></div>
+          <div>
+            <label style={lblS}>量（m³）</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input value={volume} onChange={e => setVolume(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
+              <button type="button" onClick={() => setVolumeUncertain(v => !v)}
+                style={{ flex: '0 0 auto', border: volumeUncertain ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: volumeUncertain ? '#c0392b' : '#fff', color: volumeUncertain ? '#fff' : '#8a97a6', borderRadius: 8, width: 42, height: 40, fontSize: 18, fontWeight: 700, cursor: 'pointer' }} title="不確定マーク">?</button>
+            </div>
+          </div>
+        </div>
+
+        {/* 担当（最大4人・選択） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>担当ドライバー（最大4人）</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: drivers.length ? 6 : 0 }}>
+            {drivers.map((d, i) => (
+              <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1.5px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 8, padding: '6px 10px', fontSize: 14, fontWeight: 600 }}>
+                {d.name}
+                <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            ))}
+          </div>
+          {drivers.length < 4 && (
+            <select onChange={addDriver} defaultValue="" style={{ ...inS, cursor: 'pointer' }}>
+              <option value="">＋ ドライバーを追加</option>
+              {driverOptions.filter(e => !drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 12 }}><label style={lblS}>備考（複数は改行）</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inS, resize: 'vertical' }} /></div>
+        <div style={{ marginBottom: 6 }}><label style={lblS}>現場連絡先</label><input value={siteContact} onChange={e => setSiteContact(e.target.value)} inputMode="tel" style={inS} /></div>
+
         <button type="button" onClick={submit} disabled={saving}
-          style={{ width: '100%', marginTop: 6, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+          style={{ width: '100%', marginTop: 8, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? '更新中…' : '更新'}
         </button>
       </div>
