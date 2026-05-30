@@ -51,6 +51,22 @@ const api = {
   del:  (path)       => request(path, { method: 'DELETE' }),
 }
 
+// 出荷データの変更を他タブ/他ウィンドウに通知する（localStorage の storage イベント経由）。
+// 別ウィンドウで編集→更新したとき、開いている出荷予定表タブを自動で再取得させる。
+const SHIPMENTS_PING_KEY = 'shipments_updated_at'
+function notifyShipmentsChanged() {
+  try { localStorage.setItem(SHIPMENTS_PING_KEY, String(Date.now())) } catch {}
+}
+// 変更通知を購読する。コールバックは別タブでの更新時に呼ばれる。
+function useShipmentsChanged(onChange) {
+  useEffect(() => {
+    const h = (e) => { if (e.key === SHIPMENTS_PING_KEY) onChange() }
+    window.addEventListener('storage', h)
+    return () => window.removeEventListener('storage', h)
+  }, [onChange])
+}
+
+
 // ============================================================
 // 認証コンテキスト
 // ============================================================
@@ -1257,7 +1273,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   )
 }
 
-function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed }) {
+function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, isPopup }) {
   const isMobile = useIsMobile()
   const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
   const [form, setForm]             = useState({ ...emptyShipForm })
@@ -1397,10 +1413,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         setEditing(null)
         setEditChanged([])
         setForm({ ...emptyShipForm })
+        notifyShipmentsChanged()   // 他タブ（出荷予定表）に更新を通知
+        // PC等で編集用の別ウィンドウとして開かれている場合は、更新後に閉じて元タブへ戻す
+        if (isPopup) { window.close(); return }
       } else {
         const created = await api.post('/api/shipments', payload)
         setShipments(ss => sortShip([...ss, created]))
         setForm({ ...emptyShipForm, date: form.date })
+        notifyShipmentsChanged()
       }
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
@@ -1745,6 +1765,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return () => clearInterval(t)
   }, [isPopup, mergeDiff])
 
+  // 別タブ（出荷登録の編集ウィンドウ等）で更新が入ったら即座に再取得して反映する
+  const refetch = useCallback(async () => {
+    try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 無視 */ }
+  }, [mergeDiff])
+  useShipmentsChanged(refetch)
+
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
   // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
   const timeToMin = (t) => {
@@ -1793,6 +1819,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     try {
       const res = await api.put(`/api/shipments/${s.id}`, { ...updated, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      notifyShipmentsChanged()
     } catch (e) { alert('保存エラー: ' + e.message) }
   }
 
@@ -1806,6 +1833,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     try {
       const res = await api.put(`/api/shipments/${s.id}`, { ...merged, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      notifyShipmentsChanged()
     } catch (e) { alert('保存に失敗しました: ' + e.message); throw e }
   }
 
@@ -2830,7 +2858,7 @@ function AppInner() {
   const page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
     : activeTab === 'employees' ? <EmployeesPage />
-    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} />
+    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
     : activeTab === 'assign' ? <AssignPage />
