@@ -2186,7 +2186,14 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [siteName, setSiteName] = useState(s.siteName || '')
   const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
   const [truckCount, setTruckCount] = useState((s.truckCount ?? '') === '' ? '' : String(s.truckCount))
-  const [mixCode, setMixCode] = useState(s.mixCode || '')
+  const [mixParts, setMixParts] = useState(() => {
+    const p = String(s.mixCode || '').split('-')
+    return [p[0] || '', p[1] || '', p[2] || '']
+  })
+  const [mixNotes, setMixNotes] = useState(() => {
+    const n = Array.isArray(s.mixNotes) ? s.mixNotes : []
+    return [n[0] || '', n[1] || '', n[2] || '']
+  })
   const [volume, setVolume] = useState(s.volume == null ? '' : String(s.volume))
   const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
   const [drivers, setDrivers] = useState(initDrivers)
@@ -2194,10 +2201,13 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [siteContact, setSiteContact] = useState(s.siteContact || '')
   const [saving, setSaving] = useState(false)
 
-  // 時間：行ごとに編集／追加／削除
+  // 時間：行ごとに編集／追加／削除（最大2）
   const setTime = (i, v) => setTimes(ts => ts.map((t, idx) => idx === i ? v : t))
-  const addTime = () => setTimes(ts => ts.length < 4 ? [...ts, ''] : ts)
+  const addTime = () => setTimes(ts => ts.length < 2 ? [...ts, ''] : ts)
   const delTime = (i) => setTimes(ts => ts.length > 1 ? ts.filter((_, idx) => idx !== i) : [''])
+  // 配合：3セクション（各2桁）＋各セクションの特記
+  const setMixPart = (i, v) => setMixParts(p => p.map((x, idx) => idx === i ? v : x))
+  const setMixNote = (i, v) => setMixNotes(n => n.map((x, idx) => idx === i ? v : x))
 
   // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）
   const vehList = vehicleType.split('・').map(x => x.trim()).filter(Boolean)
@@ -2218,10 +2228,13 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     setSaving(true)
     // 構造化パッチを作り、元と異なるフィールドだけ changed に積む
     const cleanTimes = times.map(t => t.trim()).filter(Boolean)
+    // 配合：3セクションを - 連結（末尾の空欄は落とす）。特記は3要素配列で保持
+    const mixCode = mixParts.map(p => p.trim()).join('-').replace(/-+$/, '')
+    const mixNotesClean = mixNotes.map(n => n.trim())
     const patch = {
       times: cleanTimes,
       companyName, tradingCompany, siteName,
-      vehicleType, truckCount, mixCode, volume, volumeUncertain,
+      vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
       siteContact,
@@ -2235,7 +2248,8 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     if ((s.siteName || '') !== siteName) changed.push('siteName')
     if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
     if (String(s.truckCount ?? '') !== String(truckCount)) changed.push('truckCount')
-    if ((s.mixCode || '') !== mixCode) changed.push('mixCode')
+    const origMixNotes = (Array.isArray(s.mixNotes) ? s.mixNotes : []).map(n => String(n || '').trim())
+    if ((s.mixCode || '') !== mixCode || !eq(origMixNotes.slice(0, 3), mixNotesClean.filter((_, i) => i < 3))) changed.push('mixCode')
     if (String(s.volume ?? '') !== String(volume) || !!s.volumeUncertain !== volumeUncertain) changed.push('volume')
     if (!eq(initDrivers, patch.drivers)) changed.push('drivers')
     if (!eq(Array.isArray(s.notes) ? s.notes.map(n => n.text) : [], patch.notes.map(n => n.text))) changed.push('notes')
@@ -2258,7 +2272,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
         {/* 時間：行ごとにコンパクトに。各行に時刻＋削除、下に追加ボタン */}
         <div style={{ marginBottom: 14 }}>
-          <label style={lblS}>時間（最大4・上から順）</label>
+          <label style={lblS}>時間（最大2・上から順）</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {times.map((t, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2271,7 +2285,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
               </div>
             ))}
           </div>
-          {times.length < 4 && (
+          {times.length < 2 && (
             <button type="button" onClick={addTime}
               style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
           )}
@@ -2300,16 +2314,29 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           </div>
         </div>
 
-        {/* 配合・量（量は?トグル付き） */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <div><label style={lblS}>配合</label><input value={mixCode} onChange={e => setMixCode(e.target.value)} style={inS} placeholder="例: 10-10-10" /></div>
-          <div>
-            <label style={lblS}>量（m³）</label>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input value={volume} onChange={e => setVolume(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
-              <button type="button" onClick={() => setVolumeUncertain(v => !v)}
-                style={{ flex: '0 0 auto', border: volumeUncertain ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: volumeUncertain ? '#c0392b' : '#fff', color: volumeUncertain ? '#fff' : '#8a97a6', borderRadius: 8, width: 42, height: 40, fontSize: 18, fontWeight: 700, cursor: 'pointer' }} title="不確定マーク">?</button>
-            </div>
+        {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>配合（各セクションに特記可）</label>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+            {[0, 1, 2].map(i => (
+              <Fragment key={i}>
+                {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input value={mixNotes[i]} onChange={e => setMixNote(i, e.target.value)} placeholder="特記"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                  <input value={mixParts[i]} onChange={e => setMixPart(i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
+                </div>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>量（m³）</label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input value={volume} onChange={e => setVolume(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
+            <button type="button" onClick={() => setVolumeUncertain(v => !v)}
+              style={{ flex: '0 0 auto', border: volumeUncertain ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: volumeUncertain ? '#c0392b' : '#fff', color: volumeUncertain ? '#fff' : '#8a97a6', borderRadius: 8, width: 42, height: 40, fontSize: 18, fontWeight: 700, cursor: 'pointer' }} title="不確定マーク">?</button>
           </div>
         </div>
 
