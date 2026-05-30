@@ -236,27 +236,33 @@ function useIsMobile(bp = MOBILE_BP) {
 // iOS でフォーカス時の自動ズームを防ぐため、モバイルでは入力欄を 16px 以上にする
 const noZoom = (style, mobile) => (mobile ? { ...style, fontSize: 16 } : style)
 
-// 子要素を「自然な横幅(width)」で描画し、親の幅に収まるよう zoom で自動縮小する。
-// iPhone/iPad で帳票が横に見切れないようにするためのラッパー。
+// 子要素を「自然な横幅(width)」で描画し、親の幅に収まるよう縮小する。
+// iOS で確実に効く transform:scale を使い、縮小後の高さも詰めて余白を出さない。
 function FitToWidth({ width = 700, max = 1, children, style }) {
-  const ref = useRef(null)
+  const outer = useRef(null)
+  const inner = useRef(null)
   const [scale, setScale] = useState(max)
+  const [h, setH] = useState(undefined)
   useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
     const calc = () => {
-      const avail = el.clientWidth
-      if (avail > 0) setScale(Math.min(max, avail / width))
+      if (!outer.current || !inner.current) return
+      const avail = outer.current.clientWidth
+      if (avail <= 0) return
+      const s = Math.min(max, avail / width)
+      setScale(s)
+      setH(inner.current.offsetHeight * s)   // 実高さ×倍率（transformは offsetHeight に影響しない）
     }
     calc()
     const ro = new ResizeObserver(calc)
-    ro.observe(el)
+    if (outer.current) ro.observe(outer.current)
+    if (inner.current) ro.observe(inner.current)
     window.addEventListener('orientationchange', calc)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(calc)
     return () => { ro.disconnect(); window.removeEventListener('orientationchange', calc) }
   }, [width, max])
   return (
-    <div ref={ref} style={{ width: '100%', overflow: 'hidden', ...style }}>
-      <div style={{ width, zoom: scale }}>{children}</div>
+    <div ref={outer} style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', height: h, ...style }}>
+      <div ref={inner} style={{ width, transform: `scale(${scale})`, transformOrigin: 'top left' }}>{children}</div>
     </div>
   )
 }
@@ -1219,15 +1225,15 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
         )}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', marginTop: 6, width: '100%' }}>
+      <div className="map-actions">
         <button type="button" onClick={toggleDraw} disabled={status !== ''}
-          style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060', borderRadius: 7, padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', fontWeight: 700, cursor: 'pointer' }}>
-          {drawMode ? '✓ 描画終了' : '✏️ 矢印を描く'}
+          style={{ border: '1.5px solid #0f3060', background: drawMode ? '#0f3060' : '#fff', color: drawMode ? '#fff' : '#0f3060' }}>
+          {drawMode ? '✓ 描画終了' : '✏️ 矢印'}
         </button>
         <button type="button" onClick={undoArrow} disabled={!(arrows || []).length}
-          style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 7, padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ やり直し</button>
+          style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', opacity: (arrows || []).length ? 1 : 0.5 }}>↩ 戻す</button>
         <button type="button" onClick={clearArrows} disabled={!(arrows || []).length}
-          style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 7, padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', fontWeight: 600, cursor: (arrows || []).length ? 'pointer' : 'default', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 全消去</button>
+          style={{ border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', opacity: (arrows || []).length ? 1 : 0.5 }}>🗑 消去</button>
         {actions}
       </div>
 
@@ -1517,7 +1523,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
                   </div>
                   <div className="cell" style={{ flex: 1 }}>
-                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} />
+                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
                   </div>
                 </div>
               </div>
@@ -1579,8 +1585,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               onArrowsChange={(a) => setVal('mapArrows', a)}
               actions={
                 <>
-                  <button type="button" style={{ ...S.cancelBtn, flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)' }} onClick={handleReset}>{editing ? '新規に戻す' : 'リセット'}</button>
-                  <button type="submit" style={{ ...S.saveBtn, flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', padding: '7px 6px', fontSize: 'clamp(11px,1.4vw,13px)', opacity: saving ? 0.7 : 1 }} disabled={saving}>
+                  <button type="button" style={{ border: '1.5px solid #dde3ed', background: '#f4f6f9', color: '#3a4a5c', fontWeight: 600 }} onClick={handleReset}>{editing ? '新規に戻す' : 'リセット'}</button>
+                  <button type="submit" style={{ border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', fontWeight: 600, opacity: saving ? 0.7 : 1 }} disabled={saving}>
                     {saving ? (editing ? '更新中…' : '登録中…') : (editing ? '更新' : '登録')}
                   </button>
                 </>

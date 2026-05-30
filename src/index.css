@@ -71,6 +71,9 @@ input, textarea, select { font-family: inherit; }
 /* 地図に重ねる矢印描画レイヤー（固定時のみ操作可） */
 .sitemap-arrows { position:absolute; inset:0; width:100%; height:100%; touch-action:none; border-radius:8px; }
 .sitemap-badge { position:absolute; top:8px; left:8px; background:rgba(15,48,96,.88); color:#fff; font-size:11px; font-weight:600; padding:4px 9px; border-radius:6px; pointer-events:none; }
+/* 地図下の操作ボタン: 1行に均等配置し、枠内に収まるよう文字を縮小＋省略 */
+.map-actions { display:flex; flex-wrap:nowrap; gap:5px; align-items:stretch; margin-top:6px; width:100%; }
+.map-actions > button { flex:1 1 0; min-width:0; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-radius:7px; padding:7px 4px; font-size:clamp(10px,2.6vw,13px); font-family:'Noto Sans JP',sans-serif; cursor:pointer; }
 .denpyo .memo-grid { display:grid; grid-template-columns:repeat(var(--memo-cols,2),1fr); grid-auto-rows:1fr; height:var(--memo-h,170px); border-top:1px solid #bbb; border-left:1px solid #bbb; margin-top:3px; width:100%; }
 .denpyo .memo-cell { min-height:0; overflow:hidden; border-right:1px solid #bbb; border-bottom:1px solid #bbb; position:relative; }
 .denpyo .memo-cell textarea { width:100%; height:100%; border:none; outline:none; resize:none; background:transparent; font-family:inherit; line-height:1.25; color:#111; box-sizing:border-box; padding:3px 36px 3px 6px; overflow:hidden; display:block; }
@@ -117,8 +120,8 @@ input, textarea, select { font-family: inherit; }
 .schedule .sc-mixnotes span { flex:1; text-align:center; font-size:clamp(9px,0.85vw,13px); color:#c81e1e; font-weight:700; min-width:0; white-space:nowrap; }
 
 /* ===== 出荷予定表（縦持ち＝スマホ/iPhone/iPad）カード表示 ===== */
-.sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; }
-.sc-card { border:1px solid #d8dee8; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.07); padding:12px 14px; }
+.sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; max-width:100%; overflow-x:hidden; }
+.sc-card { border:1px solid #d8dee8; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.07); padding:12px 14px; max-width:100%; overflow:hidden; box-sizing:border-box; }
 .sc-card-head { display:flex; align-items:flex-end; gap:10px; padding-bottom:8px; margin-bottom:4px; border-bottom:2px solid #eef0f4; }
 .sc-card-head .sc-time { flex:0 0 auto; max-width:60%; }
 /* 時刻：2つ以上は横並び＋間に「〜」 */
@@ -133,10 +136,10 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-row:last-of-type { border-bottom:none; }
 .sc-card .sc-lbl { flex:0 0 80px; font-size:12px; color:#6b7a8d; font-weight:600; letter-spacing:.04em; }
 .sc-card .sc-val { flex:1; min-width:0; }
-.sc-card .sc-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:8px 0; }
-/* ブロック形式：担当/車種・配合/量 の2×2 */
-.sc-card .sc-grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin:8px 0; }
-.sc-card .sc-box { border:1px solid #eef0f4; border-radius:8px; background:#fafbfc; padding:6px 4px 7px; text-align:center; min-height:60px; display:flex; flex-direction:column; justify-content:center; }
+.sc-card .sc-grid3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:8px 0; }
+/* ブロック形式：担当/車種・配合/量 の2×2（minmax(0,1fr)で内容による横はみ出しを防ぐ） */
+.sc-card .sc-grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:8px 0; }
+.sc-card .sc-box { border:1px solid #eef0f4; border-radius:8px; background:#fafbfc; padding:6px 4px 7px; text-align:center; min-height:60px; min-width:0; overflow:hidden; display:flex; flex-direction:column; justify-content:center; }
 .sc-card .sc-box .sc-lbl { display:block; flex:none; margin-bottom:2px; }
 /* カード内フォント（基準。各ブロックの個別指定が後段でこれを上書きする） */
 .sc-cards .sc-in { font-size:18px; }
