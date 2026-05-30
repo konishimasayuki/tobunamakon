@@ -2153,8 +2153,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
             </button>
           </div>
         )}
-      </div>
-      )}
+        </>)
+        return isPopup
+          ? <FitToWidth width={860} max={1} style={{ padding: '4px 0 24px' }}>
+              <div className="schedule popup-view" style={{ width: 860 }}>{inner}</div>
+            </FitToWidth>
+          : <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
+      })()}
       {editModal && (
         <ScheduleEditModal
           shipment={editModal}
