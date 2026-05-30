@@ -1923,19 +1923,23 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <>
               {rows.map(s => (
                 <div className="sc-card" key={s.id}>
+                  {/* 時刻 | 業者名 */}
                   <div className="sc-card-head">
                     <div className="sc-time">{cellTimes(s)}</div>
                     <div className="sc-company">{cell(s, 'companyName', '業者名')}</div>
                   </div>
-                  <div className="sc-row"><span className="sc-lbl">商社</span><span className="sc-val">{cell(s, 'tradingCompany', '商社')}</span></div>
-                  <div className="sc-row"><span className="sc-lbl">現場名</span><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
-                  <div className="sc-grid3">
+                  {/* 現場名 */}
+                  <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
+                  {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
+                  <div className="sc-grid2">
+                    <div className="sc-box"><span className="sc-lbl">担当</span>{cellDrivers(s, { big: true, oneEach: true })}</div>
                     <div className="sc-box"><span className="sc-lbl">車種</span>{cell(s, 'vehicleType', '', { center: true, big: true })}</div>
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
                     <div className="sc-box"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
-                  <div className="sc-row"><span className="sc-lbl">担当</span><span className="sc-val">{cellDrivers(s, { big: true, oneEach: true })}</span></div>
+                  {/* 備考（横並び） */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
+                  {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
                     <button type="button" onClick={() => openEditWindow(s)}

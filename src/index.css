@@ -132,8 +132,13 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-lbl { flex:0 0 80px; font-size:12px; color:#6b7a8d; font-weight:600; letter-spacing:.04em; }
 .sc-card .sc-val { flex:1; min-width:0; }
 .sc-card .sc-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:8px 0; }
+/* ブロック形式：担当/車種・配合/量 の2×2 */
+.sc-card .sc-grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin:8px 0; }
 .sc-card .sc-box { border:1px solid #eef0f4; border-radius:8px; background:#fafbfc; padding:6px 4px 7px; text-align:center; }
 .sc-card .sc-box .sc-lbl { display:block; flex:none; margin-bottom:2px; }
+/* 現場名は1行で大きく */
+.sc-card .sc-site { padding-top:8px; }
+.sc-card .sc-site .sc-val { text-align:center; }
 .sc-card .sc-card-actions { display:flex; gap:10px; margin-top:12px; }
 /* カード内フォント（数字・項目を大きく見やすく） */
 .sc-cards .sc-in { font-size:18px; }
