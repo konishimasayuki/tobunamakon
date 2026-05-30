@@ -1484,7 +1484,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
-                  <div className="cell" style={{ flex: '0 0 59%' }}>
+                  <div className="cell" style={{ flex: '0 0 52%' }}>
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
                     <div className="haigou3" style={redIf('mixCode')}>
                       <div className="hgcol">
@@ -1509,7 +1509,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   </div>
                 </div>
                 <div className="subrow">
-                  <div className="cell m3" style={{ flex: '0 0 59%', justifyContent: 'center' }}>
+                  <div className="cell m3" style={{ flex: '0 0 52%', justifyContent: 'center' }}>
                     <div className="inline" style={{ justifyContent: 'center' }}>
                       <input type="number" min="0" step="0.01" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={set('volume')} />
                       <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
@@ -1525,12 +1525,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 5段: 連絡先 / 現場連絡先（ラベル左・入力右） */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <div className="lbl" style={{ marginBottom: 0 }}>連 絡 先</div>
+              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em' }}>連 絡 先</div>
                 <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
               </div>
-              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <div className="lbl" style={{ marginBottom: 0, ...redIf('siteContact') }}>現 場 連 絡 先</div>
+              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em', ...redIf('siteContact') }}>現 場 連 絡 先</div>
                 <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} />
               </div>
             </div>
@@ -1545,8 +1545,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 32%' }}>
-                <div className="lbl" style={redIf('drivers')}>担 当 ド ラ イ バ ー（最大4）</div>
+              <div className="cell" style={{ flex: '0 0 30%' }}>
+                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー（最大4）</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
                   {form.drivers.map((d, i) => (
                     <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
@@ -1563,7 +1563,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 )}
               </div>
               <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl">ド ラ イ バ ー へ の 連 絡</div>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>ドライバーへの連絡</div>
                 <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={2} height={80} addLabel="＋ 段落を追加" />
               </div>
             </div>
