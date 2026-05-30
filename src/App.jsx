@@ -1484,6 +1484,25 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 別ウィンドウ（閲覧専用）用：入力欄ではなく折り返し表示のテキストで見せる
+  const showVal = (s, f, opts = {}) => {
+    const v = getVal(s, f)
+    const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
+    const red = isChanged(s, f) || imp
+    const weak = opts.sub || (opts.plain && !imp)
+    return (
+      <div style={{
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+        wordBreak: 'break-word',
+        color: red ? '#c81e1e' : (opts.sub ? '#555' : '#111'),
+        fontWeight: weak ? 400 : 700,
+        textAlign: opts.center ? 'center' : 'left',
+        lineHeight: 1.35,
+      }}>{v}</div>
+    )
+  }
+
   const openEditWindow = (s) => {
     const url = `${window.location.pathname}?editShipment=${encodeURIComponent(s.id)}&popup=1`
     const w = window.open(url, '_blank', 'width=900,height=950,scrollbars=yes,resizable=yes')
@@ -1582,7 +1601,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
         </div>
       ) : (
-      <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>
+      <div className={'schedule' + (isPopup ? ' popup-view' : '')} style={{ overflowX: isPopup ? 'visible' : 'auto', padding: isPopup ? '0 0 24px' : '0 16px 24px' }}>
         <table>
           <colgroup>
             <col style={{ width: '10%' }} />
@@ -1593,18 +1612,29 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <col style={{ width: '12%' }} />
             <col style={{ width: '9%' }} />
             <col style={{ width: '16%' }} />
-            <col style={{ width: '8%' }} />
+            {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
-              <th>編集</th>
+              {!isPopup && <th>編集</th>}
             </tr>
           </thead>
           <tbody>
-            {rows.map(s => (
+            {rows.map(s => (isPopup ? (
+              <tr key={s.id}>
+                <td>{showVal(s, 'companyName')}{showVal(s, 'tradingCompany', { sub: true })}</td>
+                <td>{showVal(s, 'siteName')}</td>
+                <td>{showVal(s, 'vehicleType', { center: true })}</td>
+                <td>{showVal(s, 'mixCode', { center: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 12, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</td>
+                <td>{showVal(s, 'volume', { center: true })}</td>
+                <td>{showVal(s, 'drivers')}</td>
+                <td>{showVal(s, 'times', { center: true })}</td>
+                <td>{showVal(s, 'notes', { plain: true })}{showVal(s, 'siteContact', { sub: true })}</td>
+              </tr>
+            ) : (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
@@ -1621,7 +1651,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
                 </td>
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
         {loading ? (
@@ -1629,16 +1659,18 @@ function SchedulePage({ onEditShipment, isPopup }) {
         ) : rows.length === 0 ? (
           <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
         ) : (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d' }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', padding: isPopup ? '8px 8px 0' : 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
         )}
-        <div style={{ marginTop: 16, textAlign: 'right' }}>
-          <button type="button" onClick={resetReds}
-            style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
-            🧹 変更(赤)をリセット（デバッグ）
-          </button>
-        </div>
+        {!isPopup && (
+          <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <button type="button" onClick={resetReds}
+              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
+              🧹 変更(赤)をリセット（デバッグ）
+            </button>
+          </div>
+        )}
       </div>
       )}
     </div>

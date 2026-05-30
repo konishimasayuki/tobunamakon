@@ -115,3 +115,12 @@ input, textarea, select { font-family: inherit; }
 .sc-cards .sc-in { font-size:18px; }
 .sc-cards .sc-in.big { font-size:22px; }
 .sc-cards .sc-in.big.center { font-size:28px; }
+
+/* ===== 出荷予定表 別ウィンドウ（閲覧専用・画面いっぱい・折り返し） ===== */
+/* 編集列なし・横スクロールなし。列幅は固定し、はみ出す文字は折り返す。
+   画面が大きいほど文字を大きく（clamp）して見やすさを優先。 */
+.schedule.popup-view { padding:0; }
+.schedule.popup-view table { min-width:0; width:100%; table-layout:fixed; }
+.schedule.popup-view th { font-size:clamp(14px, 1.3vw, 24px); padding:10px 8px; }
+.schedule.popup-view td { height:auto; padding:12px 10px; vertical-align:top; }
+.schedule.popup-view td > div { font-size:clamp(17px, 1.7vw, 32px); line-height:1.35; }
