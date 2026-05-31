@@ -1502,8 +1502,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
-  // 直近に登録したものを一番上に（登録日時の新しい順）
-  const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  // 出荷日付の新しい順（同日付は登録日時の新しい順）で上から表示
+  const sortedList = [...filtered].sort((a, b) =>
+    String(b.date || '').localeCompare(String(a.date || '')) ||
+    String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+  )
   // 10件ずつページング
   const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
   const curPage = Math.min(page, pageCount - 1)
@@ -1806,6 +1809,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 別ウィンドウ（isPopup）では幅に関わらず常にPC版テーブルを表示する。
   // → スマホで「別ウィンドウで開く」を押すと、横画面でPCレイアウトの予定表が出る。
   const compact = isMobile && !isPopup
+  const noEdit = compact || isPopup   // 別ウィンドウ(掲示板)・スマホカードは直接編集不可（閲覧専用）
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
   const [date, setDate] = useState(() => localToday())
@@ -1962,11 +1966,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
-        readOnly={compact}
-        tabIndex={compact ? -1 : undefined}
-        style={compact ? { pointerEvents: 'none' } : undefined}
-        onInput={compact ? undefined : (e => fitOne(e.target))}
-        onBlur={compact ? undefined : (e => saveField(s, f, e.target.value))}
+        readOnly={noEdit}
+        tabIndex={noEdit ? -1 : undefined}
+        style={noEdit ? { pointerEvents: 'none' } : undefined}
+        onInput={noEdit ? undefined : (e => fitOne(e.target))}
+        onBlur={noEdit ? undefined : (e => saveField(s, f, e.target.value))}
       />
     )
   }
@@ -1986,8 +1990,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
         rows={rows}
         defaultValue={v}
         placeholder={ph || ''}
-        onInput={e => fitOne(e.target)}
-        onBlur={e => saveField(s, f, e.target.value)}
+        readOnly={noEdit}
+        tabIndex={noEdit ? -1 : undefined}
+        style={noEdit ? { pointerEvents: 'none' } : undefined}
+        onInput={noEdit ? undefined : (e => fitOne(e.target))}
+        onBlur={noEdit ? undefined : (e => saveField(s, f, e.target.value))}
       />
     )
   }
@@ -2041,8 +2048,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
             className={cls}
             defaultValue={line}
             placeholder={i === 0 ? '担当' : ''}
-            onInput={e => fitOne(e.target)}
-            onBlur={e => saveAll(e.target.closest('.sc-drivers'))}
+            readOnly={noEdit}
+            tabIndex={noEdit ? -1 : undefined}
+            style={noEdit ? { pointerEvents: 'none' } : undefined}
+            onInput={noEdit ? undefined : (e => fitOne(e.target))}
+            onBlur={noEdit ? undefined : (e => saveAll(e.target.closest('.sc-drivers')))}
           />
         ))}
       </div>
@@ -2301,10 +2311,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
         // 別ウィンドウ: 画面が表の基準幅(860px)より広ければ幅100%で画面いっぱいに（PC）、
         // 狭ければ FitToWidth で縮小して横スクロールを出さない（スマホ縦）。
         return popupNarrow
-          ? <FitToWidth width={860} max={1} style={{ padding: '4px 0 24px' }}>
-              <div className="schedule popup-view" style={{ width: 860 }}>{inner}</div>
+          ? <FitToWidth width={860} max={1} style={{ padding: '4px 0 64px' }}>
+              <div className="schedule popup-view" style={{ width: 860, paddingBottom: 40 }}>{inner}</div>
             </FitToWidth>
-          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{inner}</div>
+          : <div className="schedule popup-view" style={{ padding: '4px 12px 64px' }}>{inner}</div>
       })()}
       {editModal && (
         <ScheduleEditModal
