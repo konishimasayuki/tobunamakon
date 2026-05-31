@@ -387,10 +387,16 @@ function CustomerModal({ customer, onSave, onClose }) {
       phone:           customer.phone           || '',
       address:         customer.address         || '',
       contactPerson:   customer.contactPerson   || '',
+      isTradingCompany: !!customer.isTradingCompany,
     } : emptyForm)
   }, [customer])
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+  // 商社チェック切替：顧客コードの頭文字を C↔S に入れ替える（数値部は維持）
+  const toggleTrading = (checked) => setForm(f => {
+    const body = String(f.customerCode || '').replace(/^[CScs]/, '')
+    return { ...f, isTradingCompany: checked, customerCode: (checked ? 'S' : 'C') + body }
+  })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -414,6 +420,10 @@ function CustomerModal({ customer, onSave, onClose }) {
             <Field label="会社名 *"      value={form.companyName}     onChange={set('companyName')}     required />
             <Field label="会社名（カナ）" value={form.companyNameKana} onChange={set('companyNameKana')} />
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#1a2332' }}>
+            <input type="checkbox" checked={!!form.isTradingCompany} onChange={e => toggleTrading(e.target.checked)} style={{ width: 18, height: 18 }} />
+            商社（チェックで顧客コードの頭文字が S になります）
+          </label>
           <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="電話番号" value={form.phone}         onChange={set('phone')}         type="tel" />
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
@@ -793,12 +803,23 @@ function CustomersPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={S.toolbar}>
-        <input style={noZoom(S.search, isMobile)} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
-        <button style={S.exportBtn} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
-        <button style={S.importBtn} onClick={() => setImportOpen(true)}>📤 インポート</button>
-        <button style={S.addBtn}    onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
-      </div>
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px' }}>
+          <input style={noZoom({ ...S.search, width: '100%' }, isMobile)} placeholder="🔍 コード・会社名・電話番号で検索" value={search} onChange={e => setSearch(e.target.value)} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button style={{ ...S.addBtn, flex: '1 1 auto', padding: '11px' }} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
+            <button style={{ ...S.importBtn, flex: '0 0 auto', padding: '11px 12px' }} onClick={() => setImportOpen(true)}>📤</button>
+            <button style={{ ...S.exportBtn, flex: '0 0 auto', padding: '11px 12px' }} onClick={() => exportCSV(customers)}>📥</button>
+          </div>
+        </div>
+      ) : (
+        <div style={S.toolbar}>
+          <input style={noZoom(S.search, isMobile)} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+          <button style={S.exportBtn} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
+          <button style={S.importBtn} onClick={() => setImportOpen(true)}>📤 インポート</button>
+          <button style={S.addBtn}    onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
+        </div>
+      )}
       <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
 
       {loading ? (
