@@ -806,10 +806,10 @@ function CustomersPage() {
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px' }}>
           <input style={noZoom({ ...S.search, width: '100%' }, isMobile)} placeholder="🔍 コード・会社名・電話番号で検索" value={search} onChange={e => setSearch(e.target.value)} />
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button style={{ ...S.addBtn, flex: '1 1 auto', padding: '11px' }} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
-            <button style={{ ...S.importBtn, flex: '0 0 auto', padding: '11px 12px' }} onClick={() => setImportOpen(true)}>📤</button>
-            <button style={{ ...S.exportBtn, flex: '0 0 auto', padding: '11px 12px' }} onClick={() => exportCSV(customers)}>📥</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+            <button style={{ ...S.addBtn, flex: '0 0 auto', padding: '11px 16px' }} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 追加</button>
+            <button style={{ ...S.importBtn, flex: '1 1 0', padding: '11px 8px', fontSize: 13 }} onClick={() => setImportOpen(true)}>📤 インポート</button>
+            <button style={{ ...S.exportBtn, flex: '1 1 0', padding: '11px 8px', fontSize: 13 }} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
           </div>
         </div>
       ) : (
@@ -1690,9 +1690,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
       {/* 一覧 */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...S.toolbar, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ ...S.toolbar, flexWrap: 'nowrap', gap: 8, alignItems: 'center', overflow: 'hidden' }}>
           {/* 検索バー（短め）。検索中は解除ボタンを表示 */}
-          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 150 : 280 }}>
+          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 130 : 280 }}>
             <input style={noZoom({ ...S.search, width: '100%', paddingRight: search ? 34 : undefined }, isMobile)}
               placeholder="🔍 検索" value={search}
               onChange={e => { setSearch(e.target.value); if (e.target.value) setDateFilter('') }} />
@@ -2916,6 +2916,32 @@ function Layout({ children, activeTab, onTabChange }) {
 // ============================================================
 // アプリ本体
 // ============================================================
+// 準備中タブのパスワードロック画面。正しいパスワードでアンロックすると本来の画面へ。
+const LOCK_PASSWORD = '0383'
+function LockedPage({ onUnlock }) {
+  const [pw, setPw] = useState('')
+  const [err, setErr] = useState(false)
+  const submit = (e) => {
+    e.preventDefault()
+    if (pw === LOCK_PASSWORD) onUnlock()
+    else { setErr(true); setPw('') }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 18, padding: 24 }}>
+      <div style={{ fontSize: 20, fontWeight: 700, color: '#3a4a5c' }}>🚧 準備中</div>
+      <div style={{ fontSize: 14, color: '#6b7a8d' }}>この機能は準備中です。パスワードを入力してください。</div>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280 }}>
+        <input type="password" inputMode="numeric" value={pw} autoFocus
+          onChange={e => { setPw(e.target.value); setErr(false) }}
+          placeholder="パスワード"
+          style={{ fontSize: 16, padding: '11px 12px', border: `1.5px solid ${err ? '#c0392b' : '#cdd5e0'}`, borderRadius: 8, textAlign: 'center' }} />
+        {err && <div style={{ fontSize: 12, color: '#c0392b', textAlign: 'center' }}>パスワードが違います</div>}
+        <button type="submit" style={{ border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>解除して開く</button>
+      </form>
+    </div>
+  )
+}
+
 function AppInner() {
   const { user, loading } = useAuth()
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
@@ -2925,6 +2951,9 @@ function AppInner() {
   const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
+  // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
+  const LOCKED_TABS = ['assign', 'shipreport', 'driverreport']
+  const [unlocked, setUnlocked] = useState({})
 
   // 別ウィンドウの自動更新は SchedulePage 内で差分更新（再取得して変更分のみ反映）する。
   // 全画面 reload は入力内容やスクロール位置が失われるため行わない。
@@ -2937,7 +2966,7 @@ function AppInner() {
 
   if (!user) return <LoginPage />
 
-  const page = activeTab === 'dashboard' ? <DashboardPage />
+  let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
     : activeTab === 'employees' ? <EmployeesPage />
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
@@ -2948,6 +2977,10 @@ function AppInner() {
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
     : null
+  // 準備中タブは未アンロックならパスワード画面を表示
+  if (LOCKED_TABS.includes(activeTab) && !unlocked[activeTab]) {
+    page = <LockedPage onUnlock={() => setUnlocked(u => ({ ...u, [activeTab]: true }))} />
+  }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
   if (isPopup) return <div style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
