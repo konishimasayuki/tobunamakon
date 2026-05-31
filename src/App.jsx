@@ -2092,12 +2092,28 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
 
-  const sendLine = (s) => {
-    const drivers = Array.isArray(s.drivers) ? s.drivers : []
-    if (drivers.length === 0) { alert('担当が入っていません'); return }
-    const names = drivers.map(d => d.name).join('、')
-    if (window.confirm(`${names} に送信しますか？`)) {
-      alert('送信を受け付けました。\n（※実際のLINE送信にはLINE Messaging APIの連携設定が必要です）')
+  const sendLine = async (s) => {
+    const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
+    if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
+    // 担当ドライバー → 従業員管理のLINEユーザーIDを解決（id一致、なければ氏名一致）
+    const resolved = shipDrivers.map(d => {
+      const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name)
+      return { name: d.name, lineId: emp?.lineId || '' }
+    })
+    const withId = resolved.filter(r => r.lineId)
+    const without = resolved.filter(r => !r.lineId)
+    if (withId.length === 0) {
+      alert('担当ドライバーにLINEユーザーIDが紐づいていません。\n従業員管理でLINE IDを設定してください。')
+      return
+    }
+    let msg = `${withId.map(r => r.name).join('、')} にLINEを送信しますか？`
+    if (without.length) msg += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
+    if (!window.confirm(msg)) return
+    try {
+      const res = await api.post('/api/line', { action: 'push', lineUserIds: withId.map(r => r.lineId), text: 'テスト' })
+      alert(`送信しました（${res.sent}/${res.total} 件成功）`)
+    } catch (e) {
+      alert('送信に失敗しました: ' + e.message)
     }
   }
 

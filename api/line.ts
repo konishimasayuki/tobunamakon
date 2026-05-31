@@ -114,6 +114,35 @@ async function replyMessage(replyToken: string, text: string, token: string): Pr
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // ===== アプリからのプッシュ送信（認証必須）。Webhookと区別するため action=push で判定 =====
+  if (req.method === 'POST' && (req.body as any)?.action === 'push') {
+    const user = requireAuth(req)
+    if (!user) return res.status(401).json({ error: '認証が必要です' })
+    const { lineUserIds, text } = (req.body || {}) as any
+    const ids: string[] = Array.isArray(lineUserIds) ? lineUserIds.filter(Boolean) : []
+    if (ids.length === 0) return res.status(400).json({ error: '送信先のLINEユーザーIDがありません' })
+    const settings = (await redis.hgetall<Record<string, string>>(SETTINGS_KEY)) || {}
+    const token = dec(settings.channelAccessToken || '')
+    if (!token) return res.status(400).json({ error: 'LINEチャネルアクセストークンが未設定です（設定画面で登録してください）' })
+    const message = String(text || '').trim() || 'テスト'
+    const results: Array<{ to: string; ok: boolean; error?: string }> = []
+    for (const to of ids) {
+      try {
+        const r = await fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ to, messages: [{ type: 'text', text: message }] }),
+        })
+        if (r.ok) results.push({ to, ok: true })
+        else { const e = await r.text(); results.push({ to, ok: false, error: e.slice(0, 200) }) }
+      } catch (e) {
+        results.push({ to, ok: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    const sent = results.filter(r => r.ok).length
+    return res.status(200).json({ sent, total: ids.length, results })
+  }
+
   // ===== LINE Webhook（LINEプラットフォームからのPOST・認証不要・常に200）=====
   if (req.method === 'POST') {
     try {
