@@ -154,7 +154,9 @@ function asArr(v: any): any[] {
 
 // 出荷データから Google Static Maps の画像URLを作る（ピン＋矢印を線で描画）
 function staticMapUrl(ship: any): string | null {
-  const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
+  // LINEのサーバーが画像を取得するためリファラーが無い。制限なしのサーバー用キー（GMAPS_API_KEY）を優先する。
+  // VITE_GMAPS_API_KEY はリファラー制限ありのフロント用なので、サーバー側静的地図には使わない（403で真っ白になる）。
+  const key = process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GMAPS_API_KEY || ''
   if (!key) return null
   const view = asObj(ship.mapView)
   const hasView = view && typeof view.lat === 'number'
