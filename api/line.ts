@@ -173,11 +173,28 @@ function staticMapUrl(ship: any): string | null {
     `markers=color:red%7C${center}`,
     `language=ja`, `region=JP`, `maptype=roadmap`, `key=${key}`,
   ]
-  // 矢印（緯度経度2点）を赤い太線で描画
+  // 矢印（緯度経度2点）を赤い太線＋終点に矢じり(V字)で描画
   const arrows = asArr(ship.mapArrows)
-  for (const a of arrows.slice(0, 10)) {
+  for (const a of arrows.slice(0, 8)) {
     if (a && typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
-      params.push(`path=color:0xe8211cff%7Cweight:5%7C${a.lat1},${a.lng1}%7C${a.lat2},${a.lng2}`)
+      const { lat1, lng1, lat2, lng2 } = a
+      // 本体の線
+      params.push(`path=color:0xe8211cff%7Cweight:5%7C${lat1},${lng1}%7C${lat2},${lng2}`)
+      // 矢じり：終点(lat2,lng2)で、線の向きから左右に短い線を2本引く
+      const latRad = (lat2 * Math.PI) / 180
+      // 経度差は緯度で縮むので cos 補正して角度を計算
+      const dx = (lng2 - lng1) * Math.cos(latRad)
+      const dy = lat2 - lat1
+      const ang = Math.atan2(dy, dx)
+      // 線の全長の15%（最小・最大でクランプ）を矢じりの長さに
+      const len = Math.hypot(dx, dy)
+      const head = Math.min(Math.max(len * 0.18, 0.00015), 0.0015)
+      const spread = Math.PI / 7   // 矢じりの開き角
+      for (const s of [ang + Math.PI - spread, ang + Math.PI + spread]) {
+        const hLat = lat2 + head * Math.sin(s)
+        const hLng = lng2 + (head * Math.cos(s)) / Math.cos(latRad)
+        params.push(`path=color:0xe8211cff%7Cweight:5%7C${lat2},${lng2}%7C${hLat},${hLng}`)
+      }
     }
   }
   return `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
