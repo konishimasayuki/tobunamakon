@@ -1502,10 +1502,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
-  // 出荷日付の新しい順（同日付は登録日時の新しい順）で上から表示
+  // 出荷日付の古い順（同日付は登録日時の古い順）で上から表示
   const sortedList = [...filtered].sort((a, b) =>
-    String(b.date || '').localeCompare(String(a.date || '')) ||
-    String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+    String(a.date || '').localeCompare(String(b.date || '')) ||
+    String(a.createdAt || '').localeCompare(String(b.createdAt || ''))
   )
   // 10件ずつページング
   const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
