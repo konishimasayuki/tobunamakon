@@ -363,6 +363,56 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // ===== アプリからの出荷カード送信（認証必須）。指定出荷の伝票カード＋地図画像を担当へ =====
+  if (req.method === 'POST' && (req.body as any)?.action === 'pushShipment') {
+    const user = requireAuth(req)
+    if (!user) return res.status(401).json({ error: '認証が必要です' })
+    const { shipmentId, lineUserIds } = (req.body || {}) as any
+    const cln = (v: any) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+    const ids: string[] = Array.isArray(lineUserIds) ? Array.from(new Set(lineUserIds.map(cln).filter(Boolean))) : []
+    if (!shipmentId) return res.status(400).json({ error: '出荷IDがありません' })
+    if (ids.length === 0) return res.status(400).json({ error: '送信先のLINEユーザーIDがありません' })
+    const settings = (await redis.hgetall<Record<string, string>>(SETTINGS_KEY)) || {}
+    const token = dec(settings.channelAccessToken || '')
+    if (!token) return res.status(400).json({ error: 'LINEチャネルアクセストークンが未設定です（設定画面で登録してください）' })
+    const s = await redis.hgetall<Record<string, any>>(`shipment:${shipmentId}`)
+    if (!s || Object.keys(s).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
+    // 「現場」返信と同じ：伝票カード＋矢印付き地図画像
+    const pushMsgs: any[] = [
+      { type: 'flex', altText: `出荷予定 ${s.siteName || s.companyName || ''}`, contents: shipmentBubble(s) },
+    ]
+    const mapImg = staticMapUrl(s)
+    if (mapImg) pushMsgs.push({ type: 'image', originalContentUrl: mapImg, previewImageUrl: mapImg })
+
+    const known = (await redis.hgetall<Record<string, string>>(USERS_KEY)) || {}
+    const rs: Array<{ to: string; ok: boolean; error?: string }> = []
+    for (const to of ids) {
+      try {
+        const prof = await fetch(`https://api.line.me/v2/bot/profile/${to}`, { headers: { Authorization: `Bearer ${token}` } })
+        if (!prof.ok) {
+          const inList = Object.prototype.hasOwnProperty.call(known, to)
+          const hint = inList ? 'このIDは登録済みですが現在送信できません（ブロック/退会の可能性）。' : 'このIDはこの公式アカウントの友だちとして取得されていません。'
+          rs.push({ to, ok: false, error: `友だち未確認(HTTP${prof.status}) ${hint}` })
+          continue
+        }
+        const r = await fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ to, messages: pushMsgs }),
+        })
+        if (r.ok) rs.push({ to, ok: true })
+        else {
+          const body = await r.text()
+          const reqId = r.headers.get('x-line-request-id') || ''
+          rs.push({ to, ok: false, error: `HTTP${r.status} ${body.slice(0, 300)}${reqId ? ` [req:${reqId}]` : ''}` })
+        }
+      } catch (e) {
+        rs.push({ to, ok: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    return res.status(200).json({ sent: rs.filter(r => r.ok).length, total: ids.length, results: rs })
+  }
+
   // ===== アプリからのプッシュ送信（認証必須）。Webhookと区別するため action=push で判定 =====
   if (req.method === 'POST' && (req.body as any)?.action === 'push') {
     const user = requireAuth(req)

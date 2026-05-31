@@ -2114,7 +2114,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (without.length) msg += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
     if (!window.confirm(msg)) return
     try {
-      const res = await api.post('/api/line', { action: 'push', lineUserIds: withId.map(r => r.lineId), text: 'テスト' })
+      const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: s.id, lineUserIds: withId.map(r => r.lineId) })
       const fails = (res.results || []).filter(r => !r.ok)
       let msg = `送信しました（${res.sent}/${res.total} 件成功）`
       if (fails.length) {
