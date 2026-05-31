@@ -359,6 +359,23 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
     const img = staticMapUrl(s)
     if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
   }
+  // デバッグ: 地図画像が出ない理由を1行で（環境変数 LINE_DEBUG=1 のときだけ）
+  if (process.env.LINE_DEBUG === '1' && messages.length < 5) {
+    const s0 = target[0]
+    const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
+    const view = asObj(s0.mapView)
+    const coords = extractLatLng(s0.siteAddress || '')
+    const url = staticMapUrl(s0) || ''
+    const dbg = [
+      `key:${key ? key.slice(0, 8) + '…(' + key.length + ')' : 'なし'}`,
+      `view:${view && typeof view.lat === 'number' ? 'あり' : 'なし'}`,
+      `coords:${coords ? 'あり' : 'なし'}`,
+      `addr:${String(s0.siteAddress || '').slice(0, 30)}`,
+      `url生成:${url ? 'OK' : 'NG'}`,
+    ].join(' / ')
+    messages.push({ type: 'text', text: `[debug] ${dbg}` })
+    if (url) messages.push({ type: 'text', text: url })
+  }
   return messages
 }
 
