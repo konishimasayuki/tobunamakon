@@ -2113,7 +2113,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!window.confirm(msg)) return
     try {
       const res = await api.post('/api/line', { action: 'push', lineUserIds: withId.map(r => r.lineId), text: 'テスト' })
-      alert(`送信しました（${res.sent}/${res.total} 件成功）`)
+      const fails = (res.results || []).filter(r => !r.ok)
+      let msg = `送信しました（${res.sent}/${res.total} 件成功）`
+      if (fails.length) {
+        // 失敗したIDと担当名・理由を表示
+        const lines = fails.map(f => {
+          const who = withId.find(w => w.lineId === f.to)
+          return `・${who ? who.name : ''}（${f.to}）\n  ${f.error || '不明なエラー'}`
+        })
+        msg += `\n\n■ 送信失敗:\n${lines.join('\n')}`
+      }
+      alert(msg)
     } catch (e) {
       alert('送信に失敗しました: ' + e.message)
     }
