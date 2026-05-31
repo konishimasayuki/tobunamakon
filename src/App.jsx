@@ -192,8 +192,8 @@ const S = {
   input:      { padding: '10px 14px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 15, outline: 'none', color: '#1a2332' },
   error:      { background: '#fef2f2', color: '#c0392b', padding: '10px 14px', borderRadius: 8, fontSize: 13, border: '1px solid #fecaca' },
   loginBtn:   { background: 'linear-gradient(135deg, #1a4d8f, #1a6a9f)', color: '#fff', border: 'none', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 4 },
-  appRoot:    { display: 'flex', height: '100dvh', overflow: 'hidden' },
-  sidebar:    { width: 200, background: '#0f3060', display: 'flex', flexDirection: 'column', flexShrink: 0 },
+  appRoot:    { display: 'flex', height: '100dvh', width: '100%', overflow: 'hidden' },
+  sidebar:    { flex: '0 0 200px', width: 200, background: '#0f3060', display: 'flex', flexDirection: 'column', flexShrink: 0 },
   sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)' },
   coName:     { color: '#fff', fontWeight: 700, fontSize: 13, lineHeight: 1.3 },
   syName:     { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 },
@@ -205,7 +205,7 @@ const S = {
   userRole:   { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 1 },
   logoutBtn:  { width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, padding: '6px 0', fontSize: 11, fontWeight: 500, cursor: 'pointer', marginTop: 8 },
   verTxt:     { textAlign: 'center', marginTop: 8, fontSize: 10, color: 'rgba(255,255,255,0.22)' },
-  main:       { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f4f6f9' },
+  main:       { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f4f6f9' },
   pageHead:   { padding: '14px 20px', background: '#fff', borderBottom: '1px solid #eef0f4', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' },
   pageTitle:  { fontSize: 17, fontWeight: 700, color: '#1a2332' },
   content:    { flex: 1, overflow: 'auto' },
@@ -1522,7 +1522,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 28, alignItems: 'stretch', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 28, alignItems: 'stretch', justifyContent: 'flex-start' }}>
           <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 0 700px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
@@ -2952,7 +2952,7 @@ function Layout({ children, activeTab, onTabChange }) {
         </aside>
       )}
 
-      <main style={{ ...S.main, width: isPC ? 'auto' : '100%', minWidth: 0 }}>
+      <main style={S.main}>
         <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 8, padding: isMobile ? '10px 12px' : '14px 20px', paddingTop: isMobile ? 'calc(10px + env(safe-area-inset-top))' : 14 }}>
           {!isPC && (
             <button style={S.hamburger} onClick={() => setOpen(true)} aria-label="メニュー">☰</button>
