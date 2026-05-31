@@ -206,58 +206,76 @@ function mapsUrlOf(s: any): string {
   return /^https?:\/\//.test(addr) ? addr : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
 }
 
-// 出荷1件を「伝票風」の Flex バブルにする（画像化せずLINEの装飾でレイアウト）
+// 出荷1件を「伝票風」の Flex バブルにする（出荷登録フォームの全項目を反映）
 function shipmentBubble(s: any): any {
   const times = Array.isArray(s.times) ? s.times.map((t: any) => (t && t.text != null ? t.text : t)).filter(Boolean) : []
   const drivers = Array.isArray(s.drivers) ? s.drivers.map((d: any) => d.name).filter(Boolean) : []
+  const placements = asArr(s.placements).filter(Boolean)
+  const mixNotes = asArr(s.mixNotes).map((x: any) => String(x || '').trim())
+  const notesArr = asArr(s.notes).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
+  const driverMsgArr = asArr(s.driverMessages).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
   const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
-  const img = staticMapUrl(s)
   const mapUrl = mapsUrlOf(s)
 
-  // 1行（ラベル＋値）。罫線で区切って伝票風に
+  // 配合表示：20-50-20 ＋ 特記（中央のみ等は元の配列をそのまま / で）
+  const mixLine = String(s.mixCode || '').trim()
+  const mixNoteLine = mixNotes.some(Boolean) ? mixNotes.filter(Boolean).join(' / ') : ''
+
+  // ラベル＋値の行
   const row = (label: string, value: string, opts: any = {}) => ({
-    type: 'box', layout: 'horizontal', spacing: 'sm',
+    type: 'box', layout: 'horizontal', spacing: 'sm', margin: 'sm',
     contents: [
-      { type: 'text', text: label, size: 'sm', color: '#8a97a6', flex: 3 },
-      { type: 'text', text: value || '—', size: opts.big ? 'lg' : 'sm', weight: opts.big ? 'bold' : 'regular', color: opts.color || '#111111', flex: 7, wrap: true },
+      { type: 'text', text: label, size: 'sm', color: '#8a97a6', flex: 4 },
+      { type: 'text', text: value || '—', size: opts.big ? 'lg' : 'sm', weight: opts.big ? 'bold' : 'regular', color: opts.color || '#111111', flex: 8, wrap: true },
     ],
   })
   const sep = () => ({ type: 'separator', margin: 'md', color: '#eef0f4' })
 
-  const body: any = {
-    type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '16px',
-    contents: [
-      // ヘッダー：時間 ｜ 業者名/商社名
-      {
-        type: 'box', layout: 'horizontal', spacing: 'md', alignItems: 'center',
-        contents: [
-          { type: 'text', text: times.length ? times.join('\n') : '—', weight: 'bold', size: 'xl', color: '#c0392b', flex: 4, wrap: true },
-          {
-            type: 'box', layout: 'vertical', flex: 6,
-            contents: [
-              { type: 'text', text: s.companyName || '', weight: 'bold', size: 'md', color: '#111111', wrap: true, align: 'end' },
-              { type: 'text', text: s.tradingCompany || '商社名', size: 'sm', color: s.tradingCompany ? '#3a4a5c' : '#cccccc', wrap: true, align: 'end' },
-            ],
-          },
-        ],
-      },
-      sep(),
-      // 現場名（大きく中央）
-      { type: 'text', text: s.siteName || '（現場名なし）', weight: 'bold', size: 'xl', color: '#111111', align: 'center', wrap: true },
-      sep(),
-      row('担当', drivers.join('、'), { big: true }),
-      row('車種', `${s.vehicleType || '—'}${s.truckCount ? `  ${s.truckCount}台` : ''}`),
-      row('配合', s.mixCode || '', { big: true, color: '#c0392b' }),
-      row('量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'),
-      sep(),
-      row('現場連絡先', s.siteContact || ''),
-      row('住所', addr || ''),
-    ],
-  }
+  const contents: any[] = [
+    // ヘッダー：日付・時間 ｜ 業者名/商社名
+    {
+      type: 'box', layout: 'horizontal', spacing: 'md', alignItems: 'center',
+      contents: [
+        {
+          type: 'box', layout: 'vertical', flex: 5,
+          contents: [
+            { type: 'text', text: s.date || '', size: 'xs', color: '#8a97a6' },
+            { type: 'text', text: times.length ? times.join('　') : '時間未定', weight: 'bold', size: 'lg', color: '#c0392b', wrap: true },
+          ],
+        },
+        {
+          type: 'box', layout: 'vertical', flex: 6,
+          contents: [
+            { type: 'text', text: s.companyName || '', weight: 'bold', size: 'md', color: '#111111', wrap: true, align: 'end' },
+            { type: 'text', text: s.tradingCompany || '商社名なし', size: 'sm', color: s.tradingCompany ? '#3a4a5c' : '#cccccc', wrap: true, align: 'end' },
+          ],
+        },
+      ],
+    },
+    sep(),
+    // 現場名（大きく中央）
+    { type: 'text', text: s.siteName || '（現場名なし）', weight: 'bold', size: 'xl', color: '#111111', align: 'center', wrap: true },
+    sep(),
+    // 主要項目
+    row('担当', drivers.join('、'), { big: true }),
+    row('車種', `${s.vehicleType || '—'}${s.truckCount ? `  ${s.truckCount}台` : ''}`),
+    row('配合', mixLine, { big: true, color: '#c0392b' }),
+  ]
+  if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
+  contents.push(row('セメント種', String(s.cementType || '')))
+  contents.push(row('量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
+  contents.push(row('配置', placements.join('・')))
+  contents.push(sep())
+  contents.push(row('連絡先', String(s.orderContact || '')))
+  contents.push(row('現場連絡先', String(s.siteContact || '')))
+  if (notesArr.length) contents.push(row('備考', notesArr.join(' / ')))
+  if (driverMsgArr.length) contents.push(row('ドライバーへの連絡', driverMsgArr.join(' / ')))
+  contents.push(sep())
+  contents.push(row('住所', addr || ''))
 
   const bubble: any = {
     type: 'bubble', size: 'mega',
-    body,
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px', contents },
     footer: {
       type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px',
       contents: [
@@ -266,10 +284,6 @@ function shipmentBubble(s: any): any {
           : { type: 'text', text: '住所未登録', size: 'sm', color: '#9aa7b5', align: 'center' },
       ],
     },
-  }
-  // 地図画像があれば hero に
-  if (img) {
-    bubble.hero = { type: 'image', url: img, size: 'full', aspectRatio: '20:13', aspectMode: 'cover' }
   }
   return bubble
 }
@@ -328,8 +342,9 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const ft = (s: any) => Array.isArray(s.times) && s.times.length ? String(s.times[0]?.text ?? s.times[0] ?? '') : ''
   ships.sort((a, b) => ft(a).localeCompare(ft(b)))
 
-  // 各現場を伝票風 Flex バブルにして carousel（最大12件）でまとめて返す
-  const bubbles = ships.slice(0, 12).map(shipmentBubble)
+  // reply上限は5メッセージ。伝票カード(carousel)で1枠、残りで地図画像を別メッセージに。
+  const target = ships.slice(0, 12)
+  const bubbles = target.map(shipmentBubble)
   const messages: any[] = [
     { type: 'text', text: `📋 ${who}\n本日（${today}）の出荷予定 ${ships.length}件` },
     {
@@ -338,6 +353,12 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
       contents: bubbles.length === 1 ? bubbles[0] : { type: 'carousel', contents: bubbles },
     },
   ]
+  // 地図画像を別リプライで（残り枠ぶん。reply合計5まで）
+  for (const s of target) {
+    if (messages.length >= 5) break
+    const img = staticMapUrl(s)
+    if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
+  }
   return messages
 }
 
