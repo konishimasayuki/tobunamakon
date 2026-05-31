@@ -2419,18 +2419,18 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
             style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
 
-        {/* 日付（左）／時間（右・最大2）。他のレイアウトは変えない */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'flex-start' }}>
-          <div style={{ flex: '0 0 40%', minWidth: 0 }}>
+        {/* 日付（左・業者名と同じ幅）／時間（右・商社名と同じ開始位置）。下の業者名/商社名グリッドと列を揃える */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14, alignItems: 'start' }}>
+          <div style={{ minWidth: 0 }}>
             <label style={lblS}>日付</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%', fontSize: 14, padding: '9px 4px', textAlign: 'center' }} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%' }} />
           </div>
-          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <label style={lblS}>時間（最大2・上から順）</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {times.map((t, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: '1 1 0', minWidth: 0, maxWidth: 150 }} />
+                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: '1 1 0', minWidth: 0 }} />
                   {times.length > 1 && (
                     <button type="button" onClick={() => delTime(i)}
                       style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>

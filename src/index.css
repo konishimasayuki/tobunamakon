@@ -156,10 +156,10 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-site .sc-in { font-size:24px; font-weight:700; text-align:center; }
 /* 車種：中央に大きく、台数は値の右側・縦中央にバッジ的に配置 */
 .sc-card .sc-vehbox { position:relative; }
-/* 7tは中央のまま固定。台数は中央から値の右へ少しだけ離して絶対配置 */
-.sc-card .sc-veh { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-width:0; }
-.sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; min-width:0; text-align:center; }
-.sc-card .sc-truck { position:absolute; left:calc(50% + 1.3em); top:50%; transform:translateY(-50%); font-size:14px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
+/* 車種は1行（横幅に合わせ自動縮小）／台数はその下の行に配置。ブロックの高さ・位置は不変 */
+.sc-card .sc-veh { display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; min-width:0; line-height:1.05; }
+.sc-card .sc-veh .sc-in { width:100%; flex:none; min-width:0; text-align:center; font-size:20px; line-height:1.05; }
+.sc-card .sc-truck { font-size:13px; font-weight:700; color:#3a4a5c; white-space:nowrap; line-height:1.05; }
 /* 量：数字・記号を大きく */
 .sc-card .sc-volbox .sc-in { font-size:28px; font-weight:700; }
 /* 担当ブロック：1人=特大、2人以上=各行2名を均等幅で並べる（縮小せず同じ大きさ） */
