@@ -1692,8 +1692,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...S.toolbar, flexWrap: 'nowrap', gap: 10, alignItems: 'center', overflow: 'hidden' }}>
           {/* 検索バー（短め）。検索中は解除ボタンを表示 */}
-          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 132 : 280, marginRight: 4 }}>
-            <input style={{ ...noZoom({ ...S.search }, isMobile), width: '100%', boxSizing: 'border-box', paddingRight: 38 }}
+          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 132 : 280, marginRight: 6 }}>
+            <input style={{ ...noZoom({ ...S.search }, isMobile), flex: 'none', minWidth: 0, width: '100%', boxSizing: 'border-box', paddingRight: 38 }}
               placeholder="🔍 検索" value={search}
               onChange={e => { setSearch(e.target.value); if (e.target.value) setDateFilter('') }} />
             {search && (
