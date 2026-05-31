@@ -807,7 +807,7 @@ function CustomersPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px' }}>
           <input style={noZoom({ ...S.search, width: '100%' }, isMobile)} placeholder="🔍 コード・会社名・電話番号で検索" value={search} onChange={e => setSearch(e.target.value)} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-            <button style={{ ...S.addBtn, flex: '0 0 auto', padding: '11px 16px' }} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 追加</button>
+            <button style={{ ...S.addBtn, flex: '0 0 auto', padding: '11px 14px' }} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
             <button style={{ ...S.importBtn, flex: '1 1 0', padding: '11px 8px', fontSize: 13 }} onClick={() => setImportOpen(true)}>📤 インポート</button>
             <button style={{ ...S.exportBtn, flex: '1 1 0', padding: '11px 8px', fontSize: 13 }} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
           </div>
@@ -1690,19 +1690,19 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
       {/* 一覧 */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...S.toolbar, flexWrap: 'nowrap', gap: 8, alignItems: 'center', overflow: 'hidden' }}>
+        <div style={{ ...S.toolbar, flexWrap: 'nowrap', gap: 10, alignItems: 'center', overflow: 'hidden' }}>
           {/* 検索バー（短め）。検索中は解除ボタンを表示 */}
-          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 130 : 280 }}>
-            <input style={noZoom({ ...S.search, width: '100%', paddingRight: search ? 34 : undefined }, isMobile)}
+          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 132 : 280, marginRight: 4 }}>
+            <input style={{ ...noZoom({ ...S.search }, isMobile), width: '100%', boxSizing: 'border-box', paddingRight: 38 }}
               placeholder="🔍 検索" value={search}
               onChange={e => { setSearch(e.target.value); if (e.target.value) setDateFilter('') }} />
             {search && (
               <button type="button" onClick={() => setSearch('')}
-                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 22, height: 22, fontSize: 13, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 24, height: 24, fontSize: 14, cursor: 'pointer', lineHeight: 1, zIndex: 2 }}>×</button>
             )}
           </div>
           {/* 直近7日の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
-          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
             {weekDates.map((d, i) => {
               const active = dateFilter === d
               const label = i === 0 ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
