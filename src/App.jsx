@@ -2952,7 +2952,7 @@ function Layout({ children, activeTab, onTabChange }) {
         </aside>
       )}
 
-      <main style={{ ...S.main, width: '100%' }}>
+      <main style={{ ...S.main, width: isPC ? 'auto' : '100%', minWidth: 0 }}>
         <div style={{ ...S.pageHead, display: 'flex', alignItems: 'center', gap: 8, padding: isMobile ? '10px 12px' : '14px 20px', paddingTop: isMobile ? 'calc(10px + env(safe-area-inset-top))' : 14 }}>
           {!isPC && (
             <button style={S.hamburger} onClick={() => setOpen(true)} aria-label="メニュー">☰</button>
