@@ -371,27 +371,10 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
     },
   ]
   // 地図画像を別リプライで（残り枠ぶん。reply合計5まで）
-  let imgCount = 0
   for (const s of target) {
     if (messages.length >= 5) break
     const img = staticMapUrl(s)
-    if (img) { messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img }); imgCount++ }
-  }
-  // 地図画像が1枚も付けられなかった場合のみ、原因＋URLをテキストで返す（成功時は静か）
-  if (imgCount === 0 && messages.length < 5) {
-    const s0 = target[0]
-    const key = process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GMAPS_API_KEY || ''
-    const view = asObj(s0.mapView)
-    const coords = extractLatLng(s0.siteAddress || '')
-    const url = staticMapUrl(s0) || ''
-    const dbg = [
-      `key:${key ? 'あり(' + key.length + ')' : 'なし'}`,
-      `view:${view && typeof view.lat === 'number' ? 'あり' : 'なし'}`,
-      `coords:${coords ? 'あり' : 'なし'}`,
-      `url:${url ? 'OK' : 'NG'}`,
-    ].join(' / ')
-    messages.push({ type: 'text', text: `地図画像を出せませんでした。\n[${dbg}]` })
-    if (url) messages.push({ type: 'text', text: `↓このURLをブラウザで開くとGoogleのエラーが見えます\n${url}` })
+    if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
   }
   return messages
 }
