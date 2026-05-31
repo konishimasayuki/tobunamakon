@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo, isTradingCompany } = req.body
+    const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo, isTradingCompany, lineUserId } = req.body
     if (!companyName) return res.status(400).json({ error: '会社名は必須です' })
     try {
       const newId = uuidv4()
@@ -45,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         contactPerson:   contactPerson   || '',
         memo:            memo            || '',
         isTradingCompany: !!isTradingCompany,
+        lineUserId:      lineUserId      || '',
         createdAt: now,
         updatedAt: now,
       }
@@ -59,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo, isTradingCompany } = req.body
+    const { customerCode, companyName, companyNameKana, phone, address, contactPerson, memo, isTradingCompany, lineUserId } = req.body
     if (!companyName) return res.status(400).json({ error: '会社名は必須です' })
     try {
       const existing = await redis.hgetall(`customer:${id}`)
@@ -74,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         contactPerson:   contactPerson   || '',
         memo:            memo            || '',
         isTradingCompany: isTradingCompany !== undefined ? !!isTradingCompany : ((existing as any).isTradingCompany ?? false),
+        lineUserId:      lineUserId !== undefined ? (lineUserId || '') : ((existing as any).lineUserId ?? ''),
         updatedAt: new Date().toISOString(),
       }
       await redis.hset(`customer:${id}`, updated)

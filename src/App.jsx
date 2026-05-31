@@ -371,7 +371,7 @@ function Field({ label, value, onChange, required, type = 'text', fullWidth = fa
 // ============================================================
 // 顧客追加・編集モーダル
 // ============================================================
-const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '', memo: '', isTradingCompany: false }
+const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '', memo: '', isTradingCompany: false, lineUserId: '' }
 
 function CustomerModal({ customer, onSave, onClose }) {
   const isMobile = useIsMobile()
@@ -388,6 +388,7 @@ function CustomerModal({ customer, onSave, onClose }) {
       address:         customer.address         || '',
       contactPerson:   customer.contactPerson   || '',
       isTradingCompany: !!customer.isTradingCompany,
+      lineUserId:      customer.lineUserId      || '',
     } : emptyForm)
   }, [customer])
 
@@ -429,6 +430,7 @@ function CustomerModal({ customer, onSave, onClose }) {
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
           <Field label="住所" value={form.address} onChange={set('address')} fullWidth />
+          <Field label="LINEユーザーID（「現場」自動返信用）" value={form.lineUserId} onChange={set('lineUserId')} fullWidth />
           {error && <div style={S.error}>{error}</div>}
           <div style={S.actions}>
             <button type="button" style={S.cancelBtn} onClick={onClose}>キャンセル</button>

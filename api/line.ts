@@ -113,6 +113,119 @@ async function replyMessage(replyToken: string, text: string, token: string): Pr
   }
 }
 
+// 返信（reply）に複数メッセージ（テキスト＋画像など）を送る
+async function replyMessages(replyToken: string, messages: any[], token: string): Promise<void> {
+  if (!replyToken || !token || !messages.length) return
+  try {
+    await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ replyToken, messages: messages.slice(0, 5) }),
+    })
+  } catch (e) {
+    console.error('reply(multi) failed', e)
+  }
+}
+
+// 端末（日本時間）基準の本日 YYYY-MM-DD
+function todayJST(): string {
+  const now = new Date(Date.now() + 9 * 3600 * 1000) // UTC+9
+  return now.toISOString().slice(0, 10)
+}
+
+// 住所文字列から「緯度,経度」を取り出す（例: "... （緯度経度:33.1,130.2）" や "33.1, 130.2"）
+function extractLatLng(s: string): { lat: number; lng: number } | null {
+  const m = String(s || '').match(/(-?\d{1,3}\.\d{3,})\s*[,，]\s*(-?\d{1,3}\.\d{3,})/)
+  if (!m) return null
+  return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
+}
+
+// 出荷データから Google Static Maps の画像URLを作る（ピン＋矢印を線で描画）
+function staticMapUrl(ship: any): string | null {
+  const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || ''
+  if (!key) return null
+  const view = ship.mapView && typeof ship.mapView.lat === 'number' ? ship.mapView : null
+  const coords = extractLatLng(ship.siteAddress || '')
+  const center = view ? { lat: view.lat, lng: view.lng } : coords
+  if (!center) return null
+  const zoom = view ? Math.round(view.zoom || 18) : 17
+  const params: string[] = [
+    `size=640x400`, `scale=2`, `zoom=${zoom}`,
+    `center=${center.lat},${center.lng}`,
+    `markers=color:red%7C${center.lat},${center.lng}`,
+    `language=ja`, `region=JP`, `key=${key}`,
+  ]
+  // 矢印（緯度経度2点）を赤い太線で描画
+  const arrows = Array.isArray(ship.mapArrows) ? ship.mapArrows : []
+  for (const a of arrows.slice(0, 10)) {
+    if (typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
+      params.push(`path=color:0xe8211cff%7Cweight:5%7C${a.lat1},${a.lng1}%7C${a.lat2},${a.lng2}`)
+    }
+  }
+  return `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+}
+
+// 出荷情報を読みやすいテキストに整形
+function formatShipment(s: any): string {
+  const times = Array.isArray(s.times) ? s.times.map((t: any) => (t && t.text != null ? t.text : t)).filter(Boolean) : []
+  const drivers = Array.isArray(s.drivers) ? s.drivers.map((d: any) => d.name).filter(Boolean) : []
+  const lines: string[] = []
+  lines.push(`■ ${s.companyName || ''}${s.tradingCompany ? `（${s.tradingCompany}）` : ''}`)
+  if (s.siteName) lines.push(`現場: ${s.siteName}`)
+  if (times.length) lines.push(`時間: ${times.join(' / ')}`)
+  if (s.vehicleType) lines.push(`車種: ${s.vehicleType}${s.truckCount ? ` ${s.truckCount}台` : ''}`)
+  if (s.mixCode) lines.push(`配合: ${s.mixCode}`)
+  if (s.volume) lines.push(`量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
+  if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
+  if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
+  return lines.join('\n')
+}
+
+// LINEユーザーIDから、本日の出荷情報の返信メッセージ配列を作る
+async function buildGenbaReply(lineUserId: string): Promise<any[]> {
+  // 顧客を全件読み、lineUserId が一致する顧客を特定
+  const custIds = (await redis.smembers('customers')) || []
+  let customer: any = null
+  for (const cid of custIds) {
+    const c = await redis.hgetall<Record<string, any>>(`customer:${cid}`)
+    if (c && String(c.lineUserId || '') === lineUserId) { customer = c; break }
+  }
+  if (!customer) {
+    return [{ type: 'text', text: 'お客様情報が見つかりませんでした。\n（管理者に「LINEユーザーID」の登録をご依頼ください）' }]
+  }
+  // 本日 かつ この顧客の出荷を抽出
+  const today = todayJST()
+  const shipIds = (await redis.smembers('shipments')) || []
+  const ships: any[] = []
+  for (const sid of shipIds) {
+    const s = await redis.hgetall<Record<string, any>>(`shipment:${sid}`)
+    if (!s) continue
+    if (String(s.date) !== today) continue
+    if (s.companyId && customer.id && s.companyId === customer.id) ships.push(s)
+    else if (String(s.companyName || '') === String(customer.companyName || '')) ships.push(s)
+  }
+  if (ships.length === 0) {
+    return [{ type: 'text', text: `本日（${today}）の出荷予定はありません。` }]
+  }
+  // 時間順に
+  const ft = (s: any) => Array.isArray(s.times) && s.times.length ? String(s.times[0]?.text ?? s.times[0] ?? '') : ''
+  ships.sort((a, b) => ft(a).localeCompare(ft(b)))
+
+  const messages: any[] = []
+  messages.push({ type: 'text', text: `📋 本日（${today}）の出荷予定 ${ships.length}件` })
+  for (const s of ships.slice(0, 2)) {   // reply上限5メッセージ。各現場=テキスト+地図で2枠使うので最大2件
+    messages.push({ type: 'text', text: formatShipment(s) })
+    const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
+    const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr || s.siteName || '')}`
+    const img = staticMapUrl(s)
+    if (img) {
+      messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
+    }
+    // 住所＋地図リンクは直前のテキストに含めず別テキストにすると枠を食うため、最後にまとめない
+  }
+  return messages.slice(0, 5)
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ===== アプリからのプッシュ送信（認証必須）。Webhookと区別するため action=push で判定 =====
   if (req.method === 'POST' && (req.body as any)?.action === 'push') {
@@ -186,6 +299,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           let name = String(userId)
           if (token) { const p = await fetchProfile(userId, token); if (p) name = p }
           await redis.hset(USERS_KEY, { [userId]: name })
+
+          // キーフレーズ「現場」→ そのユーザーに紐づく本日の出荷情報を返信
+          if (ev.type === 'message' && ev?.message?.type === 'text') {
+            const text = String(ev.message.text || '').trim()
+            if (text === '現場' || text === 'げんば' || text === 'ゲンバ') {
+              const messages = await buildGenbaReply(userId)
+              await replyMessages(ev.replyToken, messages, token)
+            }
+          }
         }
       }
     } catch (e) {
