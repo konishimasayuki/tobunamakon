@@ -2787,7 +2787,11 @@ function SettingsPage() {
                   : data.users.map((u) => (
                     <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
                       <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
-                      <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                      <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                        <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました。\n顧客管理の「LINEユーザーID」欄に貼り付けてください。') }}
+                          style={{ border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 IDコピー</button>
+                        <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                      </span>
                     </div>
                   ))}
             </div>

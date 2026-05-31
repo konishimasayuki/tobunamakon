@@ -191,7 +191,7 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
     if (c && String(c.lineUserId || '') === lineUserId) { customer = c; break }
   }
   if (!customer) {
-    return [{ type: 'text', text: 'お客様情報が見つかりませんでした。\n（管理者に「LINEユーザーID」の登録をご依頼ください）' }]
+    return [{ type: 'text', text: `お客様情報が見つかりませんでした。\n下記のIDを管理者にお伝えのうえ、顧客の「LINEユーザーID」へ登録をご依頼ください。\n\n${lineUserId}` }]
   }
   // 本日 かつ この顧客の出荷を抽出
   const today = todayJST()
