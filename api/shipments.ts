@@ -5,7 +5,9 @@ import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = requireAuth(req)
-  if (!user) return res.status(401).json({ error: '認証が必要です' })
+  // 掲示板形式（出荷予定表）の別ウィンドウはログイン不要で閲覧できるよう、GET は認証なしで許可する。
+  // 作成・更新・削除（POST/PUT/DELETE）は従来どおり認証必須。
+  if (!user && req.method !== 'GET') return res.status(401).json({ error: '認証が必要です' })
 
   const idParam = req.query.id
   const id = Array.isArray(idParam) ? idParam[0] : idParam

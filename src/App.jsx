@@ -194,13 +194,13 @@ const S = {
   loginBtn:   { background: 'linear-gradient(135deg, #1a4d8f, #1a6a9f)', color: '#fff', border: 'none', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 4 },
   appRoot:    { display: 'flex', height: '100dvh', overflow: 'hidden' },
   sidebar:    { width: 200, background: '#0f3060', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)' },
+  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 },
   coName:     { color: '#fff', fontWeight: 700, fontSize: 13, lineHeight: 1.3 },
   syName:     { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 },
-  nav:        { flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 },
+  nav:        { flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 },
   navItem:    { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left', width: '100%' },
   navActive:  { background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 600 },
-  sideFoot:   { padding: '10px 14px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.1)' },
+  sideFoot:   { padding: '10px 14px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 },
   userName:   { color: '#fff', fontWeight: 600, fontSize: 12 },
   userRole:   { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 1 },
   logoutBtn:  { width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, padding: '6px 0', fontSize: 11, fontWeight: 500, cursor: 'pointer', marginTop: 8 },
@@ -2331,6 +2331,9 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [companyName, setCompanyName] = useState(s.companyName || '')
   const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
   const [siteName, setSiteName] = useState(s.siteName || '')
+  const [siteAddress, setSiteAddress] = useState(s.siteAddress || '')
+  const [mapView, setMapView] = useState(s.mapView || null)
+  const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
   const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
   const [truckCount, setTruckCount] = useState((s.truckCount ?? '') === '' ? '' : String(s.truckCount))
   const [mixParts, setMixParts] = useState(() => {
@@ -2381,7 +2384,8 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     const patch = {
       times: cleanTimes,
       date: date || s.date,
-      companyName, tradingCompany, siteName,
+      companyName, tradingCompany, siteName, siteAddress,
+      mapView, mapArrows,
       vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
@@ -2395,6 +2399,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     if ((s.companyName || '') !== companyName) changed.push('companyName')
     if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
     if ((s.siteName || '') !== siteName) changed.push('siteName')
+    if ((s.siteAddress || '') !== siteAddress) changed.push('siteAddress')
     if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
     if (String(s.truckCount ?? '') !== String(truckCount)) changed.push('truckCount')
     const origMixNotes = (Array.isArray(s.mixNotes) ? s.mixNotes : []).map(n => String(n || '').trim())
@@ -2412,7 +2417,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '90dvh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: 'calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'sticky', top: 0, background: '#fff', paddingBottom: 4 }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
           <button type="button" onClick={onClose} disabled={saving}
@@ -2421,9 +2426,9 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
         {/* 日付（左）／時間（右・最大2）。他のレイアウトは変えない */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'flex-start' }}>
-          <div style={{ flex: '0 0 44%', minWidth: 0 }}>
+          <div style={{ flex: '0 0 38%', minWidth: 0 }}>
             <label style={lblS}>日付</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%' }} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%', padding: '9px 6px' }} />
           </div>
           <div style={{ flex: '1 1 0', minWidth: 0 }}>
             <label style={lblS}>時間（最大2・上から順）</label>
@@ -2450,6 +2455,22 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
+
+        {/* 現場住所＋地図（住所編集・ピン/矢印編集） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>現場住所</label>
+          <input value={siteAddress} onChange={e => setSiteAddress(e.target.value)} placeholder={DEFAULT_SITE_ADDRESS} style={inS} />
+          <div style={{ marginTop: 8 }}>
+            <SiteMap
+              address={siteAddress}
+              onAddressChange={setSiteAddress}
+              mapView={mapView}
+              onMapViewChange={setMapView}
+              arrows={mapArrows}
+              onArrowsChange={setMapArrows}
+            />
+          </div>
+        </div>
 
         {/* 車種（3種複数選択）＋台数 */}
         <div style={{ marginBottom: 12 }}>
@@ -2990,6 +3011,8 @@ function AppInner() {
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
+  // 掲示板形式の出荷予定表（別ウィンドウ・閲覧専用）はログイン不要で開けるようにする
+  const isBoard = isPopup && view === 'schedule' && !initialEditId
   const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
@@ -3006,7 +3029,7 @@ function AppInner() {
     </div>
   )
 
-  if (!user) return <LoginPage />
+  if (!user && !isBoard) return <LoginPage />
 
   let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
