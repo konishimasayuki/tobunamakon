@@ -1267,8 +1267,10 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   useEffect(() => {
     if (!geocoderRef.current) return
     if (drawMode) return                         // 描画中は住所変更で地図を動かさない
-    if ((arrowsRef.current || []).length) return // 矢印がある＝位置確定済み。勝手に動かさない
     if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
+    // ユーザーが住所を編集した → 旧住所用に描いた矢印は破棄し、新住所へ地図を移動して再同期する。
+    // （矢印が残ると地図が動かず、保存される地図位置と住所がズレてLINEの地図画像が一致しなくなる）
+    if ((arrowsRef.current || []).length) onArrowsChange([])
     const target = (address && address.trim()) ? address : DEFAULT_SITE_ADDRESS
     const t = setTimeout(() => doGeocode(target), 800)
     return () => clearTimeout(t)
