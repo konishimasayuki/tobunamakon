@@ -168,10 +168,10 @@ function staticMapUrl(ship: any): string | null {
   if (!center) return null
   const zoom = hasView ? Math.round(view.zoom || 18) : 17
   const params: string[] = [
-    `size=640x400`, `scale=2`, `zoom=${zoom}`,
+    `size=600x400`, `scale=2`, `zoom=${zoom}`,
     `center=${center}`,
     `markers=color:red%7C${center}`,
-    `language=ja`, `region=JP`, `key=${key}`,
+    `language=ja`, `region=JP`, `maptype=roadmap`, `key=${key}`,
   ]
   // 矢印（緯度経度2点）を赤い太線で描画
   const arrows = asArr(ship.mapArrows)
@@ -354,27 +354,27 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
     },
   ]
   // 地図画像を別リプライで（残り枠ぶん。reply合計5まで）
+  let imgCount = 0
   for (const s of target) {
     if (messages.length >= 5) break
     const img = staticMapUrl(s)
-    if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
+    if (img) { messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img }); imgCount++ }
   }
-  // デバッグ: 地図画像が出ない理由を1行で（環境変数 LINE_DEBUG=1 のときだけ）
-  if (process.env.LINE_DEBUG === '1' && messages.length < 5) {
+  // 地図画像が1枚も付けられなかった場合のみ、原因＋URLをテキストで返す（成功時は静か）
+  if (imgCount === 0 && messages.length < 5) {
     const s0 = target[0]
     const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
     const view = asObj(s0.mapView)
     const coords = extractLatLng(s0.siteAddress || '')
     const url = staticMapUrl(s0) || ''
     const dbg = [
-      `key:${key ? key.slice(0, 8) + '…(' + key.length + ')' : 'なし'}`,
+      `key:${key ? 'あり(' + key.length + ')' : 'なし'}`,
       `view:${view && typeof view.lat === 'number' ? 'あり' : 'なし'}`,
       `coords:${coords ? 'あり' : 'なし'}`,
-      `addr:${String(s0.siteAddress || '').slice(0, 30)}`,
-      `url生成:${url ? 'OK' : 'NG'}`,
+      `url:${url ? 'OK' : 'NG'}`,
     ].join(' / ')
-    messages.push({ type: 'text', text: `[debug] ${dbg}` })
-    if (url) messages.push({ type: 'text', text: url })
+    messages.push({ type: 'text', text: `地図画像を出せませんでした。\n[${dbg}]` })
+    if (url) messages.push({ type: 'text', text: `↓このURLをブラウザで開くとGoogleのエラーが見えます\n${url}` })
   }
   return messages
 }
