@@ -2740,16 +2740,48 @@ function AssignPage() {
 }
 
 // テスト用の出荷登録データ。設定画面からワンタップで投入し、出荷予定表などの動作確認に使う。
-// date は実行時の本日基準で組み立てる（本日・翌日・翌々日に分散）。
+// 本日を起点に「1日10件 × 10日分（計100件）」を組み立てる。
 function buildTestShipments() {
   const dayStr = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-  return [
-    { date: dayStr(0), companyName: '高柳左官', tradingCompany: '', times: ['08:00', '午前'], siteName: '中学校8', siteAddress: '佐賀県小城市三日月町織島６１３', vehicleType: '7t', truckCount: '1', mixCode: '10-18-10', mixNotes: ['', 'カタメ', ''], volume: '10', drivers: [{ id: '', name: '小西公幸' }], notes: [{ text: '【テスト】午前現場', important: false }], siteContact: '090-0000-0001' },
-    { date: dayStr(0), companyName: '（有）徳島景画', tradingCompany: '東部商事', times: ['10:30'], siteName: '市民体育館 改修', siteAddress: '佐賀県神埼市神埼町志波屋２０２０', vehicleType: '4t・7t', truckCount: '2', mixCode: '18-18-20', mixNotes: ['', '', ''], volume: '25', drivers: [{ id: '', name: '田中一郎' }, { id: '', name: '佐藤健' }], notes: [{ text: '【テスト】2台手配', important: false }], siteContact: '090-0000-0002' },
-    { date: dayStr(0), companyName: '山田建設', tradingCompany: '', times: ['午後'], siteName: '県道拡幅工事', siteAddress: '佐賀県佐賀市本庄町１丁目', vehicleType: '大型', truckCount: '1', mixCode: '21-18-25', mixNotes: ['', '', ''], volume: '12', volumeUncertain: true, drivers: [], notes: [{ text: '【テスト】数量未確定', important: false }], siteContact: '0952-00-0003' },
-    { date: dayStr(1), companyName: '九州土木', tradingCompany: '生コン商事', times: ['09:00'], siteName: '橋梁下部工', siteAddress: '佐賀県鳥栖市本鳥栖町', vehicleType: '7t', truckCount: '3', mixCode: '24-12-20', mixNotes: ['', '高強度', ''], volume: '30', drivers: [{ id: '', name: '鈴木大輔' }], notes: [{ text: '【テスト】翌日分', important: false }], siteContact: '0942-00-0004' },
-    { date: dayStr(2), companyName: '東部生コン（社内）', tradingCompany: '', times: ['07:30', '午前'], siteName: 'プラント前 試験打設', siteAddress: '〒842-0121 佐賀県神埼市神埼町志波屋２０２０', vehicleType: '4t', truckCount: '1', mixCode: '15-15-15', mixNotes: ['', '', ''], volume: '5', drivers: [], notes: [{ text: '【テスト】翌々日分', important: false }], siteContact: '' },
+  const companies = ['高柳左官', '（有）徳島景画', '山田建設', '九州土木', '佐賀建設', '東肥組', '鳥栖工務店', '大和コンクリート', '神埼建設', '有明工業']
+  const tradings  = ['', '東部商事', '生コン商事', '', '九州資材', '', '佐賀生コン商会', '', '西日本建材', '']
+  const sites     = ['中学校8', '市民体育館 改修', '県道拡幅工事', '橋梁下部工', '配水池工事', '農道舗装', '小学校体育館', '護岸工事', 'マンション基礎', '排水路改良']
+  const addresses = [
+    '佐賀県小城市三日月町織島６１３', '佐賀県神埼市神埼町志波屋２０２０', '佐賀県佐賀市本庄町１丁目', '佐賀県鳥栖市本鳥栖町',
+    '佐賀県神埼市千代田町餘江', '佐賀県佐賀市大和町尼寺', '佐賀県小城市小城町', '佐賀県三養基郡みやき町', '佐賀県佐賀市諸富町', '佐賀県神埼郡吉野ヶ里町',
   ]
+  const vehicles  = ['4t', '7t', '大型', '4t・7t', '7t・大型', '7t', '大型', '4t', '7t', '4t・7t・大型']
+  const mixes     = ['10-18-10', '18-18-20', '21-18-25', '24-12-20', '15-15-15', '27-18-20', '30-12-25', '21-15-20', '18-12-20', '24-18-25']
+  const driverPool = ['小西公幸', '田中一郎', '佐藤健', '鈴木大輔', '高橋誠', '渡辺隆', '伊藤豊', '山本浩']
+  const timeSlots = [['08:00', '午前'], ['10:30'], ['午後'], ['09:00'], ['07:30', '午前'], ['13:00'], ['08:30'], ['11:00', '午前'], ['14:00'], ['15:30']]
+
+  const rows = []
+  for (let day = 0; day < 10; day++) {
+    for (let i = 0; i < 10; i++) {
+      const idx = (day * 3 + i) % 10           // 日替わりで割り当てをずらして見た目に変化を出す
+      const nDrivers = i % 4                    // 0〜3人
+      const drivers = Array.from({ length: nDrivers }, (_, k) => ({ id: '', name: driverPool[(idx + k) % driverPool.length] }))
+      const hasNote = i % 5 === 0
+      rows.push({
+        date: dayStr(day),
+        companyName: companies[idx],
+        tradingCompany: tradings[(idx + i) % tradings.length],
+        times: timeSlots[i],
+        siteName: `${sites[idx]}（${day + 1}日目-${i + 1}）`,
+        siteAddress: addresses[idx],
+        vehicleType: vehicles[idx],
+        truckCount: String((i % 3) + 1),
+        mixCode: mixes[idx],
+        mixNotes: i % 4 === 1 ? ['', 'カタメ', ''] : ['', '', ''],
+        volume: String(5 + i * 2),
+        volumeUncertain: i % 7 === 0,
+        drivers,
+        notes: hasNote ? [{ text: '【テスト】動作確認用データ', important: false }] : [],
+        siteContact: `090-0000-${String(day * 10 + i).padStart(4, '0')}`,
+      })
+    }
+  }
+  return rows
 }
 
 function SettingsPage() {
@@ -2786,18 +2818,24 @@ function SettingsPage() {
   }
   const importTestShipments = async () => {
     const rows = buildTestShipments()
-    if (!window.confirm(`テスト用の出荷登録データを${rows.length}件インポートします。\n（本日・翌日・翌々日に分散して登録されます）\nよろしいですか？`)) return
+    if (!window.confirm(`テスト用の出荷登録データを${rows.length}件（1日10件×10日分）インポートします。\nよろしいですか？`)) return
     setImporting(true)
     let ok = 0
     const fails = []
-    for (const r of rows) {
-      try { await api.post('/api/shipments', r); ok++ }
-      catch (e) { fails.push(`${r.companyName}: ${e.message}`) }
+    // 100件を1件ずつ直列だと時間がかかるため、10件ずつ並列で投入する
+    const CHUNK = 10
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const batch = rows.slice(i, i + CHUNK)
+      const results = await Promise.allSettled(batch.map(r => api.post('/api/shipments', r)))
+      results.forEach((res, k) => {
+        if (res.status === 'fulfilled') ok++
+        else fails.push(`${batch[k].companyName}: ${res.reason?.message || 'エラー'}`)
+      })
     }
     setImporting(false)
     notifyShipmentsChanged()   // 開いている出荷予定表タブに反映
     let msg = `インポート完了：${ok}/${rows.length}件 登録しました。\n「出荷予定表」で確認できます。`
-    if (fails.length) msg += `\n\n失敗:\n${fails.join('\n')}`
+    if (fails.length) msg += `\n\n失敗（先頭5件）:\n${fails.slice(0, 5).join('\n')}`
     alert(msg)
   }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
@@ -2822,7 +2860,7 @@ function SettingsPage() {
       <div style={box}>
         <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🧪 テスト用データ</h3>
         <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
-          動作確認用の出荷登録データ（{buildTestShipments().length}件・本日／翌日／翌々日）をまとめて登録します。<br />
+          動作確認用の出荷登録データ（本日から10日分・1日10件＝計100件）をまとめて登録します。<br />
           登録後は「出荷予定表」や「出荷登録」で内容を確認・編集・削除できます。
         </div>
         <button onClick={importTestShipments} disabled={importing}
