@@ -1320,7 +1320,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
 
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, isPopup }) {
   const isMobile = useIsMobile()
-  const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
+  const stacked = useIsMobile(1500)   // 1500px未満はフォーム上・地図下に縦積み（iPad横・縦とも。フォーム700+地図640が横に並ぶには広い画面が必要なため）
   const [form, setForm]             = useState({ ...emptyShipForm })
   const [shipments, setShipments]   = useState([])
   const [customers, setCustomers]   = useState([])
@@ -1518,7 +1518,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
 
   return (
-    <div ref={topRef} style={{ height: '100%', overflow: 'auto' }}>
+    <div ref={topRef} style={{ height: '100%', width: '100%', minWidth: 0, overflowX: 'auto', overflowY: 'auto' }}>
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
