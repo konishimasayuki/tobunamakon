@@ -140,25 +140,43 @@ function extractLatLng(s: string): { lat: number; lng: number } | null {
   return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
 }
 
+// hgetall で文字列化されている場合があるオブジェクト/配列を安全にパース
+function asObj(v: any): any {
+  if (v == null) return null
+  if (typeof v === 'string') { try { return JSON.parse(v) } catch { return null } }
+  return v
+}
+function asArr(v: any): any[] {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : [] } catch { return [] } }
+  return []
+}
+
 // 出荷データから Google Static Maps の画像URLを作る（ピン＋矢印を線で描画）
 function staticMapUrl(ship: any): string | null {
-  const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || ''
+  const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
   if (!key) return null
-  const view = ship.mapView && typeof ship.mapView.lat === 'number' ? ship.mapView : null
+  const view = asObj(ship.mapView)
+  const hasView = view && typeof view.lat === 'number'
   const coords = extractLatLng(ship.siteAddress || '')
-  const center = view ? { lat: view.lat, lng: view.lng } : coords
+  // 中心: 固定ビュー > 住所内座標 > 住所文字列（Static Mapsは住所も中心に使える）
+  const addrText = String(ship.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
+  let center: string | null = null
+  if (hasView) center = `${view.lat},${view.lng}`
+  else if (coords) center = `${coords.lat},${coords.lng}`
+  else if (addrText) center = encodeURIComponent(addrText)
   if (!center) return null
-  const zoom = view ? Math.round(view.zoom || 18) : 17
+  const zoom = hasView ? Math.round(view.zoom || 18) : 17
   const params: string[] = [
     `size=640x400`, `scale=2`, `zoom=${zoom}`,
-    `center=${center.lat},${center.lng}`,
-    `markers=color:red%7C${center.lat},${center.lng}`,
+    `center=${center}`,
+    `markers=color:red%7C${center}`,
     `language=ja`, `region=JP`, `key=${key}`,
   ]
   // 矢印（緯度経度2点）を赤い太線で描画
-  const arrows = Array.isArray(ship.mapArrows) ? ship.mapArrows : []
+  const arrows = asArr(ship.mapArrows)
   for (const a of arrows.slice(0, 10)) {
-    if (typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
+    if (a && typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
       params.push(`path=color:0xe8211cff%7Cweight:5%7C${a.lat1},${a.lng1}%7C${a.lat2},${a.lng2}`)
     }
   }
@@ -178,6 +196,16 @@ function formatShipment(s: any): string {
   if (s.volume) lines.push(`量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
   if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
   if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
+  // 現場住所＋Googleマップリンク
+  const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
+  if (addr) {
+    lines.push(`住所: ${addr}`)
+    // 住所がすでにURL（maps.app.goo.gl 等）ならそのまま、違えば検索URLを生成
+    const url = /^https?:\/\//.test(addr)
+      ? addr
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
+    lines.push(`地図: ${url}`)
+  }
   return lines.join('\n')
 }
 
