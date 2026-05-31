@@ -2435,7 +2435,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {times.map((t, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1, minWidth: 0 }} />
+                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: '1 1 0', minWidth: 0, maxWidth: 150 }} />
                   {times.length > 1 && (
                     <button type="button" onClick={() => delTime(i)}
                       style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
@@ -2739,6 +2739,19 @@ function AssignPage() {
   )
 }
 
+// テスト用の出荷登録データ。設定画面からワンタップで投入し、出荷予定表などの動作確認に使う。
+// date は実行時の本日基準で組み立てる（本日・翌日・翌々日に分散）。
+function buildTestShipments() {
+  const dayStr = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  return [
+    { date: dayStr(0), companyName: '高柳左官', tradingCompany: '', times: ['08:00', '午前'], siteName: '中学校8', siteAddress: '佐賀県小城市三日月町織島６１３', vehicleType: '7t', truckCount: '1', mixCode: '10-18-10', mixNotes: ['', 'カタメ', ''], volume: '10', drivers: [{ id: '', name: '小西公幸' }], notes: [{ text: '【テスト】午前現場', important: false }], siteContact: '090-0000-0001' },
+    { date: dayStr(0), companyName: '（有）徳島景画', tradingCompany: '東部商事', times: ['10:30'], siteName: '市民体育館 改修', siteAddress: '佐賀県神埼市神埼町志波屋２０２０', vehicleType: '4t・7t', truckCount: '2', mixCode: '18-18-20', mixNotes: ['', '', ''], volume: '25', drivers: [{ id: '', name: '田中一郎' }, { id: '', name: '佐藤健' }], notes: [{ text: '【テスト】2台手配', important: false }], siteContact: '090-0000-0002' },
+    { date: dayStr(0), companyName: '山田建設', tradingCompany: '', times: ['午後'], siteName: '県道拡幅工事', siteAddress: '佐賀県佐賀市本庄町１丁目', vehicleType: '大型', truckCount: '1', mixCode: '21-18-25', mixNotes: ['', '', ''], volume: '12', volumeUncertain: true, drivers: [], notes: [{ text: '【テスト】数量未確定', important: false }], siteContact: '0952-00-0003' },
+    { date: dayStr(1), companyName: '九州土木', tradingCompany: '生コン商事', times: ['09:00'], siteName: '橋梁下部工', siteAddress: '佐賀県鳥栖市本鳥栖町', vehicleType: '7t', truckCount: '3', mixCode: '24-12-20', mixNotes: ['', '高強度', ''], volume: '30', drivers: [{ id: '', name: '鈴木大輔' }], notes: [{ text: '【テスト】翌日分', important: false }], siteContact: '0942-00-0004' },
+    { date: dayStr(2), companyName: '東部生コン（社内）', tradingCompany: '', times: ['07:30', '午前'], siteName: 'プラント前 試験打設', siteAddress: '〒842-0121 佐賀県神埼市神埼町志波屋２０２０', vehicleType: '4t', truckCount: '1', mixCode: '15-15-15', mixNotes: ['', '', ''], volume: '5', drivers: [], notes: [{ text: '【テスト】翌々日分', important: false }], siteContact: '' },
+  ]
+}
+
 function SettingsPage() {
   const isMobile = useIsMobile()
   const [token, setToken] = useState('')
@@ -2746,6 +2759,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [usersOpen, setUsersOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -2770,6 +2784,22 @@ function SettingsPage() {
     if (!window.confirm('このグループを一覧から削除しますか？')) return
     try { await api.del(`/api/line?groupId=${encodeURIComponent(groupId)}`); load() } catch (e) { alert(e.message) }
   }
+  const importTestShipments = async () => {
+    const rows = buildTestShipments()
+    if (!window.confirm(`テスト用の出荷登録データを${rows.length}件インポートします。\n（本日・翌日・翌々日に分散して登録されます）\nよろしいですか？`)) return
+    setImporting(true)
+    let ok = 0
+    const fails = []
+    for (const r of rows) {
+      try { await api.post('/api/shipments', r); ok++ }
+      catch (e) { fails.push(`${r.companyName}: ${e.message}`) }
+    }
+    setImporting(false)
+    notifyShipmentsChanged()   // 開いている出荷予定表タブに反映
+    let msg = `インポート完了：${ok}/${rows.length}件 登録しました。\n「出荷予定表」で確認できます。`
+    if (fails.length) msg += `\n\n失敗:\n${fails.join('\n')}`
+    alert(msg)
+  }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
   const copyText = (t) => { navigator.clipboard?.writeText(t); alert('コピーしました\n' + t) }
   const fmtDT = (s) => { const d = new Date(s); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -2787,6 +2817,18 @@ function SettingsPage() {
         <label style={{ fontSize: 12, color: '#6b7a8d' }}>チャネルアクセストークン {data.hasToken && <span style={{ color: '#1a8f5a' }}>（設定済み）</span>}</label>
         <input style={{ ...inp, marginTop: 4 }} value={token} onChange={e => setToken(e.target.value)} placeholder={data.hasToken ? '変更する場合のみ入力' : 'LINE Messaging API のチャネルアクセストークン'} />
         <button onClick={saveSettings} disabled={saving} style={{ ...S.saveBtn, marginTop: 12, opacity: saving ? 0.7 : 1 }}>{saving ? '保存中...' : '保存'}</button>
+      </div>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🧪 テスト用データ</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          動作確認用の出荷登録データ（{buildTestShipments().length}件・本日／翌日／翌々日）をまとめて登録します。<br />
+          登録後は「出荷予定表」や「出荷登録」で内容を確認・編集・削除できます。
+        </div>
+        <button onClick={importTestShipments} disabled={importing}
+          style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, opacity: importing ? 0.6 : 1 }}>
+          {importing ? 'インポート中…' : '＋ テスト用の出荷登録をインポート'}
+        </button>
       </div>
 
       <div style={box}>
