@@ -2425,7 +2425,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14, alignItems: 'start' }}>
           <div style={{ minWidth: 0 }}>
             <label style={lblS}>日付</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%' }} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: 'auto', maxWidth: '100%', display: 'block' }} />
           </div>
           <div style={{ minWidth: 0 }}>
             <label style={lblS}>時間（最大2・上から順）</label>
