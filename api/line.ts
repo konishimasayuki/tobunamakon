@@ -187,15 +187,19 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const custIds = (await redis.smembers('customers')) || []
   let customer: any = null
   const want = String(lineUserId || '').trim()
-  let withIdCount = 0          // lineUserId が設定されている顧客数（デバッグ用）
+  let withIdCount = 0
+  let sampleKeys = ''
+  let i = 0
   for (const cid of custIds) {
     const c = await redis.hgetall<Record<string, any>>(`customer:${cid}`)
+    if (i === 0 && c) sampleKeys = Object.keys(c).join(',')
+    i++
     const have = String((c && c.lineUserId) || '').trim()
     if (have) withIdCount++
     if (c && have && have === want) { customer = c; break }
   }
   if (!customer) {
-    return [{ type: 'text', text: `お客様情報が見つかりませんでした。\n\n受信ID:\n${want}\n\n(顧客総数:${custIds.length} / LINE ID登録済:${withIdCount})\n上記IDを顧客の「LINEユーザーID」へ登録してください。` }]
+    return [{ type: 'text', text: `お客様情報が見つかりませんでした。\n\n受信ID:\n${want}\n\n(顧客総数:${custIds.length} / LINE ID登録済:${withIdCount})\n先頭顧客の項目:\n${sampleKeys}` }]
   }
   // 本日 かつ この顧客の出荷を抽出
   const today = todayJST()
