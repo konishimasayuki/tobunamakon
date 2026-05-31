@@ -66,6 +66,28 @@ function useShipmentsChanged(onChange) {
   }, [onChange])
 }
 
+// ローカル（端末）時刻基準の YYYY-MM-DD を返す（toISOStringはUTCで日付がずれるため）
+function localToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+// 0:00 を跨いだら、表示中の日付が「それまでの本日」のときだけ自動で新しい本日に繰り上げる。
+// （ユーザーが別の日付を手動選択している間は変更しない）
+function useAutoToday(setDate) {
+  const lastTodayRef = useRef(localToday())
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = localToday()
+      if (t !== lastTodayRef.current) {
+        const prevToday = lastTodayRef.current
+        lastTodayRef.current = t
+        setDate(prev => (prev === prevToday ? t : prev))
+      }
+    }, 30000)
+    return () => clearInterval(id)
+  }, [setDate])
+}
+
 
 // ============================================================
 // 認証コンテキスト
@@ -126,7 +148,7 @@ function exportCSV(customers) {
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
   a.href     = url
-  a.download = `顧客一覧_${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `顧客一覧_${localToday()}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -839,7 +861,7 @@ const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
 
 const emptyShipForm = {
-  date: new Date().toISOString().slice(0, 10),
+  date: localToday(),
   companyId: '', companyName: '',
   tradingCompany: '',
   times: [{ text: '', important: false }],
@@ -1348,7 +1370,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
 
   const toForm = (s) => ({
-    date: s.date || new Date().toISOString().slice(0, 10),
+    date: s.date || localToday(),
     companyId: s.companyId || '',
     companyName: s.companyName || '',
     tradingCompany: s.tradingCompany || '',
@@ -1529,7 +1551,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
                     <div className="haigou3" style={redIf('mixCode')}>
                       <div className="hgcol">
-                        <input className="hgnote" placeholder="特記" value={mixNote(0)} onChange={e => setMixNote(0, e.target.value)} />
+                        <div className="hgnote-spacer" />
                         <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(0)} onChange={e => setMix(0, e.target.value)} />
                       </div>
                       <span className="hgsep">-</span>
@@ -1539,7 +1561,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       </div>
                       <span className="hgsep">-</span>
                       <div className="hgcol">
-                        <input className="hgnote" placeholder="特記" value={mixNote(2)} onChange={e => setMixNote(2, e.target.value)} />
+                        <div className="hgnote-spacer" />
                         <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(2)} onChange={e => setMix(2, e.target.value)} />
                       </div>
                     </div>
@@ -1725,7 +1747,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const compact = isMobile && !isPopup
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
+  useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
@@ -1801,7 +1824,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       }
       case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
-      case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '?' : '')
+      case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '  ?' : '')
       default: return s[f] == null ? '' : String(s[f])
     }
   }
@@ -1878,8 +1901,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
-        onInput={e => fitOne(e.target)}
-        onBlur={e => saveField(s, f, e.target.value)}
+        readOnly={compact}
+        tabIndex={compact ? -1 : undefined}
+        style={compact ? { pointerEvents: 'none' } : undefined}
+        onInput={compact ? undefined : (e => fitOne(e.target))}
+        onBlur={compact ? undefined : (e => saveField(s, f, e.target.value))}
       />
     )
   }
@@ -1919,9 +1945,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
       <div className={'sc-times' + (items.length === 1 ? ' single' : '')} key={'times' + (isChanged(s, 'times') ? '_c' : '') + '_n' + items.length}>
         {items.map((t, i) => (
           <Fragment key={i}>
-            {i > 0 && <span className="sc-timesep">〜</span>}
+            {i > 0 && <span className="sc-timesep">　</span>}
             <input className={cls} defaultValue={t} placeholder={i === 0 ? '時間' : ''}
-              size={5} onBlur={e => saveAll(e.target.closest('.sc-times'))} />
+              size={5} readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} />
           </Fragment>
         ))}
       </div>
@@ -1974,21 +2000,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const single = n <= 1
     const changed = isChanged(s, 'drivers')
     const cls = 'sc-in sc-driverline' + (changed ? ' changed' : '') + (single ? ' xbig' : ' big')
-    const saveAll = (container) => {
-      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
-      saveField(s, 'drivers', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
-    }
     let idx = 0
     return (
-      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}
-        onBlur={e => saveAll(e.currentTarget)}>
+      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}>
         {rows.map((row, ri) => (
           <div className="sc-drv-row" key={ri}>
             {row.map((nm) => {
               const i = idx++
               return (
                 <input key={i} className={cls} defaultValue={nm}
-                  placeholder={i === 0 ? '担当' : ''} />
+                  placeholder={i === 0 ? '担当' : ''} readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} />
               )
             })}
           </div>
@@ -2057,7 +2078,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
         </div>
       </div>
       )}
@@ -2090,7 +2111,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                         {s.truckCount ? <span className="sc-truck">{s.truckCount}台</span> : null}
                       </div>
                     </div>
-                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
                   {/* 備考（横並び） */}
@@ -2147,9 +2168,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
                   {cell(s, 'mixCode', '', { center: true, big: true })}
-                  {(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? (
+                  {(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? (
                     <div className="sc-mixnotes">
-                      <span>{s.mixNotes[0] || ''}</span><span>{s.mixNotes[1] || ''}</span><span>{s.mixNotes[2] || ''}</span>
+                      <span /><span>{s.mixNotes[1]}</span><span />
                     </div>
                   ) : null}
                 </td>
@@ -2352,14 +2373,16 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
         {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>配合（各セクションに特記可）</label>
+          <label style={lblS}>配合（中央のみ特記可）</label>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
             {[0, 1, 2].map(i => (
               <Fragment key={i}>
                 {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <input value={mixNotes[i]} onChange={e => setMixNote(i, e.target.value)} placeholder="特記"
-                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                  {i === 1
+                    ? <input value={mixNotes[1]} onChange={e => setMixNote(1, e.target.value)} placeholder="特記"
+                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                    : <div style={{ height: 15 }} />}
                   <input value={mixParts[i]} onChange={e => setMixPart(i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
                     style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
                 </div>
@@ -2434,7 +2457,7 @@ const RPT = {
 
 function DashboardPage() {
   const { all, loading } = useShipments()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localToday()
   const ms = mondayOf(today)
   const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return ymd(d) })
   const todays = all.filter(s => s.date === today)
@@ -2481,11 +2504,11 @@ function DashboardPage() {
 }
 
 function WeeklySchedulePage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
   const ms = new Date(date)   // 選択日（既定は本日）を左端に7日分表示
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = localToday()
   return (
     <div style={RPT.wrap}>
       <div style={RPT.head}>
@@ -2515,7 +2538,7 @@ function WeeklySchedulePage() {
 }
 
 function ShipReportPage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
   const rows = all.filter(s => s.date === date).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
   const totalVol = rows.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
@@ -2551,7 +2574,7 @@ function ShipReportPage() {
 }
 
 function DriverReportPage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
   const rows = all.filter(s => s.date === date)
   const groups = {}
