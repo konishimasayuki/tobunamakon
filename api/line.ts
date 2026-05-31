@@ -154,7 +154,7 @@ function asArr(v: any): any[] {
 
 // 出荷データから Google Static Maps の画像URLを作る（ピン＋矢印を線で描画）
 function staticMapUrl(ship: any): string | null {
-  const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
+  const key = process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GMAPS_API_KEY || ''
   if (!key) return null
   const view = asObj(ship.mapView)
   const hasView = view && typeof view.lat === 'number'
@@ -363,7 +363,7 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   // 地図画像が1枚も付けられなかった場合のみ、原因＋URLをテキストで返す（成功時は静か）
   if (imgCount === 0 && messages.length < 5) {
     const s0 = target[0]
-    const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
+    const key = process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GMAPS_API_KEY || ''
     const view = asObj(s0.mapView)
     const coords = extractLatLng(s0.siteAddress || '')
     const url = staticMapUrl(s0) || ''
