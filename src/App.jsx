@@ -576,7 +576,7 @@ function EmployeeModal({ employee, onSave, onClose }) {
             <Field label="氏名 *"   value={form.name}       onChange={set('name')} required />
           </div>
           <div style={isMobile ? S.grid1 : S.grid2}>
-            <Field label="LINE ID" value={form.lineId} onChange={set('lineId')} />
+            <Field label="LINE ID（U…で始まるユーザーID）" value={form.lineId} onChange={set('lineId')} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={S.smLabel}>種別 *</label>
               <select
