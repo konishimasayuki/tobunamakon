@@ -181,55 +181,66 @@ function formatShipment(s: any): string {
   return lines.join('\n')
 }
 
-// LINEユーザーIDから、本日の出荷情報の返信メッセージ配列を作る
+// LINEユーザーIDから、本日の出荷情報の返信メッセージ配列を作る。
+// 送信者を「従業員(ドライバー)のlineId」「顧客のlineUserId」の両方で照合する。
 async function buildGenbaReply(lineUserId: string): Promise<any[]> {
-  // 顧客を全件読み、lineUserId が一致する顧客を特定
+  const want = String(lineUserId || '').trim()
+  const today = todayJST()
+
+  // 1) 従業員（ドライバー）として照合
+  const empIds = (await redis.smembers('employees')) || []
+  let employee: any = null
+  for (const eid of empIds) {
+    const e = await redis.hgetall<Record<string, any>>(`employee:${eid}`)
+    const have = String((e && e.lineId) || '').trim()
+    if (e && have && have === want) { employee = e; break }
+  }
+
+  // 2) 顧客（業者）として照合
   const custIds = (await redis.smembers('customers')) || []
   let customer: any = null
-  const want = String(lineUserId || '').trim()
-  let withIdCount = 0
-  let sampleKeys = ''
-  let i = 0
   for (const cid of custIds) {
     const c = await redis.hgetall<Record<string, any>>(`customer:${cid}`)
-    if (i === 0 && c) sampleKeys = Object.keys(c).join(',')
-    i++
     const have = String((c && c.lineUserId) || '').trim()
-    if (have) withIdCount++
     if (c && have && have === want) { customer = c; break }
   }
-  if (!customer) {
-    return [{ type: 'text', text: `お客様情報が見つかりませんでした。\n\n受信ID:\n${want}\n\n(顧客総数:${custIds.length} / LINE ID登録済:${withIdCount})\n先頭顧客の項目:\n${sampleKeys}` }]
+
+  if (!employee && !customer) {
+    return [{ type: 'text', text: `登録情報が見つかりませんでした。\n\n受信ID:\n${want}\n\n従業員管理の「LINE ID」または顧客管理の「LINEユーザーID」に、このIDを登録してください。` }]
   }
-  // 本日 かつ この顧客の出荷を抽出
-  const today = todayJST()
+
+  // 本日の出荷を抽出（従業員＝担当に含まれる出荷／顧客＝その業者の出荷）
   const shipIds = (await redis.smembers('shipments')) || []
   const ships: any[] = []
   for (const sid of shipIds) {
     const s = await redis.hgetall<Record<string, any>>(`shipment:${sid}`)
     if (!s) continue
     if (String(s.date) !== today) continue
-    if (s.companyId && customer.id && s.companyId === customer.id) ships.push(s)
-    else if (String(s.companyName || '') === String(customer.companyName || '')) ships.push(s)
+    let hit = false
+    if (employee) {
+      const drivers = Array.isArray(s.drivers) ? s.drivers : []
+      if (drivers.some((d: any) => (d.id && employee.id && d.id === employee.id) || String(d.name || '') === String(employee.name || ''))) hit = true
+    }
+    if (!hit && customer) {
+      if (s.companyId && customer.id && s.companyId === customer.id) hit = true
+      else if (String(s.companyName || '') === String(customer.companyName || '')) hit = true
+    }
+    if (hit) ships.push(s)
   }
+
+  const who = employee ? `${employee.name} さん` : `${customer.companyName} 様`
   if (ships.length === 0) {
-    return [{ type: 'text', text: `本日（${today}）の出荷予定はありません。` }]
+    return [{ type: 'text', text: `${who}\n本日（${today}）の出荷予定はありません。` }]
   }
-  // 時間順に
   const ft = (s: any) => Array.isArray(s.times) && s.times.length ? String(s.times[0]?.text ?? s.times[0] ?? '') : ''
   ships.sort((a, b) => ft(a).localeCompare(ft(b)))
 
   const messages: any[] = []
-  messages.push({ type: 'text', text: `📋 本日（${today}）の出荷予定 ${ships.length}件` })
-  for (const s of ships.slice(0, 2)) {   // reply上限5メッセージ。各現場=テキスト+地図で2枠使うので最大2件
+  messages.push({ type: 'text', text: `📋 ${who}\n本日（${today}）の出荷予定 ${ships.length}件` })
+  for (const s of ships.slice(0, 2)) {   // reply上限5メッセージ。各現場=テキスト+地図で2枠
     messages.push({ type: 'text', text: formatShipment(s) })
-    const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
-    const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr || s.siteName || '')}`
     const img = staticMapUrl(s)
-    if (img) {
-      messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
-    }
-    // 住所＋地図リンクは直前のテキストに含めず別テキストにすると枠を食うため、最後にまとめない
+    if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
   }
   return messages.slice(0, 5)
 }
