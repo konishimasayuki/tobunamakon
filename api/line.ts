@@ -377,7 +377,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!token) return res.status(400).json({ error: 'LINEチャネルアクセストークンが未設定です（設定画面で登録してください）' })
     const s = await redis.hgetall<Record<string, any>>(`shipment:${shipmentId}`)
     if (!s || Object.keys(s).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
-    // 「現場」返信と同じ：伝票カード＋矢印付き地図画像
+    // 「現場情報取得」返信と同じ：伝票カード＋矢印付き地図画像
     const pushMsgs: any[] = [
       { type: 'flex', altText: `出荷予定 ${s.siteName || s.companyName || ''}`, contents: shipmentBubble(s) },
     ]
@@ -506,10 +506,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (token) { const p = await fetchProfile(userId, token); if (p) name = p }
           await redis.hset(USERS_KEY, { [userId]: name })
 
-          // キーフレーズ「現場」→ そのユーザーに紐づく本日の出荷情報を返信
+          // キーフレーズ「現場情報取得」→ そのユーザーに紐づく本日の出荷情報を返信
           if (ev.type === 'message' && ev?.message?.type === 'text') {
             const text = String(ev.message.text || '').trim()
-            if (text === '現場' || text === 'げんば' || text === 'ゲンバ') {
+            if (text === '現場情報取得') {
               const messages = await buildGenbaReply(userId)
               await replyMessages(ev.replyToken, messages, token)
             }

@@ -430,7 +430,7 @@ function CustomerModal({ customer, onSave, onClose }) {
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
           <Field label="住所" value={form.address} onChange={set('address')} fullWidth />
-          <Field label="LINEユーザーID（「現場」自動返信用）" value={form.lineUserId} onChange={set('lineUserId')} fullWidth />
+          <Field label="LINEユーザーID（「現場情報取得」自動返信用）" value={form.lineUserId} onChange={set('lineUserId')} fullWidth />
           {error && <div style={S.error}>{error}</div>}
           <div style={S.actions}>
             <button type="button" style={S.cancelBtn} onClick={onClose}>キャンセル</button>
@@ -2426,9 +2426,9 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
         {/* 日付（左）／時間（右・最大2）。他のレイアウトは変えない */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'flex-start' }}>
-          <div style={{ flex: '0 0 38%', minWidth: 0 }}>
+          <div style={{ flex: '0 0 40%', minWidth: 0 }}>
             <label style={lblS}>日付</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%', padding: '9px 6px' }} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%', fontSize: 14, padding: '9px 4px', textAlign: 'center' }} />
           </div>
           <div style={{ flex: '1 1 0', minWidth: 0 }}>
             <label style={lblS}>時間（最大2・上から順）</label>
