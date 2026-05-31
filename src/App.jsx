@@ -2297,6 +2297,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const initDrivers = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []))
     .map(d => ({ id: d.id || '', name: d.name }))
   const [times, setTimes] = useState(initTimes.length ? initTimes : [''])
+  const [date, setDate] = useState(s.date || '')
   const [companyName, setCompanyName] = useState(s.companyName || '')
   const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
   const [siteName, setSiteName] = useState(s.siteName || '')
@@ -2349,6 +2350,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     const mixNotesClean = mixNotes.map(n => n.trim())
     const patch = {
       times: cleanTimes,
+      date: date || s.date,
       companyName, tradingCompany, siteName,
       vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
@@ -2359,6 +2361,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     const origTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
     if (!eq(origTimes, cleanTimes)) changed.push('times')
+    if (date && (s.date || '') !== date) changed.push('date')
     if ((s.companyName || '') !== companyName) changed.push('companyName')
     if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
     if ((s.siteName || '') !== siteName) changed.push('siteName')
@@ -2386,25 +2389,30 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
             style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
 
-        {/* 時間：行ごとにコンパクトに。各行に時刻＋削除、下に追加ボタン */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={lblS}>時間（最大2・上から順）</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {times.map((t, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13, color: '#8a97a6', width: 18, flex: '0 0 auto' }}>{i + 1}</span>
-                <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1 }} />
-                {times.length > 1 && (
-                  <button type="button" onClick={() => delTime(i)}
-                    style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
-                )}
-              </div>
-            ))}
+        {/* 日付（左）／時間（右・最大2）。他のレイアウトは変えない */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'flex-start' }}>
+          <div style={{ flex: '0 0 44%', minWidth: 0 }}>
+            <label style={lblS}>日付</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%' }} />
           </div>
-          {times.length < 2 && (
-            <button type="button" onClick={addTime}
-              style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
-          )}
+          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+            <label style={lblS}>時間（最大2・上から順）</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {times.map((t, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1, minWidth: 0 }} />
+                  {times.length > 1 && (
+                    <button type="button" onClick={() => delTime(i)}
+                      style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {times.length < 2 && (
+              <button type="button" onClick={addTime}
+                style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
