@@ -1306,12 +1306,21 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [saving, setSaving]         = useState(false)
   const [error, setError]           = useState('')
   const [search, setSearch]         = useState('')
+  const [dateFilter, setDateFilter] = useState('')   // 日付ボタンで絞り込み中の日付（空=絞り込みなし）
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
   const [page, setPage]             = useState(0)
   const topRef = useRef(null)
   const PAGE_SIZE = 10
+  // 直近7日（本日起点）の日付配列
+  const weekDates = (() => {
+    const base = new Date()
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base); d.setDate(base.getDate() + i)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+  })()
 
   const load = useCallback(async () => {
     try {
@@ -1464,6 +1473,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   )).sort()
 
   const filtered = shipments.filter(s => {
+    if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
@@ -1475,8 +1485,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
   const curPage = Math.min(page, pageCount - 1)
   const pageRows = sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
-  // 検索が変わったら1ページ目へ
-  useEffect(() => { setPage(0) }, [search])
+  // 検索・日付絞り込みが変わったら1ページ目へ
+  useEffect(() => { setPage(0) }, [search, dateFilter])
 
   // 予定表で変更された項目を赤く表示
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
@@ -1659,8 +1669,36 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
       {/* 一覧 */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={S.toolbar}>
-          <input style={noZoom(S.search, isMobile)} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <div style={{ ...S.toolbar, display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* 検索バー（短め）。検索中は解除ボタンを表示 */}
+          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 150 : 280 }}>
+            <input style={noZoom({ ...S.search, width: '100%', paddingRight: search ? 34 : undefined }, isMobile)}
+              placeholder="🔍 検索" value={search}
+              onChange={e => { setSearch(e.target.value); if (e.target.value) setDateFilter('') }} />
+            {search && (
+              <button type="button" onClick={() => setSearch('')}
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 22, height: 22, fontSize: 13, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            )}
+          </div>
+          {/* 直近7日の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
+          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
+            {weekDates.map((d, i) => {
+              const active = dateFilter === d
+              const label = i === 0 ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
+              return (
+                <button key={d} type="button"
+                  onClick={() => { if (active) setDateFilter(''); else { setDateFilter(d); setSearch('') } }}
+                  style={{
+                    flex: '0 0 auto', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    border: active ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0',
+                    background: active ? '#c0392b' : '#fff',
+                    color: active ? '#fff' : '#1a4d8f',
+                  }}>
+                  {active ? '× 解除' : label}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
 

@@ -1,0 +1,11 @@
+{
+  "name": "東部生コン 業務管理システム",
+  "short_name": "東部生コン",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1b3f74",
+  "theme_color": "#1b3f74",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
