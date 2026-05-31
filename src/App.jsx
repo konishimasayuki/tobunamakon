@@ -1962,11 +1962,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
-        readOnly={compact}
-        tabIndex={compact ? -1 : undefined}
-        style={compact ? { pointerEvents: 'none' } : undefined}
-        onInput={compact ? undefined : (e => fitOne(e.target))}
-        onBlur={compact ? undefined : (e => saveField(s, f, e.target.value))}
+        readOnly
+        tabIndex={-1}
+        style={{ pointerEvents: 'none' }}
       />
     )
   }
@@ -1986,8 +1984,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
         rows={rows}
         defaultValue={v}
         placeholder={ph || ''}
-        onInput={e => fitOne(e.target)}
-        onBlur={e => saveField(s, f, e.target.value)}
+        readOnly
+        tabIndex={-1}
+        style={{ pointerEvents: 'none' }}
       />
     )
   }
@@ -2027,11 +2026,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
     const display = lines.length ? lines : ['']
     const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '')
-    const saveAll = (container) => {
-      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
-      const joined = inputs.map(i => i.value.trim()).filter(Boolean).join('\n')
-      saveField(s, 'drivers', joined)
-    }
     return (
       <div className="sc-drivers" key={'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + display.length}>
         {display.map((line, i) => (
@@ -2041,8 +2035,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
             className={cls}
             defaultValue={line}
             placeholder={i === 0 ? '担当' : ''}
-            onInput={e => fitOne(e.target)}
-            onBlur={e => saveAll(e.target.closest('.sc-drivers'))}
+            readOnly
+            tabIndex={-1}
+            style={{ pointerEvents: 'none' }}
           />
         ))}
       </div>
