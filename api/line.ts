@@ -287,9 +287,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = dec(settings.channelAccessToken || '')
     if (!token) return res.status(400).json({ error: 'LINEチャネルアクセストークンが未設定です（設定画面で登録してください）' })
     const message = String(text || '').trim() || 'テスト'
+    // この公式アカウントが取得済みの友だち一覧（webhookで自動登録）
+    const knownUsers = (await redis.hgetall<Record<string, string>>(USERS_KEY)) || {}
     const results: Array<{ to: string; ok: boolean; error?: string }> = []
     for (const to of ids) {
       try {
+        // 送信前にプロフィール取得で友だち＝送信可能か確認（取れない＝友だちでない/別チャネルのID）
+        const prof = await fetch(`https://api.line.me/v2/bot/profile/${to}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!prof.ok) {
+          const inList = Object.prototype.hasOwnProperty.call(knownUsers, to)
+          const hint = inList
+            ? 'このIDは登録済み一覧にありますが、現在この公式アカウントから送信できません（ブロック/退会の可能性）。'
+            : 'このIDはこの公式アカウントの友だちとして取得されていません。設定画面のLINEユーザー一覧に表示されているIDか確認してください（別の公式アカウントのID/手入力ミスの可能性）。'
+          results.push({ to, ok: false, error: `友だち未確認(HTTP${prof.status}) ${hint}` })
+          continue
+        }
         const r = await fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
