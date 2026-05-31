@@ -371,7 +371,7 @@ function Field({ label, value, onChange, required, type = 'text', fullWidth = fa
 // ============================================================
 // 顧客追加・編集モーダル
 // ============================================================
-const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '' }
+const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '', memo: '', isTradingCompany: false }
 
 function CustomerModal({ customer, onSave, onClose }) {
   const isMobile = useIsMobile()
