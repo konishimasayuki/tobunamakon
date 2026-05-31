@@ -279,7 +279,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = requireAuth(req)
     if (!user) return res.status(401).json({ error: '認証が必要です' })
     const { lineUserIds, text } = (req.body || {}) as any
-    const ids: string[] = Array.isArray(lineUserIds) ? lineUserIds.filter(Boolean) : []
+    // 送信先IDをサニタイズ（前後空白・改行・制御文字・全角空白を除去）。コピペ混入対策
+    const clean = (v: any) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+    const ids: string[] = Array.isArray(lineUserIds) ? Array.from(new Set(lineUserIds.map(clean).filter(Boolean))) : []
     if (ids.length === 0) return res.status(400).json({ error: '送信先のLINEユーザーIDがありません' })
     const settings = (await redis.hgetall<Record<string, string>>(SETTINGS_KEY)) || {}
     const token = dec(settings.channelAccessToken || '')
@@ -294,7 +296,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           body: JSON.stringify({ to, messages: [{ type: 'text', text: message }] }),
         })
         if (r.ok) results.push({ to, ok: true })
-        else { const e = await r.text(); results.push({ to, ok: false, error: e.slice(0, 200) }) }
+        else {
+          const body = await r.text()
+          const reqId = r.headers.get('x-line-request-id') || ''
+          results.push({ to, ok: false, error: `HTTP${r.status} ${body.slice(0, 300)}${reqId ? ` [req:${reqId}]` : ''}` })
+        }
       } catch (e) {
         results.push({ to, ok: false, error: e instanceof Error ? e.message : String(e) })
       }

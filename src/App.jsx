@@ -2098,9 +2098,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
     if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
     // 担当ドライバー → 従業員管理のLINEユーザーIDを解決（id一致、なければ氏名一致）
+    // lineId はコピペ混入の空白・改行・不可視文字を除去してから使う
+    const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
     const resolved = shipDrivers.map(d => {
       const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name)
-      return { name: d.name, lineId: emp?.lineId || '' }
+      return { name: d.name, lineId: cleanId(emp?.lineId) }
     })
     const withId = resolved.filter(r => r.lineId)
     const without = resolved.filter(r => !r.lineId)
