@@ -216,6 +216,7 @@ function shipmentBubble(s: any): any {
   const driverMsgArr = asArr(s.driverMessages).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
   const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
   const mapUrl = mapsUrlOf(s)
+  const mapImg = staticMapUrl(s)   // 地図画像をカード内（hero）に入れて1メッセージにまとめる
 
   // 配合表示：20-50-20 ＋ 特記（中央のみ等は元の配列をそのまま / で）
   const mixLine = String(s.mixCode || '').trim()
@@ -275,6 +276,13 @@ function shipmentBubble(s: any): any {
 
   const bubble: any = {
     type: 'bubble', size: 'mega',
+    // 地図画像をカード上部（hero）に表示。タップでGoogleマップを開く
+    ...(mapImg ? {
+      hero: {
+        type: 'image', url: mapImg, size: 'full', aspectRatio: '16:10', aspectMode: 'cover',
+        ...(mapUrl ? { action: { type: 'uri', label: 'map', uri: mapUrl } } : {}),
+      },
+    } : {}),
     body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px', contents },
     footer: {
       type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px',
@@ -342,7 +350,7 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const ft = (s: any) => Array.isArray(s.times) && s.times.length ? String(s.times[0]?.text ?? s.times[0] ?? '') : ''
   ships.sort((a, b) => ft(a).localeCompare(ft(b)))
 
-  // reply上限は5メッセージ。伝票カード(carousel)で1枠、残りで地図画像を別メッセージに。
+  // 地図画像は各カード内（hero）に内包するため、テキスト＋カード(carousel)の2メッセージで完結
   const target = ships.slice(0, 12)
   const bubbles = target.map(shipmentBubble)
   const messages: any[] = [
@@ -353,12 +361,6 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
       contents: bubbles.length === 1 ? bubbles[0] : { type: 'carousel', contents: bubbles },
     },
   ]
-  // 地図画像を別リプライで（残り枠ぶん。reply合計5まで）
-  for (const s of target) {
-    if (messages.length >= 5) break
-    const img = staticMapUrl(s)
-    if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
-  }
   return messages
 }
 
@@ -377,12 +379,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!token) return res.status(400).json({ error: 'LINEチャネルアクセストークンが未設定です（設定画面で登録してください）' })
     const s = await redis.hgetall<Record<string, any>>(`shipment:${shipmentId}`)
     if (!s || Object.keys(s).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
-    // 「現場情報取得」返信と同じ：伝票カード＋矢印付き地図画像
+    // 伝票カード（地図画像をカード内に内包＝1メッセージ）
     const pushMsgs: any[] = [
       { type: 'flex', altText: `出荷予定 ${s.siteName || s.companyName || ''}`, contents: shipmentBubble(s) },
     ]
-    const mapImg = staticMapUrl(s)
-    if (mapImg) pushMsgs.push({ type: 'image', originalContentUrl: mapImg, previewImageUrl: mapImg })
 
     const known = (await redis.hgetall<Record<string, string>>(USERS_KEY)) || {}
     const rs: Array<{ to: string; ok: boolean; error?: string }> = []
