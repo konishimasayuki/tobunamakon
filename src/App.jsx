@@ -51,6 +51,44 @@ const api = {
   del:  (path)       => request(path, { method: 'DELETE' }),
 }
 
+// 出荷データの変更を他タブ/他ウィンドウに通知する（localStorage の storage イベント経由）。
+// 別ウィンドウで編集→更新したとき、開いている出荷予定表タブを自動で再取得させる。
+const SHIPMENTS_PING_KEY = 'shipments_updated_at'
+function notifyShipmentsChanged() {
+  try { localStorage.setItem(SHIPMENTS_PING_KEY, String(Date.now())) } catch {}
+}
+// 変更通知を購読する。コールバックは別タブでの更新時に呼ばれる。
+function useShipmentsChanged(onChange) {
+  useEffect(() => {
+    const h = (e) => { if (e.key === SHIPMENTS_PING_KEY) onChange() }
+    window.addEventListener('storage', h)
+    return () => window.removeEventListener('storage', h)
+  }, [onChange])
+}
+
+// ローカル（端末）時刻基準の YYYY-MM-DD を返す（toISOStringはUTCで日付がずれるため）
+function localToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+// 0:00 を跨いだら、表示中の日付が「それまでの本日」のときだけ自動で新しい本日に繰り上げる。
+// （ユーザーが別の日付を手動選択している間は変更しない）
+function useAutoToday(setDate) {
+  const lastTodayRef = useRef(localToday())
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = localToday()
+      if (t !== lastTodayRef.current) {
+        const prevToday = lastTodayRef.current
+        lastTodayRef.current = t
+        setDate(prev => (prev === prevToday ? t : prev))
+      }
+    }, 30000)
+    return () => clearInterval(id)
+  }, [setDate])
+}
+
+
 // ============================================================
 // 認証コンテキスト
 // ============================================================
@@ -110,7 +148,7 @@ function exportCSV(customers) {
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
   a.href     = url
-  a.download = `顧客一覧_${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `顧客一覧_${localToday()}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -333,7 +371,7 @@ function Field({ label, value, onChange, required, type = 'text', fullWidth = fa
 // ============================================================
 // 顧客追加・編集モーダル
 // ============================================================
-const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '' }
+const emptyForm = { customerCode: '', companyName: '', companyNameKana: '', phone: '', address: '', contactPerson: '', memo: '', isTradingCompany: false, lineUserId: '' }
 
 function CustomerModal({ customer, onSave, onClose }) {
   const isMobile = useIsMobile()
@@ -349,10 +387,17 @@ function CustomerModal({ customer, onSave, onClose }) {
       phone:           customer.phone           || '',
       address:         customer.address         || '',
       contactPerson:   customer.contactPerson   || '',
+      isTradingCompany: !!customer.isTradingCompany,
+      lineUserId:      customer.lineUserId      || '',
     } : emptyForm)
   }, [customer])
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+  // 商社チェック切替：顧客コードの頭文字を C↔S に入れ替える（数値部は維持）
+  const toggleTrading = (checked) => setForm(f => {
+    const body = String(f.customerCode || '').replace(/^[CScs]/, '')
+    return { ...f, isTradingCompany: checked, customerCode: (checked ? 'S' : 'C') + body }
+  })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -376,11 +421,16 @@ function CustomerModal({ customer, onSave, onClose }) {
             <Field label="会社名 *"      value={form.companyName}     onChange={set('companyName')}     required />
             <Field label="会社名（カナ）" value={form.companyNameKana} onChange={set('companyNameKana')} />
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#1a2332' }}>
+            <input type="checkbox" checked={!!form.isTradingCompany} onChange={e => toggleTrading(e.target.checked)} style={{ width: 18, height: 18 }} />
+            商社（チェックで顧客コードの頭文字が S になります）
+          </label>
           <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="電話番号" value={form.phone}         onChange={set('phone')}         type="tel" />
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
           <Field label="住所" value={form.address} onChange={set('address')} fullWidth />
+          <Field label="LINEユーザーID（「現場」自動返信用）" value={form.lineUserId} onChange={set('lineUserId')} fullWidth />
           {error && <div style={S.error}>{error}</div>}
           <div style={S.actions}>
             <button type="button" style={S.cancelBtn} onClick={onClose}>キャンセル</button>
@@ -526,7 +576,7 @@ function EmployeeModal({ employee, onSave, onClose }) {
             <Field label="氏名 *"   value={form.name}       onChange={set('name')} required />
           </div>
           <div style={isMobile ? S.grid1 : S.grid2}>
-            <Field label="LINE ID" value={form.lineId} onChange={set('lineId')} />
+            <Field label="LINE ID（U…で始まるユーザーID）" value={form.lineId} onChange={set('lineId')} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={S.smLabel}>種別 *</label>
               <select
@@ -755,12 +805,23 @@ function CustomersPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={S.toolbar}>
-        <input style={noZoom(S.search, isMobile)} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
-        <button style={S.exportBtn} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
-        <button style={S.importBtn} onClick={() => setImportOpen(true)}>📤 インポート</button>
-        <button style={S.addBtn}    onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
-      </div>
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px' }}>
+          <input style={noZoom({ ...S.search, width: '100%' }, isMobile)} placeholder="🔍 コード・会社名・電話番号で検索" value={search} onChange={e => setSearch(e.target.value)} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+            <button style={{ ...S.addBtn, flex: '0 0 auto', padding: '11px 14px' }} onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
+            <button style={{ ...S.importBtn, flex: '1 1 0', padding: '11px 8px', fontSize: 13 }} onClick={() => setImportOpen(true)}>📤 インポート</button>
+            <button style={{ ...S.exportBtn, flex: '1 1 0', padding: '11px 8px', fontSize: 13 }} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
+          </div>
+        </div>
+      ) : (
+        <div style={S.toolbar}>
+          <input style={noZoom(S.search, isMobile)} placeholder="🔍  コード・会社名・電話番号などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+          <button style={S.exportBtn} onClick={() => exportCSV(customers)}>📥 エクスポート</button>
+          <button style={S.importBtn} onClick={() => setImportOpen(true)}>📤 インポート</button>
+          <button style={S.addBtn}    onClick={() => { setEditing(null); setModalOpen(true) }}>＋ 顧客追加</button>
+        </div>
+      )}
       <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件`}</div>
 
       {loading ? (
@@ -823,7 +884,7 @@ const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
 
 const emptyShipForm = {
-  date: new Date().toISOString().slice(0, 10),
+  date: localToday(),
   companyId: '', companyName: '',
   tradingCompany: '',
   times: [{ text: '', important: false }],
@@ -1257,7 +1318,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   )
 }
 
-function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed }) {
+function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, isPopup }) {
   const isMobile = useIsMobile()
   const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
   const [form, setForm]             = useState({ ...emptyShipForm })
@@ -1268,12 +1329,21 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [saving, setSaving]         = useState(false)
   const [error, setError]           = useState('')
   const [search, setSearch]         = useState('')
+  const [dateFilter, setDateFilter] = useState('')   // 日付ボタンで絞り込み中の日付（空=絞り込みなし）
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
   const [page, setPage]             = useState(0)
   const topRef = useRef(null)
   const PAGE_SIZE = 10
+  // 直近7日（本日起点）の日付配列
+  const weekDates = (() => {
+    const base = new Date()
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base); d.setDate(base.getDate() + i)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+  })()
 
   const load = useCallback(async () => {
     try {
@@ -1332,7 +1402,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
 
   const toForm = (s) => ({
-    date: s.date || new Date().toISOString().slice(0, 10),
+    date: s.date || localToday(),
     companyId: s.companyId || '',
     companyName: s.companyName || '',
     tradingCompany: s.tradingCompany || '',
@@ -1397,10 +1467,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         setEditing(null)
         setEditChanged([])
         setForm({ ...emptyShipForm })
+        notifyShipmentsChanged()   // 他タブ（出荷予定表）に更新を通知
+        // PC等で編集用の別ウィンドウとして開かれている場合は、更新後に閉じて元タブへ戻す
+        if (isPopup) { window.close(); return }
       } else {
         const created = await api.post('/api/shipments', payload)
         setShipments(ss => sortShip([...ss, created]))
         setForm({ ...emptyShipForm, date: form.date })
+        notifyShipmentsChanged()
       }
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
@@ -1422,6 +1496,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   )).sort()
 
   const filtered = shipments.filter(s => {
+    if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
@@ -1433,8 +1508,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
   const curPage = Math.min(page, pageCount - 1)
   const pageRows = sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
-  // 検索が変わったら1ページ目へ
-  useEffect(() => { setPage(0) }, [search])
+  // 検索・日付絞り込みが変わったら1ページ目へ
+  useEffect(() => { setPage(0) }, [search, dateFilter])
 
   // 予定表で変更された項目を赤く表示
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
@@ -1445,7 +1520,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 28, alignItems: 'stretch', justifyContent: 'center' }}>
-          <FitToWidth width={700} max={stacked ? 1 : 0.92} style={{ flex: stacked ? '0 0 auto' : '0 0 644px', minWidth: 0 }}>
+          <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 0 700px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
@@ -1509,7 +1584,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
                     <div className="haigou3" style={redIf('mixCode')}>
                       <div className="hgcol">
-                        <input className="hgnote" placeholder="特記" value={mixNote(0)} onChange={e => setMixNote(0, e.target.value)} />
+                        <div className="hgnote-spacer" />
                         <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(0)} onChange={e => setMix(0, e.target.value)} />
                       </div>
                       <span className="hgsep">-</span>
@@ -1519,7 +1594,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       </div>
                       <span className="hgsep">-</span>
                       <div className="hgcol">
-                        <input className="hgnote" placeholder="特記" value={mixNote(2)} onChange={e => setMixNote(2, e.target.value)} />
+                        <div className="hgnote-spacer" />
                         <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(2)} onChange={e => setMix(2, e.target.value)} />
                       </div>
                     </div>
@@ -1590,7 +1665,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             </div>
           </div>
           </FitToWidth>
-          <div style={{ flex: stacked ? '0 0 auto' : '0 0 560px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+          <div style={{ flex: stacked ? '0 0 auto' : '0 0 640px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
             <SiteMap
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
@@ -1617,8 +1692,36 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
       {/* 一覧 */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={S.toolbar}>
-          <input style={noZoom(S.search, isMobile)} placeholder="🔍  日付・業者名・現場名などで検索" value={search} onChange={e => setSearch(e.target.value)} />
+        <div style={{ ...S.toolbar, flexWrap: 'nowrap', gap: 10, alignItems: 'center', overflow: 'hidden' }}>
+          {/* 検索バー（短め）。検索中は解除ボタンを表示 */}
+          <div style={{ flex: '0 0 auto', position: 'relative', width: isMobile ? 132 : 280, marginRight: 6 }}>
+            <input style={{ ...noZoom({ ...S.search }, isMobile), flex: 'none', minWidth: 0, width: '100%', boxSizing: 'border-box', paddingRight: 38 }}
+              placeholder="🔍 検索" value={search}
+              onChange={e => { setSearch(e.target.value); if (e.target.value) setDateFilter('') }} />
+            {search && (
+              <button type="button" onClick={() => setSearch('')}
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 24, height: 24, fontSize: 14, cursor: 'pointer', lineHeight: 1, zIndex: 2 }}>×</button>
+            )}
+          </div>
+          {/* 直近7日の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
+          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
+            {weekDates.map((d, i) => {
+              const active = dateFilter === d
+              const label = i === 0 ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
+              return (
+                <button key={d} type="button"
+                  onClick={() => { if (active) setDateFilter(''); else { setDateFilter(d); setSearch('') } }}
+                  style={{
+                    flex: '0 0 auto', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    border: active ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0',
+                    background: active ? '#c0392b' : '#fff',
+                    color: active ? '#fff' : '#1a4d8f',
+                  }}>
+                  {active ? '× 解除' : label}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
 
@@ -1705,7 +1808,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const compact = isMobile && !isPopup
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
+  useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
@@ -1745,6 +1849,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return () => clearInterval(t)
   }, [isPopup, mergeDiff])
 
+  // 別タブ（出荷登録の編集ウィンドウ等）で更新が入ったら即座に再取得して反映する
+  const refetch = useCallback(async () => {
+    try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 無視 */ }
+  }, [mergeDiff])
+  useShipmentsChanged(refetch)
+
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
   // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
   const timeToMin = (t) => {
@@ -1775,7 +1885,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       }
       case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
-      case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '?' : '')
+      case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '  ?' : '')
       default: return s[f] == null ? '' : String(s[f])
     }
   }
@@ -1793,6 +1903,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     try {
       const res = await api.put(`/api/shipments/${s.id}`, { ...updated, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      notifyShipmentsChanged()
     } catch (e) { alert('保存エラー: ' + e.message) }
   }
 
@@ -1806,6 +1917,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     try {
       const res = await api.put(`/api/shipments/${s.id}`, { ...merged, changedFields })
       setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      notifyShipmentsChanged()
     } catch (e) { alert('保存に失敗しました: ' + e.message); throw e }
   }
 
@@ -1850,8 +1962,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
-        onInput={e => fitOne(e.target)}
-        onBlur={e => saveField(s, f, e.target.value)}
+        readOnly={compact}
+        tabIndex={compact ? -1 : undefined}
+        style={compact ? { pointerEvents: 'none' } : undefined}
+        onInput={compact ? undefined : (e => fitOne(e.target))}
+        onBlur={compact ? undefined : (e => saveField(s, f, e.target.value))}
       />
     )
   }
@@ -1891,9 +2006,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
       <div className={'sc-times' + (items.length === 1 ? ' single' : '')} key={'times' + (isChanged(s, 'times') ? '_c' : '') + '_n' + items.length}>
         {items.map((t, i) => (
           <Fragment key={i}>
-            {i > 0 && <span className="sc-timesep">〜</span>}
+            {i > 0 && <span className="sc-timesep">　</span>}
             <input className={cls} defaultValue={t} placeholder={i === 0 ? '時間' : ''}
-              size={5} onBlur={e => saveAll(e.target.closest('.sc-times'))} />
+              size={5} readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} />
           </Fragment>
         ))}
       </div>
@@ -1946,21 +2061,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const single = n <= 1
     const changed = isChanged(s, 'drivers')
     const cls = 'sc-in sc-driverline' + (changed ? ' changed' : '') + (single ? ' xbig' : ' big')
-    const saveAll = (container) => {
-      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
-      saveField(s, 'drivers', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
-    }
     let idx = 0
     return (
-      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}
-        onBlur={e => saveAll(e.currentTarget)}>
+      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}>
         {rows.map((row, ri) => (
           <div className="sc-drv-row" key={ri}>
             {row.map((nm) => {
               const i = idx++
               return (
                 <input key={i} className={cls} defaultValue={nm}
-                  placeholder={i === 0 ? '担当' : ''} />
+                  placeholder={i === 0 ? '担当' : ''} readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} />
               )
             })}
           </div>
@@ -1984,12 +2094,40 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
 
-  const sendLine = (s) => {
-    const drivers = Array.isArray(s.drivers) ? s.drivers : []
-    if (drivers.length === 0) { alert('担当が入っていません'); return }
-    const names = drivers.map(d => d.name).join('、')
-    if (window.confirm(`${names} に送信しますか？`)) {
-      alert('送信を受け付けました。\n（※実際のLINE送信にはLINE Messaging APIの連携設定が必要です）')
+  const sendLine = async (s) => {
+    const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
+    if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
+    // 担当ドライバー → 従業員管理のLINEユーザーIDを解決（id一致、なければ氏名一致）
+    // lineId はコピペ混入の空白・改行・不可視文字を除去してから使う
+    const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+    const resolved = shipDrivers.map(d => {
+      const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name)
+      return { name: d.name, lineId: cleanId(emp?.lineId) }
+    })
+    const withId = resolved.filter(r => r.lineId)
+    const without = resolved.filter(r => !r.lineId)
+    if (withId.length === 0) {
+      alert('担当ドライバーにLINEユーザーIDが紐づいていません。\n従業員管理でLINE IDを設定してください。')
+      return
+    }
+    let msg = `${withId.map(r => r.name).join('、')} にLINEを送信しますか？`
+    if (without.length) msg += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
+    if (!window.confirm(msg)) return
+    try {
+      const res = await api.post('/api/line', { action: 'push', lineUserIds: withId.map(r => r.lineId), text: 'テスト' })
+      const fails = (res.results || []).filter(r => !r.ok)
+      let msg = `送信しました（${res.sent}/${res.total} 件成功）`
+      if (fails.length) {
+        // 失敗したIDと担当名・理由を表示
+        const lines = fails.map(f => {
+          const who = withId.find(w => w.lineId === f.to)
+          return `・${who ? who.name : ''}（${f.to}）\n  ${f.error || '不明なエラー'}`
+        })
+        msg += `\n\n■ 送信失敗:\n${lines.join('\n')}`
+      }
+      alert(msg)
+    } catch (e) {
+      alert('送信に失敗しました: ' + e.message)
     }
   }
 
@@ -2029,7 +2167,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く</button>
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
         </div>
       </div>
       )}
@@ -2062,7 +2200,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                         {s.truckCount ? <span className="sc-truck">{s.truckCount}台</span> : null}
                       </div>
                     </div>
-                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes.filter(Boolean).join(' / ')}</div> : null}</div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
                   {/* 備考（横並び） */}
@@ -2119,9 +2257,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
                   {cell(s, 'mixCode', '', { center: true, big: true })}
-                  {(Array.isArray(s.mixNotes) && s.mixNotes.some(Boolean)) ? (
+                  {(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? (
                     <div className="sc-mixnotes">
-                      <span>{s.mixNotes[0] || ''}</span><span>{s.mixNotes[1] || ''}</span><span>{s.mixNotes[2] || ''}</span>
+                      <span /><span>{s.mixNotes[1]}</span><span />
                     </div>
                   ) : null}
                 </td>
@@ -2189,6 +2327,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const initDrivers = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []))
     .map(d => ({ id: d.id || '', name: d.name }))
   const [times, setTimes] = useState(initTimes.length ? initTimes : [''])
+  const [date, setDate] = useState(s.date || '')
   const [companyName, setCompanyName] = useState(s.companyName || '')
   const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
   const [siteName, setSiteName] = useState(s.siteName || '')
@@ -2241,6 +2380,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     const mixNotesClean = mixNotes.map(n => n.trim())
     const patch = {
       times: cleanTimes,
+      date: date || s.date,
       companyName, tradingCompany, siteName,
       vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
@@ -2251,6 +2391,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     const origTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
     if (!eq(origTimes, cleanTimes)) changed.push('times')
+    if (date && (s.date || '') !== date) changed.push('date')
     if ((s.companyName || '') !== companyName) changed.push('companyName')
     if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
     if ((s.siteName || '') !== siteName) changed.push('siteName')
@@ -2278,25 +2419,30 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
             style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
 
-        {/* 時間：行ごとにコンパクトに。各行に時刻＋削除、下に追加ボタン */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={lblS}>時間（最大2・上から順）</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {times.map((t, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13, color: '#8a97a6', width: 18, flex: '0 0 auto' }}>{i + 1}</span>
-                <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1 }} />
-                {times.length > 1 && (
-                  <button type="button" onClick={() => delTime(i)}
-                    style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
-                )}
-              </div>
-            ))}
+        {/* 日付（左）／時間（右・最大2）。他のレイアウトは変えない */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'flex-start' }}>
+          <div style={{ flex: '0 0 44%', minWidth: 0 }}>
+            <label style={lblS}>日付</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%' }} />
           </div>
-          {times.length < 2 && (
-            <button type="button" onClick={addTime}
-              style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
-          )}
+          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+            <label style={lblS}>時間（最大2・上から順）</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {times.map((t, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1, minWidth: 0 }} />
+                  {times.length > 1 && (
+                    <button type="button" onClick={() => delTime(i)}
+                      style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {times.length < 2 && (
+              <button type="button" onClick={addTime}
+                style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
@@ -2324,14 +2470,16 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
         {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>配合（各セクションに特記可）</label>
+          <label style={lblS}>配合（中央のみ特記可）</label>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
             {[0, 1, 2].map(i => (
               <Fragment key={i}>
                 {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <input value={mixNotes[i]} onChange={e => setMixNote(i, e.target.value)} placeholder="特記"
-                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                  {i === 1
+                    ? <input value={mixNotes[1]} onChange={e => setMixNote(1, e.target.value)} placeholder="特記"
+                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                    : <div style={{ height: 15 }} />}
                   <input value={mixParts[i]} onChange={e => setMixPart(i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
                     style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
                 </div>
@@ -2406,7 +2554,7 @@ const RPT = {
 
 function DashboardPage() {
   const { all, loading } = useShipments()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localToday()
   const ms = mondayOf(today)
   const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return ymd(d) })
   const todays = all.filter(s => s.date === today)
@@ -2453,11 +2601,11 @@ function DashboardPage() {
 }
 
 function WeeklySchedulePage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
   const ms = new Date(date)   // 選択日（既定は本日）を左端に7日分表示
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = localToday()
   return (
     <div style={RPT.wrap}>
       <div style={RPT.head}>
@@ -2487,7 +2635,7 @@ function WeeklySchedulePage() {
 }
 
 function ShipReportPage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
   const rows = all.filter(s => s.date === date).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
   const totalVol = rows.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
@@ -2523,7 +2671,7 @@ function ShipReportPage() {
 }
 
 function DriverReportPage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
   const rows = all.filter(s => s.date === date)
   const groups = {}
@@ -2651,7 +2799,11 @@ function SettingsPage() {
                   : data.users.map((u) => (
                     <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
                       <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
-                      <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                      <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                        <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました。\n顧客管理の「LINEユーザーID」欄に貼り付けてください。') }}
+                          style={{ border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 IDコピー</button>
+                        <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                      </span>
                     </div>
                   ))}
             </div>
@@ -2806,6 +2958,32 @@ function Layout({ children, activeTab, onTabChange }) {
 // ============================================================
 // アプリ本体
 // ============================================================
+// 準備中タブのパスワードロック画面。正しいパスワードでアンロックすると本来の画面へ。
+const LOCK_PASSWORD = '0383'
+function LockedPage({ onUnlock }) {
+  const [pw, setPw] = useState('')
+  const [err, setErr] = useState(false)
+  const submit = (e) => {
+    e.preventDefault()
+    if (pw === LOCK_PASSWORD) onUnlock()
+    else { setErr(true); setPw('') }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 18, padding: 24 }}>
+      <div style={{ fontSize: 20, fontWeight: 700, color: '#3a4a5c' }}>🚧 準備中</div>
+      <div style={{ fontSize: 14, color: '#6b7a8d' }}>この機能は準備中です。パスワードを入力してください。</div>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280 }}>
+        <input type="password" inputMode="numeric" value={pw} autoFocus
+          onChange={e => { setPw(e.target.value); setErr(false) }}
+          placeholder="パスワード"
+          style={{ fontSize: 16, padding: '11px 12px', border: `1.5px solid ${err ? '#c0392b' : '#cdd5e0'}`, borderRadius: 8, textAlign: 'center' }} />
+        {err && <div style={{ fontSize: 12, color: '#c0392b', textAlign: 'center' }}>パスワードが違います</div>}
+        <button type="submit" style={{ border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>解除して開く</button>
+      </form>
+    </div>
+  )
+}
+
 function AppInner() {
   const { user, loading } = useAuth()
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
@@ -2815,6 +2993,9 @@ function AppInner() {
   const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
+  // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
+  const LOCKED_TABS = ['assign', 'shipreport', 'driverreport']
+  const [unlocked, setUnlocked] = useState({})
 
   // 別ウィンドウの自動更新は SchedulePage 内で差分更新（再取得して変更分のみ反映）する。
   // 全画面 reload は入力内容やスクロール位置が失われるため行わない。
@@ -2827,10 +3008,10 @@ function AppInner() {
 
   if (!user) return <LoginPage />
 
-  const page = activeTab === 'dashboard' ? <DashboardPage />
+  let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
     : activeTab === 'employees' ? <EmployeesPage />
-    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} />
+    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
     : activeTab === 'assign' ? <AssignPage />
@@ -2838,6 +3019,10 @@ function AppInner() {
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
     : null
+  // 準備中タブは未アンロックならパスワード画面を表示
+  if (LOCKED_TABS.includes(activeTab) && !unlocked[activeTab]) {
+    page = <LockedPage onUnlock={() => setUnlocked(u => ({ ...u, [activeTab]: true }))} />
+  }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
   if (isPopup) return <div style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
