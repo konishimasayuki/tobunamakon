@@ -1466,32 +1466,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
       }
       if (editing) {
-        // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目を changedFields に積む
+        // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目（配合は桁ごと・備考は行ごと）を積む
         const orig = shipments.find(x => x.id === editing) || {}
-        const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-        const norm = (v) => String(v ?? '').trim()
-        const changed = []
-        const origTimes = (Array.isArray(orig.times) ? orig.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => norm(x)).filter(Boolean)
-        if (!eq(origTimes, payload.times.map(norm).filter(Boolean))) changed.push('times')
-        if (norm(orig.date) !== norm(payload.date)) changed.push('date')
-        if (norm(orig.companyName) !== norm(payload.companyName)) changed.push('companyName')
-        if (norm(orig.tradingCompany) !== norm(payload.tradingCompany)) changed.push('tradingCompany')
-        if (norm(orig.siteName) !== norm(payload.siteName)) changed.push('siteName')
-        if (norm(orig.siteAddress) !== norm(payload.siteAddress)) changed.push('siteAddress')
-        if (norm(orig.vehicleType) !== norm(payload.vehicleType)) changed.push('vehicleType')
-        const origMixNotes = (Array.isArray(orig.mixNotes) ? orig.mixNotes : []).map(norm)
-        const newMixNotes = (Array.isArray(payload.mixNotes) ? payload.mixNotes : []).map(norm)
-        if (norm(orig.mixCode) !== norm(payload.mixCode) || !eq(origMixNotes.slice(0, 3), newMixNotes.slice(0, 3))) changed.push('mixCode')
-        if (norm(orig.cementType) !== norm(payload.cementType)) changed.push('cementType')
-        if (norm(orig.volume) !== norm(payload.volume) || !!orig.volumeUncertain !== !!payload.volumeUncertain) changed.push('volume')
-        const origPlace = Array.isArray(orig.placements) ? orig.placements : []
-        if (!eq(origPlace, Array.isArray(payload.placements) ? payload.placements : [])) changed.push('placements')
-        const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
-        const newDrivers = (Array.isArray(payload.drivers) ? payload.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
-        if (!eq(origDrivers, newDrivers)) changed.push('drivers')
-        if (!eq((Array.isArray(orig.notes) ? orig.notes : []).map(n => norm(n.text)).filter(Boolean), payload.notes.map(n => norm(n.text)).filter(Boolean))) changed.push('notes')
-        if (norm(orig.orderContact) !== norm(payload.orderContact)) changed.push('orderContact')
-        if (norm(orig.siteContact) !== norm(payload.siteContact)) changed.push('siteContact')
+        const changed = diffChangedFields(orig, payload)
         const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
         const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
         setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
@@ -1713,7 +1690,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               }
             />
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
-            {editing && editChanged.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {editChanged.map(f => SCHEDULE_FIELD_LABELS[f] || f).join('・')}</div>}
+            {(() => {
+              // mix0/note0 等のサブキーは親(配合/備考)に集約し、ラベルが付くものだけ重複なく表示
+              const labels = Array.from(new Set(editChanged.map(f => SCHEDULE_FIELD_LABELS[f]).filter(Boolean)))
+              return editing && labels.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {labels.join('・')}</div>
+            })()}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
           </div>
           </div>
@@ -1826,6 +1807,52 @@ const SCHEDULE_FIELD_LABELS = {
   companyName: '業者名', tradingCompany: '商社名', siteName: '現場名',
   vehicleType: '車種', mixCode: '配合', volume: '量', drivers: '担当',
   times: '時間', notes: '備考', siteContact: '現場連絡先',
+}
+
+// 編集前(orig)と保存値(next)を比べ、変更項目の配列を返す。
+// 配合は桁グループごと(mix0/mix1/mix2)＋中央特記(mixnote)、備考は行ごと(note0,note1,…)に細分化し、
+// 一部だけ変えたときに該当サブ要素だけ赤くできるようにする。
+function diffChangedFields(orig, next) {
+  const norm = (v) => String(v ?? '').trim()
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+  const changed = []
+  const origTimes = (Array.isArray(orig.times) ? orig.times.map(t => (t && t.text != null) ? t.text : t) : []).map(norm).filter(Boolean)
+  const nextTimes = (Array.isArray(next.times) ? next.times.map(t => (t && t.text != null) ? t.text : t) : []).map(norm).filter(Boolean)
+  if (!eq(origTimes, nextTimes)) changed.push('times')
+  if (norm(orig.date) !== norm(next.date)) changed.push('date')
+  if (norm(orig.companyName) !== norm(next.companyName)) changed.push('companyName')
+  if (norm(orig.tradingCompany) !== norm(next.tradingCompany)) changed.push('tradingCompany')
+  if (norm(orig.siteName) !== norm(next.siteName)) changed.push('siteName')
+  if (norm(orig.siteAddress) !== norm(next.siteAddress)) changed.push('siteAddress')
+  if (norm(orig.vehicleType) !== norm(next.vehicleType)) changed.push('vehicleType')
+  // 配合：桁グループごとに比較（mix0/mix1/mix2）。1つでも違えば 'mixCode' も付与（旧表示の互換）
+  const op = norm(orig.mixCode).split('-')
+  const np = norm(next.mixCode).split('-')
+  let mixDiff = false
+  for (let i = 0; i < 3; i++) { if ((op[i] || '') !== (np[i] || '')) { changed.push('mix' + i); mixDiff = true } }
+  // 中央特記
+  const on = (Array.isArray(orig.mixNotes) ? orig.mixNotes : []).map(norm)
+  const nn = (Array.isArray(next.mixNotes) ? next.mixNotes : []).map(norm)
+  if ((on[1] || '') !== (nn[1] || '')) { changed.push('mixnote'); mixDiff = true }
+  if (mixDiff) changed.push('mixCode')
+  if (norm(orig.cementType) !== norm(next.cementType)) changed.push('cementType')
+  if (norm(orig.volume) !== norm(next.volume) || !!orig.volumeUncertain !== !!next.volumeUncertain) changed.push('volume')
+  const origPlace = Array.isArray(orig.placements) ? orig.placements : []
+  const nextPlace = Array.isArray(next.placements) ? next.placements : []
+  if (!eq(origPlace, nextPlace)) changed.push('placements')
+  const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
+  const nextDrivers = (Array.isArray(next.drivers) ? next.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
+  if (!eq(origDrivers, nextDrivers)) changed.push('drivers')
+  // 備考：行ごとに比較（note0,note1,…）。追加/変更された行だけ赤くする
+  const origNotes = (Array.isArray(orig.notes) ? orig.notes : []).map(n => norm(n.text)).filter(Boolean)
+  const nextNotes = (Array.isArray(next.notes) ? next.notes : []).map(n => norm(n.text)).filter(Boolean)
+  let noteDiff = false
+  for (let i = 0; i < nextNotes.length; i++) { if (nextNotes[i] !== (origNotes[i] || '')) { changed.push('note' + i); noteDiff = true } }
+  if (nextNotes.length < origNotes.length) noteDiff = true   // 行が減った場合も変更扱い
+  if (noteDiff) changed.push('notes')
+  if (norm(orig.orderContact) !== norm(next.orderContact)) changed.push('orderContact')
+  if (norm(orig.siteContact) !== norm(next.siteContact)) changed.push('siteContact')
+  return changed
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
@@ -2043,6 +2070,50 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 配合：18-13-20 を桁グループごとに分割描画。変更された桁(mix0/mix1/mix2)だけ赤くする
+  const cellMix = (s, opts = {}) => {
+    const parts = String(s.mixCode || '').split('-')
+    const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
+    // 全体変更(旧データ＝mixCodeのみ)の場合は全桁を赤に（後方互換）
+    const wholeRed = isChanged(s, 'mixCode') && !['mix0', 'mix1', 'mix2'].some(k => isChanged(s, k))
+    if (!parts.length || !String(s.mixCode || '').trim()) {
+      return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none' }} />
+    }
+    return (
+      <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '')} style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+        {parts.map((p, i) => (
+          <Fragment key={i}>
+            {i > 0 && <span>-</span>}
+            <span style={{ color: (wholeRed || isChanged(s, 'mix' + i)) ? '#c81e1e' : undefined }}>{p}</span>
+          </Fragment>
+        ))}
+      </span>
+    )
+  }
+
+  // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
+  const cellNotes = (s, opts = {}) => {
+    const arr = Array.isArray(s.notes) ? s.notes : []
+    const cls = 'sc-in sc-notes' + (opts.plain ? ' plain' : '')
+    const wholeRed = isChanged(s, 'notes') && !arr.some((_, i) => isChanged(s, 'note' + i))
+    if (!arr.length) {
+      return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', color: '#cbd2dc' }}>{opts.ph || '備考'}</span>
+    }
+    return (
+      <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '')} style={{ pointerEvents: 'none' }}>
+        {arr.map((n, i) => {
+          const red = wholeRed || isChanged(s, 'note' + i) || (n && n.important)
+          return (
+            <Fragment key={i}>
+              {i > 0 && <span> / </span>}
+              <span style={{ color: red ? '#c81e1e' : undefined, fontWeight: (n && n.important) ? 700 : undefined }}>{n.text}</span>
+            </Fragment>
+          )
+        })}
+      </span>
+    )
+  }
+
   // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
   // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
   const cellDrivers = (s, opts = {}) => {
@@ -2223,11 +2294,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
                         {cell(s, 'vehicleType', '', { center: true, big: true })}
                       </div>
                     </div>
-                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
                   {/* 備考（横並び） */}
-                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
                   {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
@@ -2279,17 +2350,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
-                  {cell(s, 'mixCode', '', { center: true, big: true })}
+                  {cellMix(s, { center: true, big: true })}
                   {(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? (
                     <div className="sc-mixnotes">
-                      <span /><span>{s.mixNotes[1]}</span><span />
+                      <span /><span style={{ color: (isChanged(s, 'mixnote') || isChanged(s, 'mixCode')) ? '#c81e1e' : undefined }}>{s.mixNotes[1]}</span><span />
                     </div>
                   ) : null}
                 </td>
                 <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
+                <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
                     <button type="button" onClick={() => openEditWindow(s)}
@@ -2413,22 +2484,8 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
       siteContact,
     }
-    const changed = []
-    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-    const origTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
-    if (!eq(origTimes, cleanTimes)) changed.push('times')
-    if (date && (s.date || '') !== date) changed.push('date')
-    if ((s.companyName || '') !== companyName) changed.push('companyName')
-    if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
-    if ((s.siteName || '') !== siteName) changed.push('siteName')
-    if ((s.siteAddress || '') !== siteAddress) changed.push('siteAddress')
-    if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
-    const origMixNotes = (Array.isArray(s.mixNotes) ? s.mixNotes : []).map(n => String(n || '').trim())
-    if ((s.mixCode || '') !== mixCode || !eq(origMixNotes.slice(0, 3), mixNotesClean.filter((_, i) => i < 3))) changed.push('mixCode')
-    if (String(s.volume ?? '') !== String(volume) || !!s.volumeUncertain !== volumeUncertain) changed.push('volume')
-    if (!eq(initDrivers, patch.drivers)) changed.push('drivers')
-    if (!eq(Array.isArray(s.notes) ? s.notes.map(n => n.text) : [], patch.notes.map(n => n.text))) changed.push('notes')
-    if ((s.siteContact || '') !== siteContact) changed.push('siteContact')
+    // 配合は桁ごと・備考は行ごとに変更を検出（共通ヘルパー）
+    const changed = diffChangedFields(s, patch)
     try { await onSave(patch, changed) } catch { setSaving(false) }
   }
 
