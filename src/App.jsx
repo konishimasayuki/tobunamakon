@@ -2742,9 +2742,13 @@ function AssignPage() {
 }
 
 // テスト用の出荷登録データ。設定画面からワンタップで投入し、出荷予定表などの動作確認に使う。
-// 本日を起点に「1日10件 × 10日分（計100件）」を組み立てる。
+// 本日を起点に「1日10件 × 10日分（計100件）」を、各項目ランダムで組み立てる。
 function buildTestShipments() {
   const dayStr = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const rint = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min   // min〜max の整数
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+  const dgts = (n) => Array.from({ length: n }, () => rint(0, 9)).join('')        // n桁のランダム数字
+
   const companies = ['高柳左官', '（有）徳島景画', '山田建設', '九州土木', '佐賀建設', '東肥組', '鳥栖工務店', '大和コンクリート', '神埼建設', '有明工業']
   const tradings  = ['', '東部商事', '生コン商事', '', '九州資材', '', '佐賀生コン商会', '', '西日本建材', '']
   const sites     = ['中学校8', '市民体育館 改修', '県道拡幅工事', '橋梁下部工', '配水池工事', '農道舗装', '小学校体育館', '護岸工事', 'マンション基礎', '排水路改良']
@@ -2752,34 +2756,50 @@ function buildTestShipments() {
     '佐賀県小城市三日月町織島６１３', '佐賀県神埼市神埼町志波屋２０２０', '佐賀県佐賀市本庄町１丁目', '佐賀県鳥栖市本鳥栖町',
     '佐賀県神埼市千代田町餘江', '佐賀県佐賀市大和町尼寺', '佐賀県小城市小城町', '佐賀県三養基郡みやき町', '佐賀県佐賀市諸富町', '佐賀県神埼郡吉野ヶ里町',
   ]
-  const vehicles  = ['4t', '7t', '大型', '4t・7t', '7t・大型', '7t', '大型', '4t', '7t', '4t・7t・大型']
-  const mixes     = ['10-18-10', '18-18-20', '21-18-25', '24-12-20', '15-15-15', '27-18-20', '30-12-25', '21-15-20', '18-12-20', '24-18-25']
   const driverPool = ['小西公幸', '田中一郎', '佐藤健', '鈴木大輔', '高橋誠', '渡辺隆', '伊藤豊', '山本浩']
-  const timeSlots = [['08:00', '午前'], ['10:30'], ['午後'], ['09:00'], ['07:30', '午前'], ['13:00'], ['08:30'], ['11:00', '午前'], ['14:00'], ['15:30']]
+  const timeChoices = ['08:00', '08:30', '09:00', '10:00', '10:30', '11:00', '13:00', '14:00', '15:30', '午前', '午後']
+  const noteChoices = ['AM', 'FAX', 'バケット→舟下ろし', '(！)23打てばなし', '工TP']
 
   const rows = []
   for (let day = 0; day < 10; day++) {
     for (let i = 0; i < 10; i++) {
-      const idx = (day * 3 + i) % 10           // 日替わりで割り当てをずらして見た目に変化を出す
-      const nDrivers = i % 4                    // 0〜3人
-      const drivers = Array.from({ length: nDrivers }, (_, k) => ({ id: '', name: driverPool[(idx + k) % driverPool.length] }))
-      const hasNote = i % 5 === 0
+      const idx = rint(0, 9)
+      // 時間：1つ または 2つ（重複しないよう選ぶ）
+      const nTimes = rint(1, 2)
+      const times = []
+      while (times.length < nTimes) { const t = pick(timeChoices); if (!times.includes(t)) times.push(t) }
+      // 車種：いずれか1つ
+      const vehicleType = pick(VEHICLE_TYPES)
+      // 配合：左18〜30 / 中12〜18 / 右20
+      const mixCode = `${rint(18, 30)}-${rint(12, 18)}-20`
+      // 担当ドライバー：1〜4人（重複なし）
+      const nDrivers = rint(1, 4)
+      const pool = [...driverPool]
+      const drivers = Array.from({ length: nDrivers }, () => {
+        const k = Math.floor(Math.random() * pool.length)
+        return { id: '', name: pool.splice(k, 1)[0] }
+      })
+      // 備考：ランダムで1つ（候補から）
+      const notes = [{ text: pick(noteChoices), important: false }]
       rows.push({
         date: dayStr(day),
-        companyName: companies[idx],
-        tradingCompany: tradings[(idx + i) % tradings.length],
-        times: timeSlots[i],
-        siteName: `${sites[idx]}（${day + 1}日目-${i + 1}）`,
-        siteAddress: addresses[idx],
-        vehicleType: vehicles[idx],
-        truckCount: String((i % 3) + 1),
-        mixCode: mixes[idx],
-        mixNotes: i % 4 === 1 ? ['', 'カタメ', ''] : ['', '', ''],
-        volume: String(5 + i * 2),
-        volumeUncertain: i % 7 === 0,
+        companyName: pick(companies),
+        tradingCompany: pick(tradings),
+        times,
+        siteName: `${pick(sites)}（${day + 1}日目-${i + 1}）`,
+        siteAddress: pick(addresses),
+        vehicleType,
+        truckCount: String(rint(1, 3)),
+        mixCode,
+        mixNotes: ['', '', ''],
+        cementType: pick(CEMENT_TYPES),           // N か B
+        volume: String(rint(3, 30)),
+        volumeUncertain: false,
+        placements: [pick(PLACEMENT_TYPES)],      // クレーン / F1 / ポンプ のいずれか1つ
+        orderContact: `${dgts(4)}-${dgts(2)}-${dgts(4)}`,   // 0000-00-0000 形式（ランダム数字）
         drivers,
-        notes: hasNote ? [{ text: '【テスト】動作確認用データ', important: false }] : [],
-        siteContact: `090-0000-${String(day * 10 + i).padStart(4, '0')}`,
+        notes,
+        siteContact: `${dgts(3)}-${dgts(4)}-${dgts(4)}`,    // 000-0000-0000 形式（ランダム数字）
       })
     }
   }
@@ -2794,6 +2814,7 @@ function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [usersOpen, setUsersOpen] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -2840,6 +2861,16 @@ function SettingsPage() {
     if (fails.length) msg += `\n\n失敗（先頭5件）:\n${fails.slice(0, 5).join('\n')}`
     alert(msg)
   }
+  const deleteAllShipments = async () => {
+    if (!window.confirm('現在登録されている出荷登録データを「すべて」削除します。\nこの操作は元に戻せません。よろしいですか？')) return
+    if (!window.confirm('本当に全件削除してよろしいですか？（最終確認）')) return
+    setDeleting(true)
+    try {
+      const res = await api.del('/api/shipments?all=1')
+      notifyShipmentsChanged()
+      alert(`削除しました（${res.deleted ?? 0}件）`)
+    } catch (e) { alert('削除に失敗しました: ' + e.message) } finally { setDeleting(false) }
+  }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
   const copyText = (t) => { navigator.clipboard?.writeText(t); alert('コピーしました\n' + t) }
   const fmtDT = (s) => { const d = new Date(s); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -2865,10 +2896,19 @@ function SettingsPage() {
           動作確認用の出荷登録データ（本日から10日分・1日10件＝計100件）をまとめて登録します。<br />
           登録後は「出荷予定表」や「出荷登録」で内容を確認・編集・削除できます。
         </div>
-        <button onClick={importTestShipments} disabled={importing}
-          style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, opacity: importing ? 0.6 : 1 }}>
-          {importing ? 'インポート中…' : '＋ テスト用の出荷登録をインポート'}
-        </button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={importTestShipments} disabled={importing || deleting}
+            style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, opacity: (importing || deleting) ? 0.6 : 1 }}>
+            {importing ? 'インポート中…' : '＋ テスト用の出荷登録をインポート'}
+          </button>
+          <button onClick={deleteAllShipments} disabled={importing || deleting}
+            style={{ ...S.dangerBtn, padding: '10px 16px', fontSize: 13, opacity: (importing || deleting) ? 0.6 : 1 }}>
+            {deleting ? '削除中…' : '🗑 出荷登録データを全件削除'}
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: '#c0392b', marginTop: 8 }}>
+          ※「全件削除」は現在登録されている出荷登録をすべて消します（元に戻せません）。
+        </div>
       </div>
 
       <div style={box}>

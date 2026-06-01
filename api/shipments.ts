@@ -116,6 +116,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // 全件削除（?all=1）。テストデータ等をまとめて消す。
+  if (req.method === 'DELETE' && !hasId && (req.query.all === '1' || req.query.all === 'true')) {
+    try {
+      const ids = (await redis.smembers('shipments')) || []
+      if (ids.length) {
+        const p = redis.pipeline()
+        ids.forEach(sid => p.del(`shipment:${sid}`))
+        p.del('shipments')
+        await p.exec()
+      }
+      return res.status(200).json({ deleted: ids.length })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
+
   // 削除
   if (req.method === 'DELETE' && hasId) {
     try {
