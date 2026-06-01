@@ -1613,7 +1613,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow">
                   <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, justifyContent: 'center' }}>
                     <div className="inline" style={{ justifyContent: 'center' }}>
-                      <input type="number" min="0" step="0.01" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={set('volume')} />
+                      <input type="text" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={e => setVal('volume', e.target.value.replace(/[^0-9.]/g, ''))} />
                       <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
                     </div>
                     <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>

@@ -44,7 +44,7 @@ input, textarea, select { font-family: inherit; }
 .denpyo .inline { display:flex; align-items:baseline; gap:4px; }
 .denpyo .num { width:54px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
 .denpyo .unit { font-size:15px; }
-.denpyo .m3 input[type="number"] { width:70px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
+.denpyo .m3 input { width:70px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
 .denpyo .qmark { display:none; margin-left:6px; font-weight:700; font-size:34px; line-height:0; vertical-align:-2px; color:#222; }
 .denpyo .qmark.on { display:inline; }
 .denpyo .qtoggle { position:absolute; bottom:4px; right:6px; font-size:11px; font-family:'Noto Sans JP',sans-serif; color:#555; display:flex; align-items:center; gap:2px; cursor:pointer; user-select:none; }
@@ -56,7 +56,7 @@ input, textarea, select { font-family: inherit; }
 .denpyo .haigou { width:100%; font-size:90px; font-weight:700; margin-top:6px; line-height:1.1; text-align:center; }
 /* 車種チップ大きく・m³大きく */
 .denpyo .chips.big .chip { font-size:20px; padding:5px 14px; }
-.denpyo .m3 input[type="number"] { font-size:30px; width:78px; max-width:55%; min-width:0; }
+.denpyo .m3 input { font-size:30px; width:78px; max-width:55%; min-width:0; }
 .denpyo .m3 .unit { font-size:20px; }
 .denpyo .m3 .inline { max-width:100%; min-width:0; }
 /* 配合：2桁×3フィールド（各数値の上に小さく特記事項） */
