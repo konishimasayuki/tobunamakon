@@ -406,31 +406,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ]
 
     const known = (await redis.hgetall<Record<string, string>>(USERS_KEY)) || {}
-    const rs: Array<{ to: string; ok: boolean; error?: string }> = []
-    for (const to of ids) {
+    // 高速化: ①宛先を並列送信 ②まずpushを送り、失敗時だけprofileで原因診断（成功ケースは1往復で完結）
+    const sendOne = async (to: string): Promise<{ to: string; ok: boolean; error?: string }> => {
       try {
-        const prof = await fetch(`https://api.line.me/v2/bot/profile/${to}`, { headers: { Authorization: `Bearer ${token}` } })
-        if (!prof.ok) {
-          const inList = Object.prototype.hasOwnProperty.call(known, to)
-          const hint = inList ? 'このIDは登録済みですが現在送信できません（ブロック/退会の可能性）。' : 'このIDはこの公式アカウントの友だちとして取得されていません。'
-          rs.push({ to, ok: false, error: `友だち未確認(HTTP${prof.status}) ${hint}` })
-          continue
-        }
         const r = await fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ to, messages: pushMsgs }),
         })
-        if (r.ok) rs.push({ to, ok: true })
-        else {
-          const body = await r.text()
-          const reqId = r.headers.get('x-line-request-id') || ''
-          rs.push({ to, ok: false, error: `HTTP${r.status} ${body.slice(0, 300)}${reqId ? ` [req:${reqId}]` : ''}` })
-        }
+        if (r.ok) return { to, ok: true }
+        const body = await r.text()
+        const reqId = r.headers.get('x-line-request-id') || ''
+        // 失敗時のみ：友だち状態を確認して原因を補足（成功ケースには影響しない）
+        let hint = ''
+        try {
+          const prof = await fetch(`https://api.line.me/v2/bot/profile/${to}`, { headers: { Authorization: `Bearer ${token}` } })
+          if (!prof.ok) {
+            const inList = Object.prototype.hasOwnProperty.call(known, to)
+            hint = ' ' + (inList ? 'このIDは登録済みですが現在送信できません（ブロック/退会の可能性）。' : 'このIDはこの公式アカウントの友だちとして取得されていません。')
+          }
+        } catch { /* 診断失敗は無視 */ }
+        return { to, ok: false, error: `HTTP${r.status} ${body.slice(0, 300)}${reqId ? ` [req:${reqId}]` : ''}${hint}` }
       } catch (e) {
-        rs.push({ to, ok: false, error: e instanceof Error ? e.message : String(e) })
+        return { to, ok: false, error: e instanceof Error ? e.message : String(e) }
       }
     }
+    const rs = await Promise.all(ids.map(sendOne))
     return res.status(200).json({ sent: rs.filter(r => r.ok).length, total: ids.length, results: rs })
   }
 
