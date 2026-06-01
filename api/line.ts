@@ -333,33 +333,33 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const want = String(lineUserId || '').trim()
   const today = todayJST()
 
-  // 1) 従業員（ドライバー）として照合
-  const empIds = (await redis.smembers('employees')) || []
-  let employee: any = null
-  for (const eid of empIds) {
-    const e = await redis.hgetall<Record<string, any>>(`employee:${eid}`)
-    const have = String((e && e.lineId) || '').trim()
-    if (e && have && have === want) { employee = e; break }
+  // 高速化: ID一覧と各レコードを直列awaitせず、pipelineで一括取得（往復回数を大幅削減）
+  const mget = async (key: string, prefix: string): Promise<any[]> => {
+    const ids = (await redis.smembers(key)) || []
+    if (!ids.length) return []
+    const p = redis.pipeline()
+    ids.forEach((id: string) => p.hgetall(`${prefix}${id}`))
+    return (await p.exec<Record<string, any>[]>()) || []
   }
+  // 従業員・顧客・出荷を並列に取得
+  const [employees, customers, allShips] = await Promise.all([
+    mget('employees', 'employee:'),
+    mget('customers', 'customer:'),
+    mget('shipments', 'shipment:'),
+  ])
 
+  // 1) 従業員（ドライバー）として照合
+  const employee = employees.find((e: any) => e && String(e.lineId || '').trim() === want) || null
   // 2) 顧客（業者）として照合
-  const custIds = (await redis.smembers('customers')) || []
-  let customer: any = null
-  for (const cid of custIds) {
-    const c = await redis.hgetall<Record<string, any>>(`customer:${cid}`)
-    const have = String((c && c.lineUserId) || '').trim()
-    if (c && have && have === want) { customer = c; break }
-  }
+  const customer = customers.find((c: any) => c && String(c.lineUserId || '').trim() === want) || null
 
   if (!employee && !customer) {
     return [{ type: 'text', text: `登録情報が見つかりませんでした。\n\n受信ID:\n${want}\n\n従業員管理の「LINE ID」または顧客管理の「LINEユーザーID」に、このIDを登録してください。` }]
   }
 
   // 本日の出荷を抽出（従業員＝担当に含まれる出荷／顧客＝その業者の出荷）
-  const shipIds = (await redis.smembers('shipments')) || []
   const ships: any[] = []
-  for (const sid of shipIds) {
-    const s = await redis.hgetall<Record<string, any>>(`shipment:${sid}`)
+  for (const s of allShips) {
     if (!s) continue
     if (String(s.date) !== today) continue
     let hit = false
@@ -534,23 +534,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (ev.type === 'unfollow') {
           await redis.hdel(USERS_KEY, userId)
         } else if (ev.type === 'follow' || ev.type === 'message') {
-          let name = String(userId)
-          if (token) { const p = await fetchProfile(userId, token); if (p) name = p }
-          await redis.hset(USERS_KEY, { [userId]: name })
+          // キーフレーズ「現場情報取得」→ 返信を最優先（プロフィール更新で返信を待たせない）
+          const isGenba = ev.type === 'message' && ev?.message?.type === 'text'
+            && String(ev.message.text || '').trim() === '現場情報取得'
+          if (isGenba) {
+            const messages = await buildGenbaReply(userId)
+            await replyMessages(ev.replyToken, messages, token)
+          }
 
-          // キーフレーズ「現場情報取得」→ そのユーザーに紐づく本日の出荷情報を返信
-          if (ev.type === 'message' && ev?.message?.type === 'text') {
-            const text = String(ev.message.text || '').trim()
-            if (text === '現場情報取得') {
-              // 先に「取得します／少々お待ちください」を返し、続けて本日の出荷情報を返信する。
-              // reply は無料・1回のみのため、同じ reply に2行案内＋情報をまとめて送る。
-              const messages = await buildGenbaReply(userId)
-              const withNotice = [
-                { type: 'text', text: '現場情報を取得します。\n少々お待ちください' },
-                ...messages,
-              ].slice(0, 5)   // replyは最大5メッセージ
-              await replyMessages(ev.replyToken, withNotice, token)
-            }
+          // ユーザー名の登録/更新（返信の後に実行＝返信遅延に影響させない）
+          {
+            let name = String(userId)
+            if (token) { const p = await fetchProfile(userId, token); if (p) name = p }
+            await redis.hset(USERS_KEY, { [userId]: name })
           }
         }
       }
