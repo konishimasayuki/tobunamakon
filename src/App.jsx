@@ -1466,7 +1466,34 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
       }
       if (editing) {
-        const updated = await api.put(`/api/shipments/${editing}`, payload)
+        // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目を changedFields に積む
+        const orig = shipments.find(x => x.id === editing) || {}
+        const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+        const norm = (v) => String(v ?? '').trim()
+        const changed = []
+        const origTimes = (Array.isArray(orig.times) ? orig.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => norm(x)).filter(Boolean)
+        if (!eq(origTimes, payload.times.map(norm).filter(Boolean))) changed.push('times')
+        if (norm(orig.date) !== norm(payload.date)) changed.push('date')
+        if (norm(orig.companyName) !== norm(payload.companyName)) changed.push('companyName')
+        if (norm(orig.tradingCompany) !== norm(payload.tradingCompany)) changed.push('tradingCompany')
+        if (norm(orig.siteName) !== norm(payload.siteName)) changed.push('siteName')
+        if (norm(orig.siteAddress) !== norm(payload.siteAddress)) changed.push('siteAddress')
+        if (norm(orig.vehicleType) !== norm(payload.vehicleType)) changed.push('vehicleType')
+        const origMixNotes = (Array.isArray(orig.mixNotes) ? orig.mixNotes : []).map(norm)
+        const newMixNotes = (Array.isArray(payload.mixNotes) ? payload.mixNotes : []).map(norm)
+        if (norm(orig.mixCode) !== norm(payload.mixCode) || !eq(origMixNotes.slice(0, 3), newMixNotes.slice(0, 3))) changed.push('mixCode')
+        if (norm(orig.cementType) !== norm(payload.cementType)) changed.push('cementType')
+        if (norm(orig.volume) !== norm(payload.volume) || !!orig.volumeUncertain !== !!payload.volumeUncertain) changed.push('volume')
+        const origPlace = Array.isArray(orig.placements) ? orig.placements : []
+        if (!eq(origPlace, Array.isArray(payload.placements) ? payload.placements : [])) changed.push('placements')
+        const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
+        const newDrivers = (Array.isArray(payload.drivers) ? payload.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
+        if (!eq(origDrivers, newDrivers)) changed.push('drivers')
+        if (!eq((Array.isArray(orig.notes) ? orig.notes : []).map(n => norm(n.text)).filter(Boolean), payload.notes.map(n => norm(n.text)).filter(Boolean))) changed.push('notes')
+        if (norm(orig.orderContact) !== norm(payload.orderContact)) changed.push('orderContact')
+        if (norm(orig.siteContact) !== norm(payload.siteContact)) changed.push('siteContact')
+        const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
+        const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
         setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
         setEditing(null)
         setEditChanged([])
