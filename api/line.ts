@@ -163,9 +163,10 @@ function staticMapUrl(ship: any): string | null {
   const coords = extractLatLng(ship.siteAddress || '')
   // 中心: 固定ビュー > 住所内座標 > 住所文字列（Static Mapsは住所も中心に使える）
   const addrText = String(ship.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
+  const c5 = (n: number) => Number(n.toFixed(5))   // URL短縮のため座標は5桁（約1m精度）に丸める
   let center: string | null = null
-  if (hasView) center = `${view.lat},${view.lng}`
-  else if (coords) center = `${coords.lat},${coords.lng}`
+  if (hasView) center = `${c5(view.lat)},${c5(view.lng)}`
+  else if (coords) center = `${c5(coords.lat)},${c5(coords.lng)}`
   else if (addrText) center = encodeURIComponent(addrText)
   if (!center) return null
   const zoom = hasView ? Math.round(view.zoom || 18) : 17
@@ -176,32 +177,41 @@ function staticMapUrl(ship: any): string | null {
     `language=ja`, `region=JP`, `key=${key}`,
   ]
   // 矢印（緯度経度2点）を赤い線＋矢じりで描画。
-  // Static Maps の path は直線しか描けないため、終点に2本の短い線分を足して矢じりにする。
+  // Static Maps の path は直線しか描けないため、終点に矢じり線を足す。
+  // URL長制限（2000字）対策: 座標は5桁に丸め、矢じりは head1→tip→head2 の1本のpathにまとめる。
   const arrows = asArr(ship.mapArrows)
-  const line = (la1: number, ln1: number, la2: number, ln2: number) =>
-    `path=color:0xe8211cff%7Cweight:5%7C${la1},${ln1}%7C${la2},${ln2}`
-  for (const a of arrows.slice(0, 10)) {
+  const r5 = (n: number) => Number(n.toFixed(5))   // 約1mの精度。桁を削ってURLを短縮
+  const seg = '%7C'
+  const pushPath = (pts: Array<[number, number]>) =>
+    params.push(`path=color:0xe8211cff%7Cweight:5${seg}${pts.map(([la, ln]) => `${r5(la)},${r5(ln)}`).join(seg)}`)
+  for (const a of arrows.slice(0, 8)) {
     if (a && typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
-      params.push(line(a.lat1, a.lng1, a.lat2, a.lng2))
-      // 終点(lat2,lng2)から始点方向へ、±30°開いた短い線分を2本足して矢じりにする
+      pushPath([[a.lat1, a.lng1], [a.lat2, a.lng2]])   // 本体（線）
+      // 終点(lat2,lng2)から始点方向へ±28°の矢じり。head1→tip→head2 を1本のpathで描く
       const cosLat = Math.cos((a.lat2 * Math.PI) / 180) || 1
       const dLat = a.lat1 - a.lat2
-      const dLng = (a.lng1 - a.lng2) * cosLat            // 経度方向を緯度スケールに合わせる
+      const dLng = (a.lng1 - a.lng2) * cosLat
       const len = Math.hypot(dLat, dLng) || 1e-9
-      const ux = dLat / len, uy = dLng / len             // 始点向きの単位ベクトル
-      const headLen = len * 0.28                         // 矢じりの長さ（線全体の約28%）
-      const ang = (28 * Math.PI) / 180                   // 開き角
+      const ux = dLat / len, uy = dLng / len
+      const headLen = len * 0.28
+      const ang = (28 * Math.PI) / 180
       const ca = Math.cos(ang), sa = Math.sin(ang)
-      for (const s of [1, -1]) {
+      const head = (s: number): [number, number] => {
         const rx = ux * ca - uy * (sa * s)
         const ry = ux * (sa * s) + uy * ca
-        const hLat = a.lat2 + rx * headLen
-        const hLng = a.lng2 + (ry * headLen) / cosLat
-        params.push(line(a.lat2, a.lng2, hLat, hLng))
+        return [a.lat2 + rx * headLen, a.lng2 + (ry * headLen) / cosLat]
       }
+      pushPath([head(1), [a.lat2, a.lng2], head(-1)])
     }
   }
-  return `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+  let url = `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+  // LINEのimage.urlは2000字まで。超える場合は末尾のpath（矢印）から順に落として収める。
+  while (url.length > 1990 && params.some(p => p.startsWith('path='))) {
+    const lastPath = params.map((p, i) => (p.startsWith('path=') ? i : -1)).filter(i => i >= 0).pop()!
+    params.splice(lastPath, 1)
+    url = `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+  }
+  return url
 }
 
 // 出荷情報を読みやすいテキストに整形（フォールバック用）
