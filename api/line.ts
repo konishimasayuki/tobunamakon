@@ -222,7 +222,7 @@ function formatShipment(s: any): string {
   lines.push(`■ ${s.companyName || ''}${s.tradingCompany ? `（${s.tradingCompany}）` : ''}`)
   if (s.siteName) lines.push(`現場: ${s.siteName}`)
   if (times.length) lines.push(`時間: ${times.join(' / ')}`)
-  if (s.vehicleType) lines.push(`車種: ${s.vehicleType}${s.truckCount ? ` ${s.truckCount}台` : ''}`)
+  if (s.vehicleType) lines.push(`車種: ${s.vehicleType}`)
   if (s.mixCode) lines.push(`配合: ${s.mixCode}`)
   if (s.volume) lines.push(`量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
   if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
@@ -290,7 +290,7 @@ function shipmentBubble(s: any): any {
     sep(),
     // 主要項目
     row('担当', drivers.join('、'), { big: true }),
-    row('車種', `${s.vehicleType || '—'}${s.truckCount ? `  ${s.truckCount}台` : ''}`),
+    row('車種', `${s.vehicleType || '—'}`),
     row('配合', mixLine, { big: true, color: '#c0392b' }),
   ]
   if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))

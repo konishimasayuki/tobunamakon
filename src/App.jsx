@@ -288,7 +288,7 @@ function FitToWidth({ width = 700, max = 1, children, style }) {
       if (avail <= 0) return
       const s = Math.min(max, avail / width)
       setScale(s)
-      setH(inner.current.offsetHeight * s)   // 実高さ×倍率（transformは offsetHeight に影響しない）
+      setH(Math.ceil(inner.current.offsetHeight * s) + 2)   // 実高さ×倍率（+端数切上で最終行の見切れ防止）
     }
     calc()
     const ro = new ResizeObserver(calc)
@@ -1579,10 +1579,6 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   <div className="lbl" style={redIf('vehicleType')}>車 種</div>
                   <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} multiStr big />
                 </div>
-                <div className="inline" style={{ justifyContent: 'flex-end' }}>
-                  <input className="num" type="number" min="0" inputMode="numeric" value={form.truckCount} onChange={set('truckCount')} />
-                  <span className="unit">台</span>
-                </div>
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
@@ -1741,7 +1737,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '台数', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -1756,7 +1752,6 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <td style={S.td}>{s.siteName || '—'}</td>
                     <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
                     <td style={S.td}>{s.vehicleType || '—'}</td>
-                    <td style={S.td}>{s.truckCount ? `${s.truckCount}台` : '—'}</td>
                     <td style={S.td}>{s.mixCode || '—'}</td>
                     <td style={S.td}>{s.cementType || '—'}</td>
                     <td style={S.td}>{s.volume ? `${s.volume}m³${s.volumeUncertain ? '?' : ''}` : (s.volumeUncertain ? '?' : '—')}</td>
@@ -2199,7 +2194,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box sc-vehbox"><span className="sc-lbl">車種</span>
                       <div className="sc-veh">
                         {cell(s, 'vehicleType', '', { center: true, big: true })}
-                        {s.truckCount ? <span className="sc-truck">{s.truckCount}台</span> : null}
                       </div>
                     </div>
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
@@ -2286,7 +2280,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
         ) : rows.length === 0 ? (
           <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
         ) : (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', padding: isPopup ? '8px 8px 0' : 0 }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', lineHeight: 1.5, padding: isPopup ? '8px 8px 16px' : 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
         )}
@@ -2337,7 +2331,6 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [mapView, setMapView] = useState(s.mapView || null)
   const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
   const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
-  const [truckCount, setTruckCount] = useState((s.truckCount ?? '') === '' ? '' : String(s.truckCount))
   const [mixParts, setMixParts] = useState(() => {
     const p = String(s.mixCode || '').split('-')
     return [p[0] || '', p[1] || '', p[2] || '']
@@ -2388,7 +2381,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
       date: date || s.date,
       companyName, tradingCompany, siteName, siteAddress,
       mapView, mapArrows,
-      vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
+      vehicleType, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
       siteContact,
@@ -2403,7 +2396,6 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     if ((s.siteName || '') !== siteName) changed.push('siteName')
     if ((s.siteAddress || '') !== siteAddress) changed.push('siteAddress')
     if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
-    if (String(s.truckCount ?? '') !== String(truckCount)) changed.push('truckCount')
     const origMixNotes = (Array.isArray(s.mixNotes) ? s.mixNotes : []).map(n => String(n || '').trim())
     if ((s.mixCode || '') !== mixCode || !eq(origMixNotes.slice(0, 3), mixNotesClean.filter((_, i) => i < 3))) changed.push('mixCode')
     if (String(s.volume ?? '') !== String(volume) || !!s.volumeUncertain !== volumeUncertain) changed.push('volume')
@@ -2474,20 +2466,13 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           </div>
         </div>
 
-        {/* 車種（3種複数選択）＋台数 */}
+        {/* 車種（3種複数選択） */}
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>車種（複数選択可）・台数</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, flex: 1 }}>
-              {VEHICLE_TYPES.map(o => (
-                <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
-              <input value={truckCount} onChange={e => setTruckCount(e.target.value)} inputMode="numeric" placeholder="台数"
-                style={{ ...inS, width: 64, textAlign: 'center', padding: '9px 4px' }} />
-              <span style={{ fontSize: 14, color: '#3a4a5c' }}>台</span>
-            </div>
+          <label style={lblS}>車種（複数選択可）</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            {VEHICLE_TYPES.map(o => (
+              <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
+            ))}
           </div>
         </div>
 
@@ -2577,45 +2562,86 @@ const RPT = {
 
 function DashboardPage() {
   const { all, loading } = useShipments()
+  const isMobile = useIsMobile()
   const today = localToday()
   const ms = mondayOf(today)
   const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return ymd(d) })
   const todays = all.filter(s => s.date === today)
   const weeks = all.filter(s => weekDates.includes(s.date))
-  const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0).toFixed(2)
-  const card = (label, value, sub) => (
-    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '16px 18px', minWidth: 150 }}>
-      <div style={{ fontSize: 12, color: '#6b7a8d' }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#0f3060' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#9aa7b5' }}>{sub}</div>}
+  const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
+  const fmtVol = n => (Math.round(n * 100) / 100).toLocaleString('ja-JP')
+  // 本日分を時間順に並べる（午前=11:59 / 午後=23:59 換算・空欄は最後）
+  const timeMin = (s) => {
+    const t = String(firstTimeOf(s) || '').trim()
+    if (!t) return 99999
+    if (/午前/.test(t)) return 719
+    if (/午後/.test(t)) return 1439
+    const m = t.match(/(\d{1,2}):(\d{2})/)
+    return m ? (+m[1]) * 60 + (+m[2]) : 99999
+  }
+  const todaysSorted = [...todays].sort((a, b) => timeMin(a) - timeMin(b))
+
+  const card = (label, value, unit, sub, accent) => (
+    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div style={{ fontSize: 12, color: '#6b7a8d', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: accent || '#0f3060', lineHeight: 1.1 }}>
+        {value}{unit && <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7a8d', marginLeft: 3 }}>{unit}</span>}
+      </div>
+      {sub && <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 3 }}>{sub}</div>}
     </div>
   )
+  const breakdown = (title, entries, empty) => (
+    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', flex: '1 1 240px', minWidth: 0 }}>
+      <h3 style={{ fontSize: 13, color: '#3a4a5c', margin: '0 0 10px' }}>{title}</h3>
+      {entries.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>{empty}</div>
+        : entries.map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f2f4f8' }}>
+            <span style={{ color: '#1a2332', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</span>
+            <span style={{ color: '#0f3060', fontWeight: 700, flex: '0 0 auto', marginLeft: 8 }}>{v}件</span>
+          </div>
+        ))}
+    </div>
+  )
+
+  const vehEntries = Object.entries(todays.reduce((m, s) => { const k = s.vehicleType || '未設定'; m[k] = (m[k] || 0) + 1; return m }, {})).sort((a, b) => b[1] - a[1])
+  const drvEntries = (() => {
+    const m = {}; todays.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => m[n] = (m[n] || 0) + 1) })
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
+  })()
+
   return (
     <div style={RPT.wrap}>
       <h2 style={{ margin: '0 0 16px', color: '#1a2332' }}>📊 ダッシュボード</h2>
       {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div> : (
         <>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
-            {card('今日の出荷', `${todays.length} 件`, today)}
-            {card('今日の合計', `${vol(todays)} m³`)}
-            {card('今週の出荷', `${weeks.length} 件`, `${weekDates[0]}〜${weekDates[6]}`)}
-            {card('今週の合計', `${vol(weeks)} m³`)}
-            {card('登録総数', `${all.length} 件`)}
+          {/* サマリーカード（レスポンシブなグリッドで折り返し） */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+            {card('今日の出荷', todays.length, '件', `${today}（${WD[new Date(today).getDay()]}）`, '#1a6a9f')}
+            {card('今日の合計', fmtVol(vol(todays)), 'm³')}
+            {card('今週の出荷', weeks.length, '件', `${weekDates[0].slice(5)}〜${weekDates[6].slice(5)}`)}
+            {card('今週の合計', fmtVol(vol(weeks)), 'm³')}
+            {card('登録総数', all.length, '件')}
           </div>
-          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-            <div>
-              <h3 style={{ fontSize: 14, color: '#3a4a5c' }}>今日の車種別</h3>
-              {todays.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>なし</div>
-                : Object.entries(todays.reduce((m, s) => { const k = s.vehicleType || '未設定'; m[k] = (m[k] || 0) + 1; return m }, {})).map(([k, v]) => <div key={k} style={{ fontSize: 13 }}>{k}: {v}件</div>)}
-            </div>
-            <div>
-              <h3 style={{ fontSize: 14, color: '#3a4a5c' }}>今日の担当別</h3>
-              {(() => {
-                const m = {}; todays.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => m[n] = (m[n] || 0) + 1) })
-                const e = Object.entries(m)
-                return e.length ? e.map(([k, v]) => <div key={k} style={{ fontSize: 13 }}>{k}: {v}件</div>) : <div style={{ fontSize: 12, color: '#9aa7b5' }}>なし</div>
-              })()}
-            </div>
+
+          {/* 内訳（車種別・担当別） */}
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
+            {breakdown('今日の車種別', vehEntries, '本日の出荷はありません')}
+            {breakdown('今日の担当別', drvEntries, '本日の出荷はありません')}
+          </div>
+
+          {/* 本日の予定（時間順） */}
+          <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px' }}>
+            <h3 style={{ fontSize: 13, color: '#3a4a5c', margin: '0 0 10px' }}>本日の予定（時間順）</h3>
+            {todaysSorted.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>本日の出荷はありません</div>
+              : todaysSorted.map(s => (
+                <div key={s.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, padding: '7px 0', borderBottom: '1px solid #f2f4f8' }}>
+                  <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 52 }}>{firstTimeOf(s) || '—'}</span>
+                  <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
+                  </span>
+                  <span style={{ flex: '0 0 auto', color: '#3a4a5c' }}>{s.vehicleType || ''}{s.volume ? ` ${s.volume}m³` : ''}</span>
+                </div>
+              ))}
           </div>
         </>
       )}
@@ -2789,7 +2815,6 @@ function buildTestShipments() {
         siteName: `${pick(sites)}（${day + 1}日目-${i + 1}）`,
         siteAddress: pick(addresses),
         vehicleType,
-        truckCount: String(rint(1, 3)),
         mixCode,
         mixNotes: ['', '', ''],
         cementType: pick(CEMENT_TYPES),           // N か B
