@@ -175,11 +175,30 @@ function staticMapUrl(ship: any): string | null {
     `markers=color:red%7C${center}`,
     `language=ja`, `region=JP`, `key=${key}`,
   ]
-  // 矢印（緯度経度2点）を赤い太線で描画
+  // 矢印（緯度経度2点）を赤い線＋矢じりで描画。
+  // Static Maps の path は直線しか描けないため、終点に2本の短い線分を足して矢じりにする。
   const arrows = asArr(ship.mapArrows)
+  const line = (la1: number, ln1: number, la2: number, ln2: number) =>
+    `path=color:0xe8211cff%7Cweight:5%7C${la1},${ln1}%7C${la2},${ln2}`
   for (const a of arrows.slice(0, 10)) {
     if (a && typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
-      params.push(`path=color:0xe8211cff%7Cweight:5%7C${a.lat1},${a.lng1}%7C${a.lat2},${a.lng2}`)
+      params.push(line(a.lat1, a.lng1, a.lat2, a.lng2))
+      // 終点(lat2,lng2)から始点方向へ、±30°開いた短い線分を2本足して矢じりにする
+      const cosLat = Math.cos((a.lat2 * Math.PI) / 180) || 1
+      const dLat = a.lat1 - a.lat2
+      const dLng = (a.lng1 - a.lng2) * cosLat            // 経度方向を緯度スケールに合わせる
+      const len = Math.hypot(dLat, dLng) || 1e-9
+      const ux = dLat / len, uy = dLng / len             // 始点向きの単位ベクトル
+      const headLen = len * 0.28                         // 矢じりの長さ（線全体の約28%）
+      const ang = (28 * Math.PI) / 180                   // 開き角
+      const ca = Math.cos(ang), sa = Math.sin(ang)
+      for (const s of [1, -1]) {
+        const rx = ux * ca - uy * (sa * s)
+        const ry = ux * (sa * s) + uy * ca
+        const hLat = a.lat2 + rx * headLen
+        const hLng = a.lng2 + (ry * headLen) / cosLat
+        params.push(line(a.lat2, a.lng2, hLat, hLng))
+      }
     }
   }
   return `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
@@ -267,7 +286,7 @@ function shipmentBubble(s: any): any {
   if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
   contents.push(row('セメント種', String(s.cementType || '')))
   contents.push(row('量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
-  contents.push(row('配置', placements.join('・')))
+  contents.push(row('荷下ろし', placements.join('・')))
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))
@@ -512,8 +531,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (ev.type === 'message' && ev?.message?.type === 'text') {
             const text = String(ev.message.text || '').trim()
             if (text === '現場情報取得') {
+              // 先に「取得します／少々お待ちください」を返し、続けて本日の出荷情報を返信する。
+              // reply は無料・1回のみのため、同じ reply に2行案内＋情報をまとめて送る。
               const messages = await buildGenbaReply(userId)
-              await replyMessages(ev.replyToken, messages, token)
+              const withNotice = [
+                { type: 'text', text: '現場情報を取得します。\n少々お待ちください' },
+                ...messages,
+              ].slice(0, 5)   // replyは最大5メッセージ
+              await replyMessages(ev.replyToken, withNotice, token)
             }
           }
         }

@@ -1336,6 +1336,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
   const [page, setPage]             = useState(0)
+  const [mapKey, setMapKey]         = useState(0)   // 別伝票を開いた/リセット時にSiteMapを再マウント（描画モード解除＋新住所で再描画）
   const topRef = useRef(null)
   const PAGE_SIZE = 10
   // 直近7日（本日起点）の日付配列
@@ -1434,6 +1435,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     setEditChanged(Array.isArray(s.changedFields) ? s.changedFields : [])
     setForm(toForm(s))
     setError('')
+    setMapKey(k => k + 1)   // 描画モード中でも地図を作り直して新しい伝票の位置・矢印で再描画する
     requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
   }
 
@@ -1469,6 +1471,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         setEditing(null)
         setEditChanged([])
         setForm({ ...emptyShipForm })
+        setMapKey(k => k + 1)      // 更新後は地図を作り直し（描画モードを解除して初期状態へ）
         notifyShipmentsChanged()   // 他タブ（出荷予定表）に更新を通知
         // PC等で編集用の別ウィンドウとして開かれている場合は、更新後に閉じて元タブへ戻す
         if (isPopup) { window.close(); return }
@@ -1476,13 +1479,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         const created = await api.post('/api/shipments', payload)
         setShipments(ss => sortShip([...ss, created]))
         setForm({ ...emptyShipForm, date: form.date })
+        setMapKey(k => k + 1)
         notifyShipmentsChanged()
       }
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
   }
 
-  const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }) }
+  const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
 
   const handleDelete = async (id) => {
     try {
@@ -1669,6 +1673,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
           </FitToWidth>
           <div style={{ flex: stacked ? '0 0 auto' : '0 0 640px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
             <SiteMap
+              key={mapKey}
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
               mapView={form.mapView}
@@ -1736,7 +1741,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '台数', '配合', 'セメント', 'm³', '配置', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '台数', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
