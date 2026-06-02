@@ -224,7 +224,7 @@ function formatShipment(s: any): string {
   if (times.length) lines.push(`時間: ${times.join(' / ')}`)
   if (s.vehicleType) lines.push(`車種: ${s.vehicleType}`)
   if (s.mixCode) lines.push(`配合: ${s.mixCode}`)
-  if (s.volume) lines.push(`量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
+  if (s.volume) lines.push(`数量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
   if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
   if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
   return lines.join('\n')
@@ -296,7 +296,7 @@ function shipmentBubble(s: any): any {
   ]
   if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
   contents.push(row('セメント種', String(s.cementType || '')))
-  contents.push(row('量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
+  contents.push(row('数量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
   contents.push(row('荷下ろし', placements.join('・')))
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))

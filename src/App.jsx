@@ -1815,7 +1815,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 // ============================================================
 const SCHEDULE_FIELD_LABELS = {
   companyName: '業者名', tradingCompany: '商社名', siteName: '現場名',
-  vehicleType: '車種', mixCode: '配合', volume: '量', drivers: '担当',
+  vehicleType: '車種', mixCode: '配合', volume: '数量', drivers: '担当',
   times: '時間', notes: '備考', siteContact: '現場連絡先', pourLocation: '打設箇所',
 }
 
@@ -1875,7 +1875,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const compact = isMobile && !isPopup
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
-  const [date, setDate] = useState(() => localToday())
+  // 別ウィンドウ（PDF出力等）からは ?date= で表示日を引き継ぐ
+  const [date, setDate] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('date')
+      if (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) return p
+    }
+    return localToday()
+  })
   useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1891,6 +1898,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
   useEffect(() => {
     api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
   }, [])
+
+  // ?print=1 の別ウィンドウは、データ読み込み完了後に自動で印刷ダイアログ（A4横）を開く
+  useEffect(() => {
+    if (loading) return
+    const wantPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
+    if (!wantPrint) return
+    const t = setTimeout(() => { try { window.print() } catch {} }, 600)   // 描画・フォント反映を待つ
+    return () => clearTimeout(t)
+  }, [loading])
 
   // 差分更新：別ウィンドウ（閲覧専用）では1分ごとに再取得し、変更があった伝票だけ差し替える。
   // 全画面 reload しないのでスクロール位置やピンチズーム状態を保ったまま最新化できる。
@@ -2200,6 +2216,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
 
+  // PDF出力：別ウィンドウの出荷予定表を A4横で印刷（表示中の日付を引き継ぎ、読み込み後に自動で印刷ダイアログ）
+  const openSchedulePdf = () => {
+    const url = `${window.location.pathname}?view=schedule&popup=1&print=1&date=${encodeURIComponent(date)}`
+    const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+
   const sendLine = async (s) => {
     const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
     if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
@@ -2278,6 +2301,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
+          <button type="button" onClick={openSchedulePdf}
+            style={{ border: '1.5px solid #c0392b', background: '#fff', color: '#c0392b', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>🖨 PDF出力</button>
         </div>
       </div>
       )}
@@ -2312,7 +2337,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                       </div>
                     </div>
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
-                    <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                    <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
                   {/* 備考（横並び） */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
@@ -2342,20 +2367,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
         const inner = (<>
         <table>
           <colgroup>
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '14%' }} />
             {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th><div>現場名</div><div>打設箇所</div></th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
+              <th>現場名</th><th>打設箇所</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2364,7 +2390,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {rows.map(s => (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
-                <td>{cell(s, 'siteName', '', { big: true })}{cell(s, 'pourLocation', '打設箇所', { plain: true })}</td>
+                <td>{cell(s, 'siteName', '', { big: true })}</td>
+                <td>{cell(s, 'pourLocation', '', { center: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
                   {cellMix(s, { center: true, big: true })}
@@ -2599,7 +2626,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           </div>
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>量（m³）</label>
+          <label style={lblS}>数量（m³）</label>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input value={volume} onChange={e => setVolume(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
             <button type="button" onClick={() => setVolumeUncertain(v => !v)}

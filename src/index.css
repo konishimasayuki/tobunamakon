@@ -194,14 +194,25 @@ input, textarea, select { font-family: inherit; }
 .schedule-popup-root .schedule.popup-view { box-sizing:border-box; max-width:100%; }
 .schedule-popup-root .schedule.popup-view table { table-layout:fixed; }
 
-/* PDF出力（印刷）: 用紙は横向き。ヘッダーのボタン類は隠し、表を全幅で出す */
+/* PDF出力（印刷）: 用紙はA4横。23行を1ページに収め、画像の帳票のように罫線付きで出す */
 @media print {
-  @page { size: A4 landscape; margin: 8mm; }
+  @page { size: A4 landscape; margin: 6mm; }
   html, body { background:#fff !important; }
   .no-print { display:none !important; }
-  /* 別ウィンドウ表示時は表だけを印刷（縮小スケールを解除して実寸で） */
+  /* 別ウィンドウは表だけを印刷（FitToWidthの縮小スケールを解除して実寸で） */
   .schedule-popup-root, .schedule-popup-root .schedule.popup-view { padding:0 !important; max-width:none !important; overflow:visible !important; }
-  .schedule.popup-view table { width:100% !important; }
+  .schedule.popup-view { transform:none !important; }
+  .schedule.popup-view table { width:100% !important; min-width:0 !important; table-layout:fixed; }
+  /* 1ページ(横A4 ≒ 高さ190mm)に収まるよう行を圧縮（ヘッダー＋23行） */
+  .schedule.popup-view td, .schedule.popup-view th { padding:1px 3px !important; line-height:1.15 !important; border:1px solid #111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .schedule.popup-view td { height:7.3mm !important; }
+  .schedule.popup-view thead th, .schedule.popup-view thead th > div { letter-spacing:0.04em !important; font-size:11px !important; padding:2px 3px !important; line-height:1.2 !important; }
+  .schedule.popup-view .sc-in, .schedule.popup-view .sc-mixcode, .schedule.popup-view .sc-notes { font-size:12px !important; line-height:1.15 !important; padding:0 1px !important; }
+  .schedule.popup-view .sc-in.big, .schedule.popup-view .sc-mixcode.big { font-size:13px !important; }
+  .schedule.popup-view .sc-in.xl { font-size:14px !important; }
+  /* 色は黒基調、変更箇所のみ赤を保持 */
   .schedule .sc-in, .schedule .sc-mixcode, .schedule .sc-notes { color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .schedule .sc-in.changed, .schedule .sc-in.imp, .schedule .sc-mixcode .changed { color:#c81e1e !important; }
+  .schedule .sc-in.changed, .schedule .sc-in.imp { color:#c81e1e !important; }
+  /* ページ分割を防ぐ */
+  .schedule.popup-view table, .schedule.popup-view tr, .schedule.popup-view td { page-break-inside:avoid; }
 }
