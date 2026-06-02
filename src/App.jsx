@@ -2216,13 +2216,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
 
-  // PDF出力：別ウィンドウの出荷予定表を A4横で印刷（表示中の日付を引き継ぎ、読み込み後に自動で印刷ダイアログ）
-  const openSchedulePdf = () => {
-    const url = `${window.location.pathname}?view=schedule&popup=1&print=1&date=${encodeURIComponent(date)}`
-    const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
-    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
-  }
-
   const sendLine = async (s) => {
     const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
     if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
@@ -2301,8 +2294,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
-          <button type="button" onClick={openSchedulePdf}
-            style={{ border: '1.5px solid #c0392b', background: '#fff', color: '#c0392b', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>🖨 PDF出力</button>
         </div>
       </div>
       )}
@@ -2989,6 +2980,14 @@ function SettingsPage() {
   const [usersOpen, setUsersOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [pdfDate, setPdfDate] = useState(() => localToday())
+
+  // PDF出力：出荷予定表を A4横で別ウィンドウに開き、読み込み後に自動で印刷ダイアログを出す
+  const openSchedulePdf = () => {
+    const url = `${window.location.pathname}?view=schedule&popup=1&print=1&date=${encodeURIComponent(pdfDate)}`
+    const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -3082,6 +3081,20 @@ function SettingsPage() {
         </div>
         <div style={{ fontSize: 12, color: '#c0392b', marginTop: 8 }}>
           ※「全件削除」は現在登録されている出荷登録をすべて消します（元に戻せません）。
+        </div>
+      </div>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🖨 出荷予定表 PDF出力（暫定）</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          指定日の出荷予定表を A4横・1ページで印刷（PDF保存）します。<br />
+          別ウィンドウが開き、自動で印刷ダイアログが表示されます（用紙: A4／向き: 横 を選択してください）。
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="date" value={pdfDate} onChange={e => setPdfDate(e.target.value)}
+            style={{ ...inp, width: 'auto', fontSize: 14, padding: '8px 10px' }} />
+          <button onClick={openSchedulePdf}
+            style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>🖨 PDF出力</button>
         </div>
       </div>
 
