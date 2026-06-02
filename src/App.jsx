@@ -2210,6 +2210,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
   }
 
+  const openScheduleWindow = () => {
+    const url = `${window.location.pathname}?view=schedule&popup=1`
+    const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+
   const sendLine = async (s) => {
     const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
     if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
@@ -2286,6 +2292,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
+          <button type="button" onClick={openScheduleWindow}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
         </div>
       </div>
       )}
