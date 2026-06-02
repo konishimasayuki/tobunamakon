@@ -193,3 +193,15 @@ input, textarea, select { font-family: inherit; }
 }
 .schedule-popup-root .schedule.popup-view { box-sizing:border-box; max-width:100%; }
 .schedule-popup-root .schedule.popup-view table { table-layout:fixed; }
+
+/* PDF出力（印刷）: 用紙は横向き。ヘッダーのボタン類は隠し、表を全幅で出す */
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  html, body { background:#fff !important; }
+  .no-print { display:none !important; }
+  /* 別ウィンドウ表示時は表だけを印刷（縮小スケールを解除して実寸で） */
+  .schedule-popup-root, .schedule-popup-root .schedule.popup-view { padding:0 !important; max-width:none !important; overflow:visible !important; }
+  .schedule.popup-view table { width:100% !important; }
+  .schedule .sc-in, .schedule .sc-mixcode, .schedule .sc-notes { color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .schedule .sc-in.changed, .schedule .sc-in.imp, .schedule .sc-mixcode .changed { color:#c81e1e !important; }
+}

@@ -285,8 +285,9 @@ function shipmentBubble(s: any): any {
       ],
     },
     sep(),
-    // 現場名（大きく中央）
+    // 現場名（大きく中央）＋打設箇所
     { type: 'text', text: s.siteName || '（現場名なし）', weight: 'bold', size: 'xl', color: '#111111', align: 'center', wrap: true },
+    ...(s.pourLocation ? [{ type: 'text', text: `打設箇所: ${s.pourLocation}`, size: 'sm', color: '#3a4a5c', align: 'center', wrap: true }] : []),
     sep(),
     // 主要項目
     row('担当', drivers.join('、'), { big: true }),

@@ -899,6 +899,7 @@ const emptyShipForm = {
   volume: '',
   volumeUncertain: false,
   placements: [],
+  pourLocation: '',
   orderContact: '', siteContact: '',
   drivers: [],
   notes: [{ text: '', important: false }],
@@ -1421,6 +1422,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     volume: (s.volume ?? '') === '' ? '' : String(s.volume),
     volumeUncertain: !!s.volumeUncertain,
     placements: Array.isArray(s.placements) ? s.placements : [],
+    pourLocation: s.pourLocation || '',
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
@@ -1578,10 +1580,18 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 4段: 車種 / 配合・m³ / セメント種・配置 */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
-                <div>
-                  <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} multiStr big />
+              <div className="cell stack" style={{ flex: '0 0 24%', minHeight: 140, padding: 0 }}>
+                <div className="subrow" style={{ flex: '0 0 auto' }}>
+                  <div className="cell" style={{ flex: 1 }}>
+                    <div className="lbl" style={redIf('vehicleType')}>車 種</div>
+                    <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} multiStr big />
+                  </div>
+                </div>
+                <div className="subrow" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
+                    <FitField value={form.pourLocation} onChange={set('pourLocation')} style={redIf('pourLocation')} />
+                  </div>
                 </div>
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
@@ -1806,7 +1816,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 const SCHEDULE_FIELD_LABELS = {
   companyName: '業者名', tradingCompany: '商社名', siteName: '現場名',
   vehicleType: '車種', mixCode: '配合', volume: '量', drivers: '担当',
-  times: '時間', notes: '備考', siteContact: '現場連絡先',
+  times: '時間', notes: '備考', siteContact: '現場連絡先', pourLocation: '打設箇所',
 }
 
 // 編集前(orig)と保存値(next)を比べ、変更項目の配列を返す。
@@ -1840,6 +1850,7 @@ function diffChangedFields(orig, next) {
   const origPlace = Array.isArray(orig.placements) ? orig.placements : []
   const nextPlace = Array.isArray(next.placements) ? next.placements : []
   if (!eq(origPlace, nextPlace)) changed.push('placements')
+  if (norm(orig.pourLocation) !== norm(next.pourLocation)) changed.push('pourLocation')
   const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
   const nextDrivers = (Array.isArray(next.drivers) ? next.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
   if (!eq(origDrivers, nextDrivers)) changed.push('drivers')
@@ -2249,8 +2260,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
           </div>
           <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
-          <button type="button" onClick={() => window.close()}
-            style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+          <div className="no-print" style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => window.print()}
+              style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>🖨 PDF出力</button>
+            <button type="button" onClick={() => window.close()}
+              style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+          </div>
         </div>
       ) : (
       <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -2286,6 +2301,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   </div>
                   {/* 現場名（中央・大きく） */}
                   <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
+                  {/* 打設箇所 */}
+                  {(s.pourLocation || isChanged(s, 'pourLocation')) ? <div className="sc-row"><span className="sc-lbl">打設箇所</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所', { plain: true })}</span></div> : null}
                   {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
                   <div className="sc-grid2">
                     <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
@@ -2338,7 +2355,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
+              <th><div>現場名</div><div>打設箇所</div></th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2347,7 +2364,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {rows.map(s => (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
-                <td>{cell(s, 'siteName', '', { big: true })}</td>
+                <td>{cell(s, 'siteName', '', { big: true })}{cell(s, 'pourLocation', '打設箇所', { plain: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
                   {cellMix(s, { center: true, big: true })}
@@ -2425,6 +2442,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [companyName, setCompanyName] = useState(s.companyName || '')
   const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
   const [siteName, setSiteName] = useState(s.siteName || '')
+  const [pourLocation, setPourLocation] = useState(s.pourLocation || '')
   const [siteAddress, setSiteAddress] = useState(s.siteAddress || '')
   const [mapView, setMapView] = useState(s.mapView || null)
   const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
@@ -2477,7 +2495,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     const patch = {
       times: cleanTimes,
       date: date || s.date,
-      companyName, tradingCompany, siteName, siteAddress,
+      companyName, tradingCompany, siteName, siteAddress, pourLocation,
       mapView, mapArrows,
       vehicleType, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
@@ -2533,6 +2551,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
+        <div style={{ marginBottom: 12 }}><label style={lblS}>打設箇所</label><input value={pourLocation} onChange={e => setPourLocation(e.target.value)} style={inS} /></div>
 
         {/* 現場住所＋地図（住所編集・ピン/矢印編集） */}
         <div style={{ marginBottom: 12 }}>
@@ -2751,9 +2770,26 @@ function WeeklySchedulePage() {
           {days.map(d => {
             const ds = ymd(d), wd = WD[d.getDay()]
             const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+            // その日の集計：車種別の台数（1予定=1台）、合計数量、?が1つでもあれば表示
+            const vehCount = {}
+            VEHICLE_TYPES.forEach(v => { vehCount[v] = 0 })
+            list.forEach(s => {
+              const vs = String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean)
+              if (vs.length) vs.forEach(v => { vehCount[v] = (vehCount[v] || 0) + 1 })
+            })
+            const totalVol = list.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
+            const hasUncertain = list.some(s => s.volumeUncertain)
+            const vehSummary = VEHICLE_TYPES.filter(v => vehCount[v] > 0).map(v => `${v}:${vehCount[v]}`).join(' ')
             return (
               <div key={ds} style={{ border: '1px solid #dde3ed', borderRadius: 8, minHeight: 220, background: ds === todayStr ? '#eef5ff' : '#fff' }}>
                 <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', fontWeight: 700, fontSize: 13, textAlign: 'center', color: wd === '日' ? '#c0392b' : wd === '土' ? '#1b4ea8' : '#1a2332' }}>{d.getMonth() + 1}/{d.getDate()}（{wd}）</div>
+                {/* 日次サマリー：車両別合計台数 ／ 合計数量（?あれば付与） */}
+                {list.length > 0 && (
+                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 700 }}>{vehSummary || '車種未設定'}（計{list.length}台）</div>
+                    <div style={{ color: '#0f3060', fontWeight: 700 }}>{(Math.round(totalVol * 100) / 100).toLocaleString('ja-JP')}m³{hasUncertain ? ' ?' : ''}</div>
+                  </div>
+                )}
                 <div style={{ padding: 6 }}>
                   {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
                     : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? ` /${s.volume}m³` : ''}</span></div>)}
@@ -2869,6 +2905,7 @@ function buildTestShipments() {
   const driverPool = ['小西公幸', '田中一郎', '佐藤健', '鈴木大輔', '高橋誠', '渡辺隆', '伊藤豊', '山本浩']
   const timeChoices = ['08:00', '08:30', '09:00', '10:00', '10:30', '11:00', '13:00', '14:00', '15:30', '午前', '午後']
   const noteChoices = ['AM', 'FAX', 'バケット→舟下ろし', '(！)23打てばなし', '工TP']
+  const pourChoices = ['基礎', '土間', '擁壁', '床版', '柱・梁', 'スラブ', '布基礎', 'beam・slab同時打設で長め']
 
   const rows = []
   for (let day = 0; day < 10; day++) {
@@ -2905,6 +2942,7 @@ function buildTestShipments() {
         volume: String(rint(3, 30)),
         volumeUncertain: false,
         placements: [pick(PLACEMENT_TYPES)],      // クレーン / F1 / ポンプ のいずれか1つ
+        pourLocation: pick(pourChoices),
         orderContact: `${dgts(4)}-${dgts(2)}-${dgts(4)}`,   // 0000-00-0000 形式（ランダム数字）
         drivers,
         notes,
