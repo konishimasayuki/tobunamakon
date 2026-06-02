@@ -1529,8 +1529,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 28, alignItems: 'stretch', justifyContent: 'center' }}>
-          <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 0 700px', minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 20, alignItems: 'stretch', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
+          <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 1 700px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
@@ -1671,7 +1671,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             </div>
           </div>
           </FitToWidth>
-          <div style={{ flex: stacked ? '0 0 auto' : '0 0 640px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+          <div style={{ flex: stacked ? '0 0 auto' : '1 1 480px', width: stacked ? '100%' : undefined, minWidth: 0, maxWidth: stacked ? undefined : 640 }}>
             <SiteMap
               key={mapKey}
               address={form.siteAddress}
