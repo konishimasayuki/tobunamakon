@@ -1875,7 +1875,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const compact = isMobile && !isPopup
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
-  // 別ウィンドウ（PDF出力等）からは ?date= で表示日を引き継ぐ
+  // 別ウィンドウからは ?date= で表示日を引き継ぐ
   const [date, setDate] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search).get('date')
@@ -1899,7 +1899,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
   }, [])
 
-  // ?print=1 の別ウィンドウは、データ読み込み完了後に自動で印刷ダイアログ（A4横）を開く
+  // ?print=1 の別ウィンドウ（設定のPDF出力）は、データ読み込み完了後に自動で印刷ダイアログ（A4横）を開く
   useEffect(() => {
     if (loading) return
     const wantPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
@@ -2277,8 +2277,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
           <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
           <div className="no-print" style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => window.print()}
-              style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>🖨 PDF出力</button>
             <button type="button" onClick={() => window.close()}
               style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
           </div>
