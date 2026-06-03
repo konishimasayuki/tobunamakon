@@ -152,6 +152,20 @@ function asArr(v: any): any[] {
   return []
 }
 
+// 車種ラベル（数量付き）: vehicleItems があれば「4t×2・7t」、無ければ vehicleType
+function vehicleLabelOf(s: any): string {
+  const items = asArr(s.vehicleItems)
+  if (items.length) return items.map((v: any) => v.qty ? `${v.type}×${v.qty}` : v.type).join('・')
+  return String(s.vehicleType || '')
+}
+// 配合行（複数）: mixRows があれば各行 {code,note}、無ければ mixCode/mixNotes 1行
+function mixRowsOf(s: any): Array<{ code: string; note: string }> {
+  const rows = asArr(s.mixRows)
+  if (rows.length) return rows.map((r: any) => ({ code: asArr(r.parts).slice(0, 3).join('-').replace(/-+$/, ''), note: String(r.note || '') }))
+  const mn = asArr(s.mixNotes)
+  return [{ code: String(s.mixCode || ''), note: String(mn[1] || '') }]
+}
+
 // 出荷データから Google Static Maps の画像URLを作る（ピン＋矢印を線で描画）
 function staticMapUrl(ship: any): string | null {
   // LINEのサーバーが画像を取得するためリファラーが無い。制限なしのサーバー用キー（GMAPS_API_KEY）を優先する。
@@ -222,8 +236,8 @@ function formatShipment(s: any): string {
   lines.push(`■ ${s.companyName || ''}${s.tradingCompany ? `（${s.tradingCompany}）` : ''}`)
   if (s.siteName) lines.push(`現場: ${s.siteName}`)
   if (times.length) lines.push(`時間: ${times.join(' / ')}`)
-  if (s.vehicleType) lines.push(`車種: ${s.vehicleType}`)
-  if (s.mixCode) lines.push(`配合: ${s.mixCode}`)
+  if (vehicleLabelOf(s)) lines.push(`車種: ${vehicleLabelOf(s)}`)
+  { const mr = mixRowsOf(s).filter(r => r.code); if (mr.length) lines.push(`配合: ${mr.map(r => r.code).join(' / ')}`) }
   if (s.volume) lines.push(`数量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
   if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
   if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
@@ -291,13 +305,24 @@ function shipmentBubble(s: any): any {
     sep(),
     // 主要項目
     row('担当', drivers.join('、'), { big: true }),
-    row('車種', `${s.vehicleType || '—'}`),
-    row('配合', mixLine, { big: true, color: '#c0392b' }),
+    row('車種', vehicleLabelOf(s) || '—'),
   ]
-  if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
+  // 配合（複数行）。各行 code＋（特記）を表示
+  const mrows = mixRowsOf(s).filter(r => r.code || r.note)
+  if (mrows.length) {
+    mrows.forEach((r, i) => {
+      contents.push(row(i === 0 ? '配合' : '　', r.code || '—', { big: true, color: '#c0392b' }))
+      if (r.note) contents.push(row('（特記）', r.note, { color: '#c0392b' }))
+    })
+  } else {
+    contents.push(row('配合', mixLine || '—', { big: true, color: '#c0392b' }))
+    if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
+  }
   contents.push(row('セメント種', String(s.cementType || '')))
   contents.push(row('数量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
   contents.push(row('荷下ろし', placements.join('・')))
+  const noteTags = asArr(s.noteTags).filter(Boolean)
+  if (noteTags.length) contents.push(row('区分', noteTags.join('・')))
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))

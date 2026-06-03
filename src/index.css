@@ -49,6 +49,14 @@ input, textarea, select { font-family: inherit; }
 .denpyo .qmark.on { display:inline; }
 .denpyo .qtoggle { position:absolute; bottom:4px; right:6px; font-size:11px; font-family:'Noto Sans JP',sans-serif; color:#555; display:flex; align-items:center; gap:2px; cursor:pointer; user-select:none; }
 .denpyo .qtoggle input { margin:0; }
+/* m³値の下：丸み四角チェック（中央）＋「？を付ける」枠（右） */
+.denpyo .qrow { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:6px; font-family:'Noto Sans JP',sans-serif; }
+.denpyo .qbox { width:20px; height:20px; border:1.5px solid #888; border-radius:6px; background:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:14px; color:#1b4ea8; cursor:pointer; user-select:none; }
+.denpyo .qbox.on { border-color:#1b4ea8; background:#e8f0ff; font-weight:700; }
+.denpyo .qlabel { border:1px solid #999; border-radius:4px; padding:2px 8px; font-size:12px; color:#555; cursor:pointer; user-select:none; white-space:nowrap; }
+/* 車種の数量入力（チップ横） */
+.denpyo .vehqty { width:2.2em; text-align:center; border:none; border-bottom:1.5px solid #111; font-size:16px; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
+.denpyo .vehqty::placeholder { color:#bbb; font-size:11px; }
 .denpyo .haigou-head { display:flex; align-items:baseline; gap:12px; }
 .denpyo .haigou-head .lbl { margin-bottom:0; flex:0 0 auto; }
 .denpyo .tokki { flex:1 1 auto; width:auto; min-width:0; font-size:10px; color:#c81e1e; font-weight:700; }
