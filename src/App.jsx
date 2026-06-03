@@ -2635,13 +2635,13 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     ;(Array.isArray(s.vehicleItems) ? s.vehicleItems : []).forEach(v => { if (v.type) m[v.type] = v.qty || '' })
     return m
   })
-  const [mixParts, setMixParts] = useState(() => {
+  const [mixRows, setMixRows] = useState(() => {
+    if (Array.isArray(s.mixRows) && s.mixRows.length) {
+      return s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
+    }
     const p = String(s.mixCode || '').split('-')
-    return [p[0] || '', p[1] || '', p[2] || '']
-  })
-  const [mixNotes, setMixNotes] = useState(() => {
     const n = Array.isArray(s.mixNotes) ? s.mixNotes : []
-    return [n[0] || '', n[1] || '', n[2] || '']
+    return [{ parts: [p[0] || '', p[1] || '', p[2] || ''], note: n[1] || '' }]
   })
   const [volume, setVolume] = useState(s.volume == null ? '' : String(s.volume))
   const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
@@ -2656,15 +2656,19 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const setTime = (i, v) => setTimes(ts => ts.map((t, idx) => idx === i ? v : t))
   const addTime = () => setTimes(ts => ts.length < 2 ? [...ts, ''] : ts)
   const delTime = (i) => setTimes(ts => ts.length > 1 ? ts.filter((_, idx) => idx !== i) : [''])
-  // 配合：3セクション（各2桁）＋各セクションの特記
-  const setMixPart = (i, v) => setMixParts(p => p.map((x, idx) => idx === i ? v : x))
-  const setMixNote = (i, v) => setMixNotes(n => n.map((x, idx) => idx === i ? v : x))
+  // 配合：複数行。各行3セクション（各2桁）＋中央の特記
+  const setMixPart = (ri, i, v) => setMixRows(rs => rs.map((r, idx) => idx === ri ? { ...r, parts: r.parts.map((x, j) => j === i ? v : x) } : r))
+  const setMixNote = (ri, v) => setMixRows(rs => rs.map((r, idx) => idx === ri ? { ...r, note: v } : r))
+  const addMixRow = () => setMixRows(rs => [...rs, { parts: ['', '', ''], note: '' }])
+  const removeMixRow = (ri) => setMixRows(rs => rs.length > 1 ? rs.filter((_, idx) => idx !== ri) : rs)
 
-  // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）
+  // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）。新規選択時は台数を1台にする
   const vehList = vehicleType.split('・').map(x => x.trim()).filter(Boolean)
   const toggleVeh = (o) => {
-    const next = vehList.includes(o) ? vehList.filter(x => x !== o) : [...vehList, o]
+    const isOn = vehList.includes(o)
+    const next = isOn ? vehList.filter(x => x !== o) : [...vehList, o]
     setVehicleType(VEHICLE_TYPES.filter(v => next.includes(v)).join('・'))
+    if (!isOn) setVehQty(q => ({ ...q, [o]: q[o] || '1' }))
   }
 
   // 担当：最大4人。選択肢から追加／チップで削除
@@ -2679,21 +2683,22 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     setSaving(true)
     // 構造化パッチを作り、元と異なるフィールドだけ changed に積む
     const cleanTimes = times.map(t => t.trim()).filter(Boolean)
-    // 配合：3セクションを - 連結（末尾の空欄は落とす）。特記は3要素配列で保持
-    const mixCode = mixParts.map(p => p.trim()).join('-').replace(/-+$/, '')
-    const mixNotesClean = mixNotes.map(n => n.trim())
+    // 配合：複数行を整形（全行空の行は落とす）。1行目を mixCode/mixNotes に同期
+    const cleanRows = mixRows
+      .map(r => ({ parts: [r.parts[0].trim(), r.parts[1].trim(), r.parts[2].trim()], note: (r.note || '').trim() }))
+      .filter(r => r.parts.some(Boolean) || r.note)
+    const finalRows = cleanRows.length ? cleanRows : [{ parts: ['', '', ''], note: '' }]
+    const mixCode = finalRows[0].parts.join('-').replace(/-+$/, '')
+    const mixNotesClean = ['', finalRows[0].note || '', '']
     // 車種：選択中の車種名＋入力された台数を vehicleItems に反映
     const vehTypes = String(vehicleType || '').split('・').map(x => x.trim()).filter(Boolean)
     const vehicleItems = vehTypes.map(t => ({ type: t, qty: (vehQty[t] || '').trim() }))
-    // 配合：1行目はモーダル編集分、2行目以降は既存(mixRows)をそのまま保持
-    const prevRows = Array.isArray(s.mixRows) ? s.mixRows : []
-    const mixRows = [{ parts: [mixParts[0] || '', mixParts[1] || '', mixParts[2] || ''], note: mixNotesClean[1] || '' }, ...prevRows.slice(1)]
     const patch = {
       times: cleanTimes,
       date: date || s.date,
       companyName, tradingCompany, siteName, siteAddress, pourLocation,
       mapView, mapArrows,
-      vehicleType, vehicleItems, mixCode, mixNotes: mixNotesClean, mixRows, volume, volumeUncertain,
+      vehicleType, vehicleItems, mixCode, mixNotes: mixNotesClean, mixRows: finalRows, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
       noteTags,
@@ -2807,24 +2812,32 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           )}
         </div>
 
-        {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
+        {/* 配合（複数行・3セクション・中央に特記）＋量（?トグル） */}
         <div style={{ marginBottom: 12 }}>
           <label style={lblS}>配合（中央のみ特記可）</label>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {[0, 1, 2].map(i => (
-              <Fragment key={i}>
-                {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {i === 1
-                    ? <input value={mixNotes[1]} onChange={e => setMixNote(1, e.target.value)} placeholder="特記"
-                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
-                    : <div style={{ height: 15 }} />}
-                  <input value={mixParts[i]} onChange={e => setMixPart(i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
-                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
-                </div>
-              </Fragment>
-            ))}
-          </div>
+          {mixRows.map((row, ri) => (
+            <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 10 : 0 }}>
+              {[0, 1, 2].map(i => (
+                <Fragment key={i}>
+                  {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {i === 1
+                      ? <input value={row.note} onChange={e => setMixNote(ri, e.target.value)} placeholder="特記"
+                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                      : <div style={{ height: 15 }} />}
+                    <input value={row.parts[i]} onChange={e => setMixPart(ri, i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
+                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
+                  </div>
+                </Fragment>
+              ))}
+              {ri > 0 && (
+                <button type="button" onClick={() => removeMixRow(ri)} title="この配合を削除"
+                  style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 40, fontSize: 16, cursor: 'pointer' }}>×</button>
+              )}
+            </div>
+          ))}
+          <button type="button" onClick={addMixRow}
+            style={{ marginTop: 8, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 配合を追加</button>
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={lblS}>数量（m³）</label>
