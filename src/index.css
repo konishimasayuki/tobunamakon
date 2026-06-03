@@ -149,6 +149,7 @@ input, textarea, select { font-family: inherit; }
 .schedule td.sc-nowrap .sc-in { white-space:nowrap; text-overflow:clip; }
 .schedule td.sc-nowrap textarea.sc-ta { white-space:nowrap; }
 /* 配合の特記事項を配合の3フィールド（数字3つ）に合わせて3分割表示 */
+.schedule .sc-mixnote-line { display:block; width:100%; font-size:clamp(9px,1.1cqi,13px); color:#c81e1e; font-weight:700; text-align:center; line-height:1.25; white-space:nowrap; }
 .schedule .sc-mixnotes { display:flex; width:100%; }
 .schedule .sc-mixnotes span { flex:1; text-align:center; font-size:clamp(9px,0.85vw,13px); color:#c81e1e; font-weight:700; min-width:0; white-space:nowrap; }
 

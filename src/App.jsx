@@ -2262,15 +2262,24 @@ function SchedulePage({ onEditShipment, isPopup }) {
       <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '') + '_n' + rows.length} style={{ pointerEvents: 'none' }}>
         {rows.map((r, ri) => {
           const parts = String(r.code || '').split('-')
+          // 各配合行の下にその行の特記を表示（配合→特記→配合→特記…）
+          const noteRed = ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))
           return (
-            <span key={ri} style={{ display: 'block', whiteSpace: 'nowrap' }}>
-              {parts.map((p, i) => (
-                <Fragment key={i}>
-                  {i > 0 && <span>-</span>}
-                  <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
-                </Fragment>
-              ))}
-            </span>
+            <Fragment key={ri}>
+              {r.code ? (
+                <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
+                  {parts.map((p, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <span>-</span>}
+                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
+                    </Fragment>
+                  ))}
+                </span>
+              ) : null}
+              {(r.note && r.note.trim()) ? (
+                <span className="sc-mixnote-line" style={noteRed ? { color: '#c81e1e' } : undefined}>{r.note}</span>
+              ) : null}
+            </Fragment>
           )
         })}
       </span>
@@ -2474,8 +2483,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   </div>
                   {/* 現場名（中央・大きく） */}
                   <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
-                  {/* 打設箇所 */}
-                  {(s.pourLocation || isChanged(s, 'pourLocation')) ? <div className="sc-row"><span className="sc-lbl">打設箇所</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所', { plain: true })}</span></div> : null}
                   {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
                   <div className="sc-grid2">
                     <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
@@ -2484,8 +2491,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
                         {cell(s, 'vehicleType', '', { center: true, big: true })}
                       </div>
                     </div>
-                    <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                  </div>
+                  {/* 打設箇所・区分（1行を半分ずつ） */}
+                  <div className="sc-grid2">
+                    <div className="sc-box"><span className="sc-lbl">打設箇所</span>{cell(s, 'pourLocation', '', { center: true })}</div>
+                    <div className="sc-box"><span className="sc-lbl">区分</span>{cell(s, 'noteTags', '', { center: true })}</div>
                   </div>
                   {/* 備考（横並び） */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
@@ -2542,14 +2554,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'pourLocation', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
-                <td className="sc-nowrap">
-                  {cellMix(s, { center: true, big: true })}
-                  {(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? (
-                    <div className="sc-mixnotes">
-                      <span /><span style={{ color: (isChanged(s, 'mixnote') || isChanged(s, 'mixCode')) ? '#c81e1e' : undefined }}>{s.mixNotes[1]}</span><span />
-                    </div>
-                  ) : null}
-                </td>
+                <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
@@ -2620,10 +2625,16 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
   const [siteName, setSiteName] = useState(s.siteName || '')
   const [pourLocation, setPourLocation] = useState(s.pourLocation || '')
+  const [pourFree, setPourFree] = useState(() => !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)))
   const [siteAddress, setSiteAddress] = useState(s.siteAddress || '')
   const [mapView, setMapView] = useState(s.mapView || null)
   const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
   const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
+  const [vehQty, setVehQty] = useState(() => {   // 車種ごとの台数 { '7t': '2', ... }
+    const m = {}
+    ;(Array.isArray(s.vehicleItems) ? s.vehicleItems : []).forEach(v => { if (v.type) m[v.type] = v.qty || '' })
+    return m
+  })
   const [mixParts, setMixParts] = useState(() => {
     const p = String(s.mixCode || '').split('-')
     return [p[0] || '', p[1] || '', p[2] || '']
@@ -2636,7 +2647,9 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
   const [drivers, setDrivers] = useState(initDrivers)
   const [notes, setNotes] = useState(Array.isArray(s.notes) ? s.notes.map(n => n.text).join('\n') : '')
+  const [noteTags, setNoteTags] = useState(Array.isArray(s.noteTags) ? s.noteTags : [])
   const [siteContact, setSiteContact] = useState(s.siteContact || '')
+  const toggleNoteTag = (t) => setNoteTags(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
   const [saving, setSaving] = useState(false)
 
   // 時間：行ごとに編集／追加／削除（最大2）
@@ -2669,12 +2682,12 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     // 配合：3セクションを - 連結（末尾の空欄は落とす）。特記は3要素配列で保持
     const mixCode = mixParts.map(p => p.trim()).join('-').replace(/-+$/, '')
     const mixNotesClean = mixNotes.map(n => n.trim())
-    // 既存の車種数量(vehicleItems)を保持しつつ、モーダルで変更された車種名に合わせて同期
-    const prevItems = Array.isArray(s.vehicleItems) ? s.vehicleItems : []
+    // 車種：選択中の車種名＋入力された台数を vehicleItems に反映
     const vehTypes = String(vehicleType || '').split('・').map(x => x.trim()).filter(Boolean)
-    const vehicleItems = vehTypes.map(t => prevItems.find(v => v.type === t) || { type: t, qty: '' })
-    // 配合は1行（モーダルは単一行編集）。表示の複数行(mixRows)も1行に同期
-    const mixRows = [{ parts: [mixParts[0] || '', mixParts[1] || '', mixParts[2] || ''], note: mixNotesClean[1] || '' }]
+    const vehicleItems = vehTypes.map(t => ({ type: t, qty: (vehQty[t] || '').trim() }))
+    // 配合：1行目はモーダル編集分、2行目以降は既存(mixRows)をそのまま保持
+    const prevRows = Array.isArray(s.mixRows) ? s.mixRows : []
+    const mixRows = [{ parts: [mixParts[0] || '', mixParts[1] || '', mixParts[2] || ''], note: mixNotesClean[1] || '' }, ...prevRows.slice(1)]
     const patch = {
       times: cleanTimes,
       date: date || s.date,
@@ -2683,6 +2696,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
       vehicleType, vehicleItems, mixCode, mixNotes: mixNotesClean, mixRows, volume, volumeUncertain,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
+      noteTags,
       siteContact,
     }
     // 配合は桁ごと・備考は行ごとに変更を検出（共通ヘルパー）
@@ -2734,7 +2748,25 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
-        <div style={{ marginBottom: 12 }}><label style={lblS}>打設箇所</label><input value={pourLocation} onChange={e => setPourLocation(e.target.value)} style={inS} /></div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>打設箇所</label>
+          {!pourFree ? (
+            <select value={pourLocation} style={{ ...inS, cursor: 'pointer' }}
+              onChange={e => {
+                if (e.target.value === '入力する') { setPourFree(true); setPourLocation('') }
+                else setPourLocation(e.target.value)
+              }}>
+              <option value=""></option>
+              {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={pourLocation} onChange={e => setPourLocation(e.target.value)} placeholder="打設箇所を入力" style={{ ...inS, flex: 1 }} />
+              <button type="button" onClick={() => { setPourFree(false); setPourLocation('') }}
+                style={{ flex: '0 0 auto', border: '1.5px solid #cdd5e0', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>一覧</button>
+            </div>
+          )}
+        </div>
 
         {/* 現場住所＋地図（住所編集・ピン/矢印編集） */}
         <div style={{ marginBottom: 12 }}>
@@ -2752,7 +2784,7 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           </div>
         </div>
 
-        {/* 車種（3種複数選択） */}
+        {/* 車種（3種複数選択）＋選択した車種ごとの台数 */}
         <div style={{ marginBottom: 12 }}>
           <label style={lblS}>車種（複数選択可）</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
@@ -2760,6 +2792,19 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
               <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
             ))}
           </div>
+          {vehList.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+              {vehList.map(t => (
+                <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#3a4a5c' }}>{t}</span>
+                  <input value={vehQty[t] || ''} inputMode="numeric" maxLength={2} placeholder="台"
+                    onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ''); setVehQty(q => ({ ...q, [t]: v })) }}
+                    style={{ width: 52, fontSize: 16, fontWeight: 700, textAlign: 'center', padding: '7px 4px', border: '1.5px solid #cdd5e0', borderRadius: 8, fontFamily: 'inherit', color: '#111' }} />
+                  <span style={{ fontSize: 13, color: '#6b7a8d' }}>台</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
@@ -2807,6 +2852,16 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
               {driverOptions.filter(e => !drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
+        </div>
+
+        {/* 区分（工TP / 領 / 増コン） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>区分</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            {NOTE_TAGS.map(t => (
+              <div key={t} onClick={() => toggleNoteTag(t)} style={chip(noteTags.includes(t))}>{t}</div>
+            ))}
+          </div>
         </div>
 
         <div style={{ marginBottom: 12 }}><label style={lblS}>備考（複数は改行）</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inS, resize: 'vertical' }} /></div>
