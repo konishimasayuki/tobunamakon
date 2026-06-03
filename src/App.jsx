@@ -885,10 +885,10 @@ const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース
 const NOTE_TAGS = ['工TP', '領', '増コン']
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
 
-// 車種表示: vehicleItems があれば「4t×2・7t」形式、無ければ vehicleType をそのまま
+// 車種表示: vehicleItems があれば「4t×2・7t」形式、無ければ vehicleType をそのまま（×1 は表記しない）
 function vehicleLabel(s) {
   if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) {
-    return s.vehicleItems.map(v => v.qty ? `${v.type}×${v.qty}` : v.type).join('・')
+    return s.vehicleItems.map(v => (v.qty && parseInt(v.qty, 10) !== 1) ? `${v.type}×${v.qty}` : v.type).join('・')
   }
   return s.vehicleType || ''
 }
@@ -2630,9 +2630,10 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [mapView, setMapView] = useState(s.mapView || null)
   const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
   const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
-  const [vehQty, setVehQty] = useState(() => {   // 車種ごとの台数 { '7t': '2', ... }
+  const [vehQty, setVehQty] = useState(() => {   // 車種ごとの台数 { '7t': '2', ... }。選択済みで未入力なら1台
     const m = {}
     ;(Array.isArray(s.vehicleItems) ? s.vehicleItems : []).forEach(v => { if (v.type) m[v.type] = v.qty || '' })
+    String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).forEach(t => { if (!m[t]) m[t] = '1' })
     return m
   })
   const [mixRows, setMixRows] = useState(() => {
