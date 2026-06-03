@@ -878,7 +878,7 @@ function CustomersPage() {
 // ============================================================
 // 出荷登録ページ
 // ============================================================
-const VEHICLE_TYPES = ['4t', '7t', '大型', '空']
+const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
@@ -1669,7 +1669,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                         return (
                           <span key={o} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                             <span className={'chip' + (it ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                            {it && o !== '空' && (
+                            {it && (
                               <input className="vehqty" inputMode="numeric" maxLength={2} placeholder="台"
                                 value={it.qty} onChange={e => setVehQty(o, e.target.value)} />
                             )}
@@ -1684,7 +1684,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
                     {/* 打設箇所：プルダウン or 自由入力。文字大きく中央揃え（位置はプルダウン基準で統一） */}
                     {!form.pourFree ? (
-                      <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
+                      <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
                         onChange={e => {
                           if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
                           else setVal('pourLocation', e.target.value)
@@ -1694,7 +1694,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       </select>
                     ) : (
                       <div style={{ position: 'relative' }}>
-                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={28} style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center' }} />
+                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={15} style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center' }} />
                         <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
                           style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                       </div>
@@ -1998,6 +1998,9 @@ function diffChangedFields(orig, next) {
   const origPlace = Array.isArray(orig.placements) ? orig.placements : []
   const nextPlace = Array.isArray(next.placements) ? next.placements : []
   if (!eq(origPlace, nextPlace)) changed.push('placements')
+  const origTags = Array.isArray(orig.noteTags) ? orig.noteTags : []
+  const nextTags = Array.isArray(next.noteTags) ? next.noteTags : []
+  if (!eq(origTags, nextTags)) changed.push('noteTags')
   if (norm(orig.pourLocation) !== norm(next.pourLocation)) changed.push('pourLocation')
   const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
   const nextDrivers = (Array.isArray(next.drivers) ? next.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
@@ -2117,6 +2120,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
       case 'vehicleType': return vehicleLabel(s)   // 数量付き（4t×2・7t）
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
+      case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
       case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '  ?' : '')
       default: return s[f] == null ? '' : String(s[f])
     }
@@ -2512,20 +2516,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <table>
           <colgroup>
             <col style={{ width: '11%' }} />
-            <col style={{ width: '15%' }} />
+            <col style={{ width: '12%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '6%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '14%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '11%' }} />
             {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>打設箇所</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
+              <th>現場名</th><th>打設箇所</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th><th>区分</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2535,7 +2540,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
-                <td>{cell(s, 'pourLocation', '', { center: true })}</td>
+                <td className="sc-nowrap">{cell(s, 'pourLocation', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">
                   {cellMix(s, { center: true, big: true })}
@@ -2548,6 +2553,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
+                <td className="sc-nowrap">{cell(s, 'noteTags', '', { center: true })}</td>
                 <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
