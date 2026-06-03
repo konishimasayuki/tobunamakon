@@ -118,6 +118,8 @@ input, textarea, select { font-family: inherit; }
 .schedule th, .schedule td { border:1px solid #111; padding:2px 4px; vertical-align:middle; overflow:hidden; }
 /* 見出し行（業者名・商社など）は文字間に余白を設けて可読性を高める */
 .schedule thead th, .schedule thead th > div { letter-spacing:0.35em !important; }
+/* 狭い列の見出しは字間を詰めて見切れを防ぐ（打設箇所など） */
+.schedule thead th.th-tight, .schedule thead th.th-tight > div { letter-spacing:0.04em !important; }
 .schedule th { background:#fafafa; color:#111; font-weight:700; font-size:clamp(11px,1.5cqi,16px); text-align:center; white-space:nowrap; padding:8px 4px; line-height:1.8; }
 .schedule td { height:36px; }
 .schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:clamp(12px,1.7cqi,18px); color:#111; font-weight:700; font-family:inherit; padding:2px 2px; }

@@ -2530,7 +2530,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>打設箇所</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th><th>区分</th>
+              <th>現場名</th><th className="th-tight">打設箇所</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th><th>区分</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2828,6 +2828,18 @@ const WD = ['日', '月', '火', '水', '木', '金', '土']
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const mondayOf = (dateStr) => { const d = new Date(dateStr); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return d }
 const firstTimeOf = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
+// 時間文字列を分に変換（午前=11:59 / 午後=23:59 / 空欄や未解析は最後）
+const timeToMin = (t) => {
+  const str = String(t || '').trim()
+  if (!str) return 100000
+  const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
+  if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+  if (str.includes('午前')) return 11 * 60 + 59
+  if (str.includes('午後')) return 23 * 60 + 59
+  const h = str.match(/(\d{1,2})\s*時/)
+  if (h) return parseInt(h[1], 10) * 60
+  return 99999
+}
 const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
 
 function useShipments() {
@@ -2953,30 +2965,38 @@ function WeeklySchedulePage() {
           {days.map(d => {
             const ds = ymd(d), wd = WD[d.getDay()]
             const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
-            // その日の集計：車種別の合計台数（数量があれば加算・無ければ1台）、合計数量、?が1つでもあれば表示
-            const vehCount = {}
-            VEHICLE_TYPES.forEach(v => { vehCount[v] = 0 })
-            list.forEach(s => {
-              if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) {
-                s.vehicleItems.forEach(v => { if (v.type) vehCount[v.type] = (vehCount[v.type] || 0) + (parseInt(v.qty, 10) || 1) })
-              } else {
-                String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).forEach(v => { vehCount[v] = (vehCount[v] || 0) + 1 })
-              }
-            })
-            const totalVol = list.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
-            const hasUncertain = list.some(s => s.volumeUncertain)
-            const totalTrucks = VEHICLE_TYPES.reduce((a, v) => a + (vehCount[v] || 0), 0)
-            const vehSummary = VEHICLE_TYPES.filter(v => vehCount[v] > 0).map(v => `${v}:${vehCount[v]}`).join(' ')
+            // 便ごとの車種別合計台数を集計（数量があれば加算・無ければ1台）
+            const vehStats = (rows) => {
+              const c = {}
+              VEHICLE_TYPES.forEach(v => { c[v] = 0 })
+              rows.forEach(s => {
+                if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) {
+                  s.vehicleItems.forEach(v => { if (v.type) c[v.type] = (c[v.type] || 0) + (parseInt(v.qty, 10) || 1) })
+                } else {
+                  String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).forEach(v => { c[v] = (c[v] || 0) + 1 })
+                }
+              })
+              const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
+              const summary = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v}:${c[v]}`).join(' ')
+              return { summary, total }
+            }
+            // 便の区分：第一便=9時まで(<9:00)／第二便=9時以降の午前(9:00〜11:59)／午後=12:00以降
+            const bin = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
+            const binList = [list.filter(s => bin(s) === 0), list.filter(s => bin(s) === 1), list.filter(s => bin(s) === 2)]
+            const BIN_LABELS = ['第一便（9時まで）', '第二便（9時以降）', '午後']
             return (
               <div key={ds} style={{ border: '1px solid #dde3ed', borderRadius: 8, minHeight: 220, background: ds === todayStr ? '#eef5ff' : '#fff' }}>
                 <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', fontWeight: 700, fontSize: 13, textAlign: 'center', color: wd === '日' ? '#c0392b' : wd === '土' ? '#1b4ea8' : '#1a2332' }}>{d.getMonth() + 1}/{d.getDate()}（{wd}）</div>
-                {/* 日次サマリー：車両別合計台数 ／ 合計数量（?あれば付与） */}
-                {list.length > 0 && (
-                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
-                    <div style={{ fontWeight: 700 }}>{vehSummary || '車種未設定'}（計{totalTrucks || list.length}台）</div>
-                    <div style={{ color: '#0f3060', fontWeight: 700 }}>{(Math.round(totalVol * 100) / 100).toLocaleString('ja-JP')}m³{hasUncertain ? ' ?' : ''}</div>
-                  </div>
-                )}
+                {/* 便別サマリー：第一便／第二便／午後の車種別台数と合計台数 */}
+                {binList.map((bl, bi) => {
+                  const st = vehStats(bl)
+                  return (
+                    <div key={bi} style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 700, color: '#0f3060' }}>{BIN_LABELS[bi]} 計{st.total}台</div>
+                      <div>{st.summary || '—'}</div>
+                    </div>
+                  )
+                })}
                 <div style={{ padding: 6 }}>
                   {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
                     : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? ` /${s.volume}m³` : ''}</span></div>)}
