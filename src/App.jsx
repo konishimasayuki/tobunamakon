@@ -1700,14 +1700,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow">
                   <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
-                    {/* 配合：上半分・下半分の2行まで（各行に特記）。高さを変えず収める */}
+                    {/* 配合：上半分・下半分の2行まで（各行に特記）。1行/2行で高さを完全に揃える（常にcompact＋固定高） */}
                     {(() => {
                       const rows = mixRowsOf()
                       const two = rows.length > 1
                       return (
-                        <div className={'mixwrap' + (two ? ' two' : '')}>
+                        <div className={'mixwrap' + (two ? ' two' : ' one')}>
                           {rows.map((r, ri) => (
-                            <div key={ri} className={'mixrow' + (two ? ' compact' : '')}>
+                            <div key={ri} className="mixrow">
                               <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
                                 <div className="hgcol">
                                   <div className="hgnote-spacer" />
@@ -1726,7 +1726,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                               </div>
                               {ri > 0 && (
                                 <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
-                                  style={{ flex: '0 0 auto', border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer', marginBottom: 4 }}>×</button>
+                                  style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
                               )}
                             </div>
                           ))}
@@ -1748,15 +1748,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       <input type="text" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={e => setVal('volume', e.target.value.replace(/[^0-9.]/g, ''))} />
                       <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
                     </div>
-                    {/* 値の下：四角チェック（中央）＋「？を付ける」枠（右） */}
+                    {/* 値の下：「？を付ける」ボタンのみ（ON/OFFは m³横の ? 表示で判別） */}
                     <div className="qrow">
-                      <span
-                        role="checkbox"
-                        aria-checked={form.volumeUncertain}
-                        className={'qbox' + (form.volumeUncertain ? ' on' : '')}
-                        onClick={() => setVal('volumeUncertain', !form.volumeUncertain)}
-                      >{form.volumeUncertain ? '✓' : ''}</span>
-                      <span className="qlabel" onClick={() => setVal('volumeUncertain', !form.volumeUncertain)}>？を付ける</span>
+                      <span className={'qlabel' + (form.volumeUncertain ? ' on' : '')} onClick={() => setVal('volumeUncertain', !form.volumeUncertain)}>？を付ける</span>
                     </div>
                   </div>
                   <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
