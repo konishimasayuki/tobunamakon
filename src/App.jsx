@@ -919,6 +919,7 @@ const emptyShipForm = {
   volumeUncertain: false,
   placements: [],
   pourLocation: '',
+  pourFree: false,      // 打設箇所を自由入力モードにしているか
   noteTags: [],         // 工TP / 領 / 増コン の選択
   orderContact: '', siteContact: '',
   drivers: [],
@@ -1497,6 +1498,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     volumeUncertain: !!s.volumeUncertain,
     placements: Array.isArray(s.placements) ? s.placements : [],
     pourLocation: s.pourLocation || '',
+    pourFree: typeof s.pourFree === 'boolean' ? s.pourFree
+      : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
     noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
@@ -1679,18 +1682,21 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow" style={{ flex: 1 }}>
                   <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                     <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
-                    {/* 打設箇所：プルダウン（入力する=自由入力）。文字大きく中央揃え */}
-                    {POUR_LOCATIONS.includes(form.pourLocation) || form.pourLocation === '' ? (
+                    {/* 打設箇所：プルダウン or 自由入力。文字大きく中央揃え（位置はプルダウン基準で統一） */}
+                    {!form.pourFree ? (
                       <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
-                        onChange={e => setVal('pourLocation', e.target.value === '入力する' ? '　' : e.target.value)}>
+                        onChange={e => {
+                          if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
+                          else setVal('pourLocation', e.target.value)
+                        }}>
                         <option value=""></option>
                         {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <FitField value={form.pourLocation.trim()} onChange={set('pourLocation')} baseSize={28} style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center' }} />
-                        <button type="button" onClick={() => setVal('pourLocation', '')}
-                          style={{ flex: '0 0 auto', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
+                      <div style={{ position: 'relative' }}>
+                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={28} style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center' }} />
+                        <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
+                          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                       </div>
                     )}
                   </div>
