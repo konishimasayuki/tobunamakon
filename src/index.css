@@ -76,6 +76,16 @@ input, textarea, select { font-family: inherit; }
 /* 特記は中央のみ。左右はレイアウト維持のため同じ高さの空きを確保 */
 .denpyo .haigou3 .hgnote-spacer { width:3.4em; height:calc(10px + 2px); }
 .denpyo .haigou3 .hg { width:1.7em; text-align:center; border:none; border-bottom:3px solid #111; font-size:44px; font-weight:700; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
+/* 配合を2行（上半分・下半分）にした場合：高さを変えずに収めるため数値・記号を縮小 */
+.denpyo .haigou3.compact { margin-top:0; gap:4px; }
+.denpyo .haigou3.compact .hg { font-size:24px; border-bottom-width:2px; }
+.denpyo .haigou3.compact .hgsep { font-size:20px; }
+.denpyo .haigou3.compact .hgnote { font-size:9px; width:3em; }
+.denpyo .haigou3.compact .hgnote-spacer { width:3em; height:calc(9px + 1px); }
+.denpyo .mixrow { display:flex; align-items:flex-end; justify-content:center; gap:4px; }
+.denpyo .mixrow.compact { flex:1 1 0; min-height:0; }
+.denpyo .mixwrap { display:flex; flex-direction:column; justify-content:center; flex:1 1 auto; min-height:0; }
+.denpyo .mixwrap.two { gap:2px; justify-content:space-evenly; }
 /* 地図キャンバス（モバイルは低め＝全画面化を避ける） */
 .sitemap-canvas { width:100%; height:560px; border-radius:8px; background:#e8eaed; }
 @media (max-width:760px){ .sitemap-canvas { height:300px; } }

@@ -1419,7 +1419,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   })
   const addMixRow = () => setForm(f => {
     const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
-    if (rows.length >= 4) return f
+    if (rows.length >= 2) return f
     rows.push({ parts: ['', '', ''], note: '' })
     return { ...f, ...syncMix(rows) }
   })
@@ -1700,34 +1700,42 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow">
                   <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
-                    {/* 配合：複数行（各行に特記）＋追加ボタン */}
-                    {mixRowsOf().map((r, ri) => (
-                      <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                        <div className="haigou3" style={redIf('mixCode')}>
-                          <div className="hgcol">
-                            <div className="hgnote-spacer" />
-                            <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={e => setMixCell(ri, 0, e.target.value)} />
-                          </div>
-                          <span className="hgsep">-</span>
-                          <div className="hgcol">
-                            <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
-                            <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={e => setMixCell(ri, 1, e.target.value)} />
-                          </div>
-                          <span className="hgsep">-</span>
-                          <div className="hgcol">
-                            <div className="hgnote-spacer" />
-                            <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={e => setMixCell(ri, 2, e.target.value)} />
-                          </div>
+                    {/* 配合：上半分・下半分の2行まで（各行に特記）。高さを変えず収める */}
+                    {(() => {
+                      const rows = mixRowsOf()
+                      const two = rows.length > 1
+                      return (
+                        <div className={'mixwrap' + (two ? ' two' : '')}>
+                          {rows.map((r, ri) => (
+                            <div key={ri} className={'mixrow' + (two ? ' compact' : '')}>
+                              <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
+                                <div className="hgcol">
+                                  <div className="hgnote-spacer" />
+                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={e => setMixCell(ri, 0, e.target.value)} />
+                                </div>
+                                <span className="hgsep">-</span>
+                                <div className="hgcol">
+                                  <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
+                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={e => setMixCell(ri, 1, e.target.value)} />
+                                </div>
+                                <span className="hgsep">-</span>
+                                <div className="hgcol">
+                                  <div className="hgnote-spacer" />
+                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={e => setMixCell(ri, 2, e.target.value)} />
+                                </div>
+                              </div>
+                              {ri > 0 && (
+                                <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
+                                  style={{ flex: '0 0 auto', border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer', marginBottom: 4 }}>×</button>
+                              )}
+                            </div>
+                          ))}
+                          {rows.length < 2 && (
+                            <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px' }} onClick={addMixRow}>＋ 配合を追加</button>
+                          )}
                         </div>
-                        {mixRowsOf().length > 1 && (
-                          <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
-                            style={{ flex: '0 0 auto', border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 13, lineHeight: 1, padding: '2px 6px', cursor: 'pointer', marginBottom: 6 }}>×</button>
-                        )}
-                      </div>
-                    ))}
-                    {mixRowsOf().length < 4 && (
-                      <button type="button" className="addrow" onClick={addMixRow}>＋ 配合を追加</button>
-                    )}
+                      )
+                    })()}
                   </div>
                   <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                     <div className="lbl">セメント種</div>
