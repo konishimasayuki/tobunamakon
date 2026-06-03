@@ -51,7 +51,7 @@ input, textarea, select { font-family: inherit; }
 .denpyo .qtoggle input { margin:0; }
 /* m³値の下：丸み四角チェック（中央）＋「？を付ける」枠（右） */
 .denpyo .qrow { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:6px; font-family:'Noto Sans JP',sans-serif; }
-.denpyo .qlabel { border:1px solid #999; border-radius:4px; padding:2px 8px; font-size:12px; color:#555; cursor:pointer; user-select:none; white-space:nowrap; }
+.denpyo .qlabel { border:1px solid #999; border-radius:4px; padding:2px 8px; font-size:12px; color:#555; cursor:pointer; user-select:none; white-space:nowrap; margin-left:8px; font-family:'Noto Sans JP',sans-serif; align-self:center; }
 .denpyo .qlabel.on { border-color:#c81e1e; background:#fdecec; color:#c81e1e; font-weight:700; }
 /* 車種の数量入力（チップ横） */
 .denpyo .vehqty { width:2.2em; text-align:center; border:none; border-bottom:1.5px solid #111; font-size:16px; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
@@ -83,8 +83,8 @@ input, textarea, select { font-family: inherit; }
 .denpyo .haigou3.compact .hgnote-spacer { width:3em; height:calc(9px + 1px); }
 /* 各行：中央揃え。×ボタンは行末 */
 .denpyo .mixrow { display:flex; align-items:flex-end; justify-content:center; gap:4px; position:relative; }
-/* 固定高（2行ぶん）。中央に配置 */
-.denpyo .mixwrap { display:flex; flex-direction:column; align-items:stretch; justify-content:center; height:96px; gap:6px; overflow:hidden; }
+/* 固定高（2行ぶん）。中央に配置。縦を少し広げる */
+.denpyo .mixwrap { display:flex; flex-direction:column; align-items:stretch; justify-content:center; height:118px; gap:6px; overflow:hidden; }
 .denpyo .mixwrap.two { gap:8px; }
 /* 1行のときは数字をできるだけ大きく（固定高96pxに収まる範囲で拡大）・中央揃え */
 .denpyo .mixwrap.one .haigou3 .hg { font-size:48px; }

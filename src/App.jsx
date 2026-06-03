@@ -1744,12 +1744,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 </div>
                 <div className="subrow">
                   <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, justifyContent: 'center' }}>
-                    <div className="inline" style={{ justifyContent: 'center' }}>
+                    <div className="inline" style={{ justifyContent: 'center', alignItems: 'center' }}>
                       <input type="text" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={e => setVal('volume', e.target.value.replace(/[^0-9.]/g, ''))} />
                       <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
-                    </div>
-                    {/* 値の下：「？を付ける」ボタンのみ（ON/OFFは m³横の ? 表示で判別） */}
-                    <div className="qrow">
+                      {/* 数値の右に「？を付ける」ボタン（ON/OFFは m³横の ? 表示で判別） */}
                       <span className={'qlabel' + (form.volumeUncertain ? ' on' : '')} onClick={() => setVal('volumeUncertain', !form.volumeUncertain)}>？を付ける</span>
                     </div>
                   </div>
