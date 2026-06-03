@@ -1679,16 +1679,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="subrow" style={{ flex: 1 }}>
                   <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                     <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
-                    {/* 打設箇所：プルダウン（入力する=自由入力） */}
+                    {/* 打設箇所：プルダウン（入力する=自由入力）。文字大きく中央揃え */}
                     {POUR_LOCATIONS.includes(form.pourLocation) || form.pourLocation === '' ? (
-                      <select className="f" style={redIf('pourLocation')} value={form.pourLocation}
+                      <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
                         onChange={e => setVal('pourLocation', e.target.value === '入力する' ? '　' : e.target.value)}>
                         <option value=""></option>
                         {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <FitField value={form.pourLocation.trim()} onChange={set('pourLocation')} style={redIf('pourLocation')} />
+                        <FitField value={form.pourLocation.trim()} onChange={set('pourLocation')} baseSize={28} style={{ ...redIf('pourLocation'), fontSize: 28, fontWeight: 700, textAlign: 'center' }} />
                         <button type="button" onClick={() => setVal('pourLocation', '')}
                           style={{ flex: '0 0 auto', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                       </div>
@@ -1800,7 +1800,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell" style={{ flex: '0 0 34%', minWidth: 0 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>ドライバーへの連絡</div>
                 {/* 縦に段落追加（段落を追加で上の段落の下に追加） */}
-                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={1} height={80} addLabel="＋ 段落を追加" />
+                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={1} max={4} height={80} addLabel="＋ 段落を追加" />
               </div>
               {/* 選択したものだけ表示（工TP / 領 / 増コン） */}
               <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
