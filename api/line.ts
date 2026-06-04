@@ -155,8 +155,19 @@ function asArr(v: any): any[] {
 // 車種ラベル（数量付き）: vehicleItems があれば「4t×2・7t」、無ければ vehicleType
 function vehicleLabelOf(s: any): string {
   const items = asArr(s.vehicleItems)
-  if (items.length) return items.map((v: any) => v.qty ? `${v.type}×${v.qty}` : v.type).join('・')
+  if (items.length) return items.map((v: any) => v.type).join('・')
   return String(s.vehicleType || '')
+}
+// 数量表示（+a・? と2段目の量をまとめる）
+function volumeOne(v: any, plusA: any, uncertain: any): string {
+  const base = (v == null ? '' : String(v)).trim()
+  if (!base && !plusA && !uncertain) return ''
+  return `${base}${base ? 'm³' : ''}${plusA ? '+a' : ''}${uncertain ? '?' : ''}`
+}
+function volumeDisplay(s: any): string {
+  const a = volumeOne(s.volume, s.volumePlusA, s.volumeUncertain)
+  const b = volumeOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
+  return [a, b].filter(Boolean).join(' / ')
 }
 // 配合行（複数）: mixRows があれば各行 {code,note}、無ければ mixCode/mixNotes 1行
 function mixRowsOf(s: any): Array<{ code: string; note: string }> {
@@ -238,7 +249,7 @@ function formatShipment(s: any): string {
   if (times.length) lines.push(`時間: ${times.join(' / ')}`)
   if (vehicleLabelOf(s)) lines.push(`車種: ${vehicleLabelOf(s)}`)
   { const mr = mixRowsOf(s).filter(r => r.code); if (mr.length) lines.push(`配合: ${mr.map(r => r.code).join(' / ')}`) }
-  if (s.volume) lines.push(`数量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
+  { const vd = volumeDisplay(s); if (vd) lines.push(`数量: ${vd}`) }
   if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
   if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
   return lines.join('\n')
@@ -319,10 +330,10 @@ function shipmentBubble(s: any): any {
     if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
   }
   contents.push(row('セメント種', String(s.cementType || '')))
-  contents.push(row('数量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
+  contents.push(row('数量', volumeDisplay(s) || '—'))
   contents.push(row('荷下ろし', placements.join('・')))
   const noteTags = asArr(s.noteTags).filter(Boolean)
-  if (noteTags.length) contents.push(row('区分', noteTags.join('・')))
+  if (noteTags.length) contents.push(row('特記', noteTags.join('・')))
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))
