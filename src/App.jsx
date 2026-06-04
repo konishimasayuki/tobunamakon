@@ -3224,6 +3224,85 @@ function WeeklySchedulePage() {
   )
 }
 
+// 生コン出荷予定表（手書き様式に寄せた帳票・印刷/PDF出力）
+function SeikonOutputPage({ isPopup }) {
+  const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  const urlDate = params.get('date') || ''
+  const wantPrint = params.get('print') === '1'
+  const [date, setDate] = useState(urlDate || localToday())
+  const { all, loading } = useShipments()
+  const rows = all.filter(s => s.date === date)
+    .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+
+  const d = new Date(date)
+  const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
+
+  // 印刷：別ウィンドウ（サイドバー無し）で開き、読み込み後に自動で印刷ダイアログ（A4縦）
+  const openPrint = () => {
+    const url = `${window.location.pathname}?view=seikon&popup=1&print=1&date=${encodeURIComponent(date)}`
+    const w = window.open(url, '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+  useEffect(() => {
+    if (loading || !wantPrint) return
+    const t = setTimeout(() => { try { window.print() } catch { /* noop */ } }, 500)
+    return () => clearTimeout(t)
+  }, [loading, wantPrint])
+
+  const timesOf = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
+  const mixOf = (s) => mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')
+  const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
+
+  const ROWS = 20
+  const blanks = Math.max(0, ROWS - rows.length)
+  const cols = ['業者名', '現場名', '打設場所', '車両', '配合', '数量', '時間', '担当連絡先', '摘要']
+
+  return (
+    <div className="seikon-wrap" style={{ height: '100%', overflow: 'auto', padding: isPopup ? 8 : 18, background: '#fff' }}>
+      <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ padding: '6px 10px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 16 }} />
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{reiwa}</span>
+        <button type="button" onClick={openPrint}
+          style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🖨 印刷 / PDF出力</button>
+      </div>
+      <div className="seikon-sheet">
+        <div className="seikon-title">
+          <span className="st-name">生コン出荷予定表</span>
+          <span className="st-date">{reiwa}</span>
+          <span className="st-ampm">AM ・ PM</span>
+        </div>
+        <table className="seikon-table">
+          <colgroup>
+            <col style={{ width: '12%' }} /><col style={{ width: '16%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} /><col style={{ width: '16%' }} /><col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '15%' }} /><col style={{ width: '9%' }} />
+          </colgroup>
+          <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
+          <tbody>
+            {rows.map(s => (
+              <tr key={s.id}>
+                <td>{s.companyName || ''}</td>
+                <td>{s.siteName || ''}</td>
+                <td>{s.pourLocation || ''}</td>
+                <td>{vehicleLabel(s) || ''}</td>
+                <td>{mixOf(s)}</td>
+                <td>{shipVolStr(s)}</td>
+                <td>{timesOf(s)}</td>
+                <td>{s.orderContact || ''}</td>
+                <td>{notesOf(s)}</td>
+              </tr>
+            ))}
+            {Array.from({ length: blanks }).map((_, i) => (
+              <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+        {loading && <div style={{ padding: 12, color: '#6b7a8d' }} className="no-print">読み込み中...</div>}
+      </div>
+    </div>
+  )
+}
+
 function ShipReportPage() {
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
@@ -3458,6 +3537,7 @@ const TABS = [
   { id: 'shipments', label: '出荷登録', icon: '🚛' },
   { id: 'schedule', label: '出荷予定表', icon: '📋' },
   { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
+  { id: 'seikon', label: '生コン出荷予定表出力', icon: '📝' },
   { id: 'assign', label: '配送臨時割り当て', icon: '🔁' },
   { id: 'shipreport', label: '出荷日報', icon: '📑' },
   { id: 'driverreport', label: '運行日報', icon: '🚚' },
@@ -3604,7 +3684,7 @@ function AppInner() {
   const isPopup = params.get('popup') === '1'
   // 掲示板形式の出荷予定表（別ウィンドウ・閲覧専用）はログイン不要で開けるようにする
   const isBoard = isPopup && view === 'schedule' && !initialEditId
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'dashboard'))
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
   // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
@@ -3628,6 +3708,7 @@ function AppInner() {
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
+    : activeTab === 'seikon' ? <SeikonOutputPage isPopup={isPopup} />
     : activeTab === 'assign' ? <AssignPage />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
