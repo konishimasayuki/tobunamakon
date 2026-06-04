@@ -763,11 +763,13 @@ function CustomersPage() {
 
   useEffect(() => { load() }, [load])
 
+  // カタカナ→ひらがなに正規化（ひらがなで検索してもカナ欄にヒットする）
+  const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
   const filtered = customers.filter(c => {
     if (!search) return true
-    const q = String(search).toLowerCase()
+    const q = toHira(search)
     return [c.customerCode, c.companyName, c.companyNameKana, c.phone, c.address, c.contactPerson]
-      .some(v => String(v || '').toLowerCase().includes(q))
+      .some(v => toHira(v).includes(q))
   })
 
   const handleSave = async (data) => {
@@ -931,6 +933,7 @@ const emptyShipForm = {
   pdfName: '',               // 添付PDFのファイル名
   pdfData: '',               // 添付PDFの本体(dataURL)。保存時のみ送信、未変更は空
   hasPdf: false,             // 既存伝票にPDFが添付済みか
+  pdfRemove: false,          // 既存PDFを削除する指示（保存時に反映）
   placements: [],
   pourLocation: '',
   pourFree: false,      // 打設箇所を自由入力モードにしているか
@@ -1513,16 +1516,24 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const MAX = 2.5 * 1024 * 1024
     if (file.size > MAX) { alert(`PDFが大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。\n2.5MB以下に圧縮してください。`); e.target.value = ''; return }
     const reader = new FileReader()
-    reader.onload = () => setForm(f => ({ ...f, pdfData: String(reader.result || ''), pdfName: file.name, hasPdf: true }))
+    reader.onload = () => setForm(f => ({ ...f, pdfData: String(reader.result || ''), pdfName: file.name, hasPdf: true, pdfRemove: false }))
     reader.onerror = () => alert('PDFの読み込みに失敗しました')
     reader.readAsDataURL(file)
     e.target.value = ''
   }
 
-  // 添付PDFをプレビュー（選択直後はローカル、保存済みはサーバーから新規タブで開く＝クイックルック相当）
+  // 添付PDFを削除（保存時に反映）。未保存の選択分はその場でクリア
+  const removePdf = () => setForm(f => ({ ...f, pdfData: '', pdfName: '', hasPdf: false, pdfRemove: true }))
+
+  // 添付PDFをプレビュー（新規ウィンドウで開く＝クイックルック相当）
   const previewPdf = () => {
-    if (form.pdfData) { const w = window.open(); if (w) { w.document.write(`<iframe src="${form.pdfData}" style="border:0;width:100%;height:100%"></iframe>`); w.document.title = form.pdfName || 'PDF' } return }
-    if (editing && form.hasPdf) window.open(`/api/shipments?id=${encodeURIComponent(editing)}&pdf=1`, '_blank', 'noopener')
+    const feat = 'width=900,height=1000,scrollbars=yes,resizable=yes'
+    if (form.pdfData) {
+      const w = window.open('', '_blank', feat)
+      if (w) { w.document.write(`<title>${form.pdfName || 'PDF'}</title><iframe src="${form.pdfData}" style="border:0;position:absolute;inset:0;width:100%;height:100%"></iframe>`); w.document.close() }
+      return
+    }
+    if (editing && form.hasPdf) window.open(`/api/shipments?id=${encodeURIComponent(editing)}&pdf=1`, '_blank', feat)
   }
 
   const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
@@ -1558,6 +1569,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     pdfName: s.pdfName || '',
     pdfData: '',
     hasPdf: !!s.hasPdf,
+    pdfRemove: false,
     placements: Array.isArray(s.placements) ? s.placements : [],
     pourLocation: s.pourLocation || '',
     pourFree: typeof s.pourFree === 'boolean' ? s.pourFree
@@ -1607,8 +1619,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         notes: form.notes.filter(n => n.text.trim() !== ''),
         driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
       }
-      // PDFは新規選択時のみ送る。未選択なら既存の添付を消さないようキー自体を外す
-      if (!form.pdfData) delete payload.pdfData
+      // PDF: 削除指示なら空を送って消す／新規選択時はその本体を送る／いずれでもなければ既存維持のためキーを外す
+      if (form.pdfRemove) payload.pdfData = ''
+      else if (!form.pdfData) delete payload.pdfData
       if (editing) {
         // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目（配合は桁ごと・備考は行ごと）を積む
         const orig = shipments.find(x => x.id === editing) || {}
@@ -1816,6 +1829,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
                       return (
                         <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
+                          {/* 先頭の×スロット（1段目は空スペーサーで数字の開始位置を揃える） */}
+                          <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
+                            {idx === 1 ? (
+                              <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
+                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                            ) : null}
+                          </span>
                           <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]} onChange={e => setVal(vKey, e.target.value.replace(/[^0-9.]/g, ''))} />
                           <span className="unit" style={redIf('volume')}>m<sup>3</sup>
                             {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
@@ -1823,10 +1843,6 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                           </span>
                           <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
                           <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
-                          {idx === 1 ? (
-                            <span className="qlabel" title="2段目を削除"
-                              onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
-                          ) : null}
                         </div>
                       )
                     })}
@@ -1906,6 +1922,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   {(form.pdfData || (form.hasPdf && editing)) && (
                     <button type="button" onClick={previewPdf}
                       style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>👁 プレビュー</button>
+                  )}
+                  {(form.pdfData || form.hasPdf) && (
+                    <button type="button" onClick={removePdf}
+                      style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🗑 削除</button>
                   )}
                 </div>
                 {(form.pdfName || form.hasPdf) && (
@@ -2002,9 +2022,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <td style={S.td}>{s.date}</td>
                     <td style={{ ...S.td, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {s.hasPdf
-                        ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} target="_blank" rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline' }}>PDF</a>
+                        ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes') }}
+                            style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a>
                         : '—'}
                     </td>
                     <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
@@ -2485,6 +2505,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
 
+  // 添付PDFを新規ウィンドウで開く
+  const openPdfWin = (id) => window.open(`/api/shipments?id=${encodeURIComponent(id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')
+
   const sendLine = async (s) => {
     const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
     if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
@@ -2595,11 +2618,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
                   </div>
-                  {/* 打設箇所・区分（1行を半分ずつ） */}
-                  <div className="sc-grid2">
-                    <div className="sc-box"><span className="sc-lbl">打設箇所</span>{cell(s, 'pourLocation', '', { center: true })}</div>
-                    <div className="sc-box"><span className="sc-lbl">特記</span>{cell(s, 'noteTags', '', { center: true })}</div>
-                  </div>
+                  {/* PDF（添付があれば新規ウィンドウで開く） */}
+                  {s.hasPdf && (
+                    <div className="sc-row"><span className="sc-lbl">PDF</span><span className="sc-val">
+                      <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }}
+                        style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
+                    </span></div>
+                  )}
                   {/* 備考（横並び） */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
                   {/* 現場連絡先 */}
@@ -2629,21 +2654,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <table>
           <colgroup>
             <col style={{ width: '11%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '15%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '6%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '11%' }} />
+            <col style={{ width: '14%' }} />
             {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th className="th-tight">打設箇所</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th><th>特記</th>
+              <th>現場名</th><th>PDF</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2653,13 +2677,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
-                <td className="sc-nowrap">{cell(s, 'pourLocation', '', { center: true, big: true, xl: true })}</td>
+                <td className="sc-nowrap" style={{ textAlign: 'center' }}>
+                  {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a> : null}
+                </td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
-                <td className="sc-nowrap">{cell(s, 'noteTags', '', { center: true })}</td>
                 <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
@@ -3165,7 +3190,7 @@ function WeeklySchedulePage() {
                 }
               })
               const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
-              const summary = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v}:${c[v]}`).join(' ')
+              const summary = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v}:${c[v]}台`).join(' ')
               return { summary, total }
             }
             // 便の区分：第一便=9時まで(<9:00)／第二便=9時以降の午前(9:00〜11:59)／午後=12:00以降

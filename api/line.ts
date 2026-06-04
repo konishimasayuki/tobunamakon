@@ -255,6 +255,14 @@ function formatShipment(s: any): string {
   return lines.join('\n')
 }
 
+// アプリの公開ベースURL（PDFなど絶対URLが必要なリンク用）。本番ドメイン優先。
+function appBaseUrl(): string {
+  const env = process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || ''
+  if (env) return env.replace(/\/+$/, '')
+  const v = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || ''
+  return v ? `https://${v}` : ''
+}
+
 // 現場住所のGoogleマップURL（住所がURLならそのまま、テキストなら検索URL）
 function mapsUrlOf(s: any): string {
   const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
@@ -355,6 +363,10 @@ function shipmentBubble(s: any): any {
     footer: {
       type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px',
       contents: [
+        // GoogleマップリンクのにPDFリンク（新規ウィンドウで開く）
+        ...((s.hasPdf && appBaseUrl())
+          ? [{ type: 'button', style: 'secondary', height: 'sm', action: { type: 'uri', label: '📄 PDFを開く', uri: `${appBaseUrl()}/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1` } }]
+          : []),
         mapUrl
           ? { type: 'button', style: 'primary', color: '#1a4d8f', height: 'sm', action: { type: 'uri', label: '📍 Googleマップで開く', uri: mapUrl } }
           : { type: 'text', text: '住所未登録', size: 'sm', color: '#9aa7b5', align: 'center' },
