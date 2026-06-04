@@ -3275,6 +3275,9 @@ function SeikonOutputPage({ isPopup }) {
   const [date, setDate] = useState(urlDate || localToday())
   const [ampm, setAmpm] = useState(urlAmpm)   // 'both' | 'AM' | 'PM'
   const { all, loading } = useShipments()
+  const [customers, setCustomers] = useState([])
+  useEffect(() => { api.get('/api/customers').then(setCustomers).catch(() => { /* noop */ }) }, [])
+  const custCode = (s) => { const c = customers.find(c => c.id === s.companyId); return c ? (c.customerCode || '') : '' }
   const inAmPm = (s) => { if (ampm === 'both') return true; const m = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? m < 720 : m >= 720 }
   const rows = all.filter(s => s.date === date && inAmPm(s))
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
@@ -3306,9 +3309,33 @@ function SeikonOutputPage({ isPopup }) {
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     const split = mixes.length >= 2 || !!v2
-    lineRows.push({ s, mix: mixes[0] || '', vol: v1 })
-    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '' })
+    lineRows.push({ s, mix: mixes[0] || '', vol: v1, volNum: s.volume || '' })
+    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '', volNum: s.volume2 || '' })
   })
+
+  // 販売大臣CSVエクスポート（カンマ区切り・ダブルクォーテーション囲み・タイトル行あり・UTF-8 BOM）
+  const exportCsv = () => {
+    const header = ['伝票日付', '得意先コード', '業者名', '商社名', '現場名', '打設場所', '車両', '配合', 'セメント種', '数量', '時間', '連絡先', '現場連絡先', '備考', '特記', '荷下ろし', '担当']
+    const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
+    const dateStr = date.replace(/-/g, '/')
+    const out = [header.map(esc).join(',')]
+    lineRows.forEach(r => {
+      const s = r.s
+      out.push([
+        dateStr, custCode(s), s.companyName || '', s.tradingCompany || '', s.siteName || '', s.pourLocation || '',
+        vehicleLabel(s) || '', r.mix, s.cementType || '', r.volNum, timesArr(s).join(' '),
+        s.orderContact || '', s.siteContact || '', notesOf(s), tagsOf(s),
+        (Array.isArray(s.placements) ? s.placements.join('・') : ''), driversOf(s).join('・'),
+      ].map(esc).join(','))
+    })
+    if (lineRows.length === 0) { alert('この日の出荷登録がありません'); return }
+    const blob = new Blob(['﻿' + out.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `生コン出荷予定表_${date}.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
   // 1行を描画（分割行も元行のコピー＋その行の配合/数量で出力）
   const renderRow = (s, mix, vol, key) => {
@@ -3346,6 +3373,8 @@ function SeikonOutputPage({ isPopup }) {
         <button type="button" onClick={() => setAmpm(a => a === 'PM' ? 'both' : 'PM')} style={ampmBtn(ampm === 'PM')}>PM</button>
         <button type="button" onClick={openPrint}
           style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🖨 印刷 / PDF出力</button>
+        <button type="button" onClick={exportCsv}
+          style={{ border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📥 販売大臣CSVエクスポート</button>
       </div>
       <div className="seikon-sheet">
         <div className="seikon-title">
