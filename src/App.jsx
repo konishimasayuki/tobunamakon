@@ -2407,6 +2407,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）
+  const cellVolume = (s) => {
+    const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '?' : ''}` }
+    const lines = [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean)
+    if (lines.length <= 1) return cell(s, 'volume', '', { center: true, big: true })
+    const red = isChanged(s, 'volume')
+    return (
+      <span ref={fitRef} className="sc-mixcode big center" style={{ pointerEvents: 'none', color: red ? '#c81e1e' : undefined }}>
+        {lines.map((l, i) => <span key={i} style={{ display: 'block', whiteSpace: 'nowrap' }}>{l}</span>)}
+      </span>
+    )
+  }
+
   // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
   const cellNotes = (s, opts = {}) => {
     const arr = Array.isArray(s.notes) ? s.notes : []
@@ -2616,7 +2629,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                       </div>
                     </div>
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
-                    <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                    <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cellVolume(s)}</div>
                   </div>
                   {/* PDF（添付があれば新規ウィンドウで開く） */}
                   {s.hasPdf && (
@@ -2682,7 +2695,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 </td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
-                <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
+                <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
@@ -3114,7 +3127,21 @@ function DashboardPage() {
     </div>
   )
 
-  const vehEntries = Object.entries(todays.reduce((m, s) => { const k = s.vehicleType || '未設定'; m[k] = (m[k] || 0) + 1; return m }, {})).sort((a, b) => b[1] - a[1])
+  // 便別（第一便=9時まで／第二便=9時以降の午前／午後）の車種別台数
+  const vehStats = (list) => {
+    const c = {}; VEHICLE_TYPES.forEach(v => { c[v] = 0 })
+    list.forEach(s => {
+      if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) s.vehicleItems.forEach(v => { if (v.type) c[v.type] = (c[v.type] || 0) + (parseInt(v.qty, 10) || 1) })
+      else String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).forEach(v => { c[v] = (c[v] || 0) + 1 })
+    })
+    const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
+    const items = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v} ${c[v]}台`)
+    return { items, total }
+  }
+  const binOf = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
+  const todayBins = [0, 1, 2].map(b => todays.filter(s => binOf(s) === b))
+  const BIN_LABELS = [{ main: '第一便', sub: '（9時まで）' }, { main: '第二便', sub: '（9時以降）' }, { main: '午後', sub: '' }]
+
   const drvEntries = (() => {
     const m = {}; todays.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => m[n] = (m[n] || 0) + 1) })
     return Object.entries(m).sort((a, b) => b[1] - a[1])
@@ -3134,9 +3161,24 @@ function DashboardPage() {
             {card('登録総数', all.length, '件')}
           </div>
 
-          {/* 内訳（車種別・担当別） */}
+          {/* 内訳（車種別＝便別・担当別） */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
-            {breakdown('今日の車種別', vehEntries, '本日の出荷はありません')}
+            <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', flex: '1 1 240px', minWidth: 0 }}>
+              <h3 style={{ fontSize: 13, color: '#3a4a5c', margin: '0 0 10px' }}>今日の車種別（便別）</h3>
+              {todays.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>本日の出荷はありません</div>
+                : BIN_LABELS.map((lb, bi) => {
+                  const st = vehStats(todayBins[bi])
+                  return (
+                    <div key={bi} style={{ padding: '6px 0', borderBottom: '1px solid #f2f4f8' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                        <span style={{ color: '#0f3060', fontWeight: 700 }}>{lb.main}{lb.sub}</span>
+                        <span style={{ color: '#0f3060', fontWeight: 700 }}>計{st.total}台</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#3a4a5c', marginTop: 2 }}>{st.items.length ? st.items.join('　') : '—'}</div>
+                    </div>
+                  )
+                })}
+            </div>
             {breakdown('今日の担当別', drvEntries, '本日の出荷はありません')}
           </div>
 
@@ -3229,9 +3271,12 @@ function SeikonOutputPage({ isPopup }) {
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const urlDate = params.get('date') || ''
   const wantPrint = params.get('print') === '1'
+  const urlAmpm = params.get('ampm') || 'both'
   const [date, setDate] = useState(urlDate || localToday())
+  const [ampm, setAmpm] = useState(urlAmpm)   // 'both' | 'AM' | 'PM'
   const { all, loading } = useShipments()
-  const rows = all.filter(s => s.date === date)
+  const inAmPm = (s) => { if (ampm === 'both') return true; const m = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? m < 720 : m >= 720 }
+  const rows = all.filter(s => s.date === date && inAmPm(s))
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
   const d = new Date(date)
@@ -3239,7 +3284,7 @@ function SeikonOutputPage({ isPopup }) {
 
   // 印刷：別ウィンドウ（サイドバー無し）で開き、読み込み後に自動で印刷ダイアログ（A4縦）
   const openPrint = () => {
-    const url = `${window.location.pathname}?view=seikon&popup=1&print=1&date=${encodeURIComponent(date)}`
+    const url = `${window.location.pathname}?view=seikon&popup=1&print=1&date=${encodeURIComponent(date)}&ampm=${ampm}`
     const w = window.open(url, '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
@@ -3250,18 +3295,33 @@ function SeikonOutputPage({ isPopup }) {
   }, [loading, wantPrint])
 
   const timesOf = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
-  const mixOf = (s) => mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')
   const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
+  const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
+  const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
+
+  // 配合が2種／数量が2種（片方だけでも）あれば、下に分割用の行を追加する
+  const lineRows = []
+  rows.forEach(s => {
+    const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
+    const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
+    const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
+    const split = mixes.length >= 2 || !!v2
+    lineRows.push({ s, mix: mixes[0] || '', vol: v1, primary: true })
+    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '', primary: false })
+  })
 
   const ROWS = 20
-  const blanks = Math.max(0, ROWS - rows.length)
-  const cols = ['業者名', '現場名', '打設場所', '車両', '配合', '数量', '時間', '担当連絡先', '摘要']
+  const blanks = Math.max(0, ROWS - lineRows.length)
+  const cols = ['業者名', '現場名', '打設場所', '車両', '配合', 'セメント種', '数量', '時間', '担当連絡先', '摘要']
+  const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
   return (
     <div className="seikon-wrap" style={{ height: '100%', overflow: 'auto', padding: isPopup ? 8 : 18, background: '#fff' }}>
       <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ padding: '6px 10px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 16 }} />
         <span style={{ fontSize: 13, color: '#6b7a8d' }}>{reiwa}</span>
+        <button type="button" onClick={() => setAmpm(a => a === 'AM' ? 'both' : 'AM')} style={ampmBtn(ampm === 'AM')}>AM</button>
+        <button type="button" onClick={() => setAmpm(a => a === 'PM' ? 'both' : 'PM')} style={ampmBtn(ampm === 'PM')}>PM</button>
         <button type="button" onClick={openPrint}
           style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🖨 印刷 / PDF出力</button>
       </div>
@@ -3269,29 +3329,46 @@ function SeikonOutputPage({ isPopup }) {
         <div className="seikon-title">
           <span className="st-name">生コン出荷予定表</span>
           <span className="st-date">{reiwa}</span>
-          <span className="st-ampm">AM ・ PM</span>
+          <span className="st-ampm">
+            <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
+          </span>
         </div>
         <table className="seikon-table">
           <colgroup>
-            <col style={{ width: '12%' }} /><col style={{ width: '16%' }} /><col style={{ width: '9%' }} />
-            <col style={{ width: '7%' }} /><col style={{ width: '16%' }} /><col style={{ width: '8%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '15%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '8%' }} />
+            <col style={{ width: '6%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '16%' }} /><col style={{ width: '9%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
-            {rows.map(s => (
-              <tr key={s.id}>
-                <td>{s.companyName || ''}</td>
-                <td>{s.siteName || ''}</td>
-                <td>{s.pourLocation || ''}</td>
-                <td>{vehicleLabel(s) || ''}</td>
-                <td>{mixOf(s)}</td>
-                <td>{shipVolStr(s)}</td>
-                <td>{timesOf(s)}</td>
-                <td>{s.orderContact || ''}</td>
-                <td>{notesOf(s)}</td>
-              </tr>
-            ))}
+            {lineRows.map((r, ri) => {
+              const s = r.s
+              return r.primary ? (
+                <tr key={s.id + '_p'}>
+                  <td>{s.companyName || ''}</td>
+                  <td>{s.siteName || ''}</td>
+                  <td>{s.pourLocation || ''}</td>
+                  <td>{vehicleLabel(s) || ''}</td>
+                  <td>{r.mix}</td>
+                  <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
+                  <td style={{ textAlign: 'center' }}>{r.vol}</td>
+                  <td style={{ textAlign: 'center' }}>{timesOf(s)}</td>
+                  <td>
+                    <div className="seikon-contact-top">{[notesOf(s), tagsOf(s)].filter(Boolean).join('　')}&nbsp;</div>
+                    <div className="seikon-contact-bottom">{s.orderContact || ''}&nbsp;</div>
+                  </td>
+                  <td>&nbsp;</td>
+                </tr>
+              ) : (
+                <tr key={s.id + '_s' + ri}>
+                  <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+                  <td>{r.mix}</td>
+                  <td>&nbsp;</td>
+                  <td style={{ textAlign: 'center' }}>{r.vol}</td>
+                  <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+                </tr>
+              )
+            })}
             {Array.from({ length: blanks }).map((_, i) => (
               <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
             ))}
