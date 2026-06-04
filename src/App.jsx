@@ -3654,6 +3654,8 @@ function Layout({ children, activeTab, onTabChange }) {
   const [open, setOpen]   = useState(false)
   const isMobile = useIsMobile()
   const isPC = !isMobile
+  // スマホでは生コン出荷予定表出力タブを表示しない
+  const navTabs = TABS.filter(t => !(isMobile && t.id === 'seikon'))
 
   // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
@@ -3691,7 +3693,7 @@ function Layout({ children, activeTab, onTabChange }) {
           </div>
         </div>
         <nav style={S.nav}>
-          {TABS.map(tab => (
+          {navTabs.map(tab => (
             <button key={tab.id} style={{ ...S.navItem, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => onTabChange(tab.id)}>
               <span style={{ fontSize: 15 }}>{tab.icon}</span>{tab.label}
             </button>
@@ -3722,7 +3724,7 @@ function Layout({ children, activeTab, onTabChange }) {
             <button style={{ ...S.hamburger, color: '#fff' }} onClick={closeSidebar}>✕</button>
           </div>
           <nav style={S.nav}>
-            {TABS.map(tab => (
+            {navTabs.map(tab => (
               <button key={tab.id} style={{ ...S.navItem, padding: '13px 12px', fontSize: 15, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
                 <span style={{ fontSize: 17 }}>{tab.icon}</span>{tab.label}
               </button>
@@ -3781,6 +3783,7 @@ function LockedPage({ onUnlock }) {
 
 function AppInner() {
   const { user, loading } = useAuth()
+  const isMobile = useIsMobile()
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
@@ -3811,7 +3814,9 @@ function AppInner() {
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
-    : activeTab === 'seikon' ? <SeikonOutputPage isPopup={isPopup} />
+    : activeTab === 'seikon' ? (isMobile && !isPopup
+      ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
+      : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
