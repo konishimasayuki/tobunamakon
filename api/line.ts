@@ -363,9 +363,13 @@ function shipmentBubble(s: any): any {
     footer: {
       type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px',
       contents: [
-        // GoogleマップリンクのにPDFリンク（新規ウィンドウで開く）
+        // GoogleマップリンクのにPDFのURLを表示（タップでも開ける／新規ウィンドウ）
         ...((s.hasPdf && appBaseUrl())
-          ? [{ type: 'button', style: 'secondary', height: 'sm', action: { type: 'uri', label: '📄 PDFを開く', uri: `${appBaseUrl()}/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1` } }]
+          ? [{
+              type: 'text', size: 'xs', color: '#1a4d8f', wrap: true,
+              text: `📄 PDF: ${appBaseUrl()}/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`,
+              action: { type: 'uri', label: 'PDF', uri: `${appBaseUrl()}/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1` },
+            }]
           : []),
         mapUrl
           ? { type: 'button', style: 'primary', color: '#1a4d8f', height: 'sm', action: { type: 'uri', label: '📍 Googleマップで開く', uri: mapUrl } }
