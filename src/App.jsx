@@ -3310,7 +3310,8 @@ function SeikonOutputPage({ isPopup }) {
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     const split = mixes.length >= 2 || !!v2
     lineRows.push({ s, mix: mixes[0] || '', vol: v1, volNum: s.volume || '' })
-    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '', volNum: s.volume2 || '' })
+    // 分割行：2種目が無い側は1種目をコピーして必ず埋める
+    if (split) lineRows.push({ s, mix: mixes[1] || mixes[0] || '', vol: v2 || v1, volNum: (s.volume2 || s.volume) || '' })
   })
 
   // 販売大臣CSVエクスポート（カンマ区切り・ダブルクォーテーション囲み・タイトル行あり・UTF-8 BOM）
