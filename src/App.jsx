@@ -1765,7 +1765,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       </select>
                     ) : (
                       <div style={{ position: 'relative' }}>
-                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={15} style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center' }} />
+                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={15} placeholder="打設箇所を入力"
+                          style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 30px 5px 6px', boxSizing: 'border-box' }} />
                         <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
                           style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                       </div>
@@ -2680,7 +2681,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>PDF</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
+              <th>現場名</th><th>📄PDF</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
