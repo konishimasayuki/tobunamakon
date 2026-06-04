@@ -2678,7 +2678,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>
-                  {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a> : null}
+                  {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}
                 </td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
@@ -3196,16 +3196,17 @@ function WeeklySchedulePage() {
             // 便の区分：第一便=9時まで(<9:00)／第二便=9時以降の午前(9:00〜11:59)／午後=12:00以降
             const bin = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
             const binList = [list.filter(s => bin(s) === 0), list.filter(s => bin(s) === 1), list.filter(s => bin(s) === 2)]
-            const BIN_LABELS = ['第一便（9時まで）', '第二便（9時以降）', '午後']
+            const BIN_LABELS = [{ main: '第一便', sub: '（9時まで）' }, { main: '第二便', sub: '（9時以降）' }, { main: '午後', sub: '' }]
             return (
               <div key={ds} style={{ border: '1px solid #dde3ed', borderRadius: 8, minHeight: 220, background: ds === todayStr ? '#eef5ff' : '#fff' }}>
                 <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', fontWeight: 700, fontSize: 13, textAlign: 'center', color: wd === '日' ? '#c0392b' : wd === '土' ? '#1b4ea8' : '#1a2332' }}>{d.getMonth() + 1}/{d.getDate()}（{wd}）</div>
                 {/* 便別サマリー：第一便／第二便／午後の車種別台数と合計台数 */}
                 {binList.map((bl, bi) => {
                   const st = vehStats(bl)
+                  const lb = BIN_LABELS[bi]
                   return (
                     <div key={bi} style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
-                      <div style={{ fontWeight: 700, color: '#0f3060' }}>{BIN_LABELS[bi]} 計{st.total}台</div>
+                      <div style={{ fontWeight: 700, color: '#0f3060' }}>{lb.main}{lb.sub && <br />}{lb.sub} 計{st.total}台</div>
                       <div>{st.summary || '—'}</div>
                     </div>
                   )
