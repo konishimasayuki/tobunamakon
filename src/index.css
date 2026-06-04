@@ -257,10 +257,12 @@ input, textarea, select { font-family: inherit; }
 .seikon-contact-bottom { min-height:1.3em; }
 
 @media print {
-  @page seikon { size: A4 portrait; margin: 8mm; }
+  @page seikon { size: A4 landscape; margin: 7mm; }
   .seikon-sheet { page: seikon; max-width:none; }
   .seikon-wrap { padding:0 !important; }
-  .seikon-table th, .seikon-table td { font-size:11px; padding:2px 4px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .seikon-table td { height:11mm; }
+  .seikon-title { padding:2px 2px 6px; }
+  .seikon-title .st-name { font-size:18px; }
+  .seikon-table th, .seikon-table td { font-size:11px; padding:1px 4px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .seikon-table td { height:7mm; }
   .seikon-table, .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
 }

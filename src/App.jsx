@@ -3294,23 +3294,45 @@ function SeikonOutputPage({ isPopup }) {
     return () => clearTimeout(t)
   }, [loading, wantPrint])
 
-  const timesOf = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
+  const timesArr = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
   const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
   const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
 
-  // 配合が2種／数量が2種（片方だけでも）あれば、下に分割用の行を追加する
+  // 配合が2種／数量が2種（片方だけでも）あれば、下に分割用の行を追加する（他セルは元行のコピー）
   const lineRows = []
   rows.forEach(s => {
     const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     const split = mixes.length >= 2 || !!v2
-    lineRows.push({ s, mix: mixes[0] || '', vol: v1, primary: true })
-    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '', primary: false })
+    lineRows.push({ s, mix: mixes[0] || '', vol: v1 })
+    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '' })
   })
 
-  const ROWS = 20
+  // 1行を描画（分割行も元行のコピー＋その行の配合/数量で出力）
+  const renderRow = (s, mix, vol, key) => {
+    const ts = timesArr(s)
+    return (
+      <tr key={key}>
+        <td>{s.companyName || ''}</td>
+        <td>{s.siteName || ''}</td>
+        <td>{s.pourLocation || ''}</td>
+        <td>{vehicleLabel(s) || ''}</td>
+        <td>{mix}</td>
+        <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
+        <td style={{ textAlign: 'center' }}>{vol}</td>
+        <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : <>&nbsp;</>}</td>
+        <td>
+          <div className="seikon-contact-top">{[notesOf(s), tagsOf(s)].filter(Boolean).join('　')}&nbsp;</div>
+          <div className="seikon-contact-bottom">{s.orderContact || ''}&nbsp;</div>
+        </td>
+        <td>&nbsp;</td>
+      </tr>
+    )
+  }
+
+  const ROWS = 23
   const blanks = Math.max(0, ROWS - lineRows.length)
   const cols = ['業者名', '現場名', '打設場所', '車両', '配合', 'セメント種', '数量', '時間', '担当連絡先', '摘要']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
@@ -3341,34 +3363,7 @@ function SeikonOutputPage({ isPopup }) {
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
-            {lineRows.map((r, ri) => {
-              const s = r.s
-              return r.primary ? (
-                <tr key={s.id + '_p'}>
-                  <td>{s.companyName || ''}</td>
-                  <td>{s.siteName || ''}</td>
-                  <td>{s.pourLocation || ''}</td>
-                  <td>{vehicleLabel(s) || ''}</td>
-                  <td>{r.mix}</td>
-                  <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
-                  <td style={{ textAlign: 'center' }}>{r.vol}</td>
-                  <td style={{ textAlign: 'center' }}>{timesOf(s)}</td>
-                  <td>
-                    <div className="seikon-contact-top">{[notesOf(s), tagsOf(s)].filter(Boolean).join('　')}&nbsp;</div>
-                    <div className="seikon-contact-bottom">{s.orderContact || ''}&nbsp;</div>
-                  </td>
-                  <td>&nbsp;</td>
-                </tr>
-              ) : (
-                <tr key={s.id + '_s' + ri}>
-                  <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-                  <td>{r.mix}</td>
-                  <td>&nbsp;</td>
-                  <td style={{ textAlign: 'center' }}>{r.vol}</td>
-                  <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-                </tr>
-              )
-            })}
+            {lineRows.map((r, ri) => renderRow(r.s, r.mix, r.vol, r.s.id + '_' + ri))}
             {Array.from({ length: blanks }).map((_, i) => (
               <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
             ))}
