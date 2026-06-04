@@ -257,10 +257,12 @@ input, textarea, select { font-family: inherit; }
 .seikon-contact-bottom { min-height:1.3em; }
 
 @media print {
-  @page seikon { size: A4 landscape; margin: 5mm; }
-  html, body { margin:0 !important; }
-  .seikon-sheet { page: seikon; max-width:none; }
-  .seikon-wrap { padding:0 !important; }
+  /* 名前付き@pageは使わず、グローバルの @page(A4 landscape) に任せる（名前付きにすると
+     ページコンテキスト切替で強制改ページが入り、常に2ページ目が出てしまうため） */
+  html, body { margin:0 !important; height:auto !important; }
+  .popup-print-root { height:auto !important; overflow:visible !important; }
+  .seikon-wrap { padding:0 !important; height:auto !important; overflow:visible !important; }
+  .seikon-sheet { max-width:none !important; }
   .seikon-title { padding:0 0 3px; }
   .seikon-title .st-name { font-size:15px; }
   .seikon-title .st-date, .seikon-title .st-ampm { font-size:11px; }

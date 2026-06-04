@@ -3823,7 +3823,7 @@ function AppInner() {
   }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
+  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
 
   return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }
