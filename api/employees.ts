@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const p = redis.pipeline()
       ids.forEach(eid => p.hgetall(`employee:${eid}`))
       const rows = await p.exec<Record<string, any>[]>()
-      const drivers = rows.filter(e => e && e.type === 'driver').map(e => ({ id: e.id, name: e.name, type: 'driver' }))
+      const drivers = rows.filter(e => e && e.type === 'driver').map(e => ({ id: e.id, name: e.name, type: 'driver', lineId: e.lineId || '' }))
       drivers.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
       return res.status(200).json(drivers)
     } catch (e) {

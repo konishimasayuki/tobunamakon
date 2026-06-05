@@ -446,10 +446,9 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ===== アプリからの出荷カード送信（認証必須）。指定出荷の伝票カード＋地図画像を担当へ =====
+  // ===== アプリからの出荷カード送信。指定出荷の伝票カード＋地図画像を担当へ =====
+  // 配送割り当ての共有ウィンドウ（ログイン不要）からも送れるよう認証は必須にしない。
   if (req.method === 'POST' && (req.body as any)?.action === 'pushShipment') {
-    const user = requireAuth(req)
-    if (!user) return res.status(401).json({ error: '認証が必要です' })
     const { shipmentId, lineUserIds } = (req.body || {}) as any
     const cln = (v: any) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
     const ids: string[] = Array.isArray(lineUserIds) ? Array.from(new Set(lineUserIds.map(cln).filter(Boolean))) : []

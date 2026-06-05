@@ -3930,6 +3930,25 @@ function AssignPage({ isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
   }
   const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null); setAddrTarget(null) }
+  // 担当者を2名ずつの行に分ける
+  const driverLines = (drv) => { const lines = []; for (let i = 0; i < drv.length; i += 2) lines.push(drv.slice(i, i + 2).join('・')); return lines }
+  // 担当ドライバーへLINE送信（従業員のLINE IDを解決して送る）
+  const sendLine = async (s) => {
+    const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
+    if (!shipDrivers.length) { alert('担当が入っていません'); return }
+    const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+    const resolved = shipDrivers.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanId(emp?.lineId) } })
+    const withId = resolved.filter(r => r.lineId)
+    const without = resolved.filter(r => !r.lineId)
+    if (!withId.length) { alert('担当ドライバーにLINEユーザーIDが紐づいていません。\n従業員管理でLINE IDを設定してください。'); return }
+    let msg = `${withId.map(r => r.name).join('、')} にLINEを送信しますか？`
+    if (without.length) msg += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
+    if (!window.confirm(msg)) return
+    try {
+      const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: s.id, lineUserIds: withId.map(r => r.lineId) })
+      alert(`送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`)
+    } catch (e) { alert('LINE送信エラー: ' + e.message) }
+  }
   const wd = (() => { const d = new Date(date); return isNaN(d.getTime()) ? '' : WD[d.getDay()] })()
 
   return (
@@ -3954,10 +3973,13 @@ function AssignPage({ isPopup }) {
               {rows.map(s => {
                 const addr = cleanAddr(s.siteAddress)
                 const drv = driversOf(s)
-                const drvCell = drv.length ? <span style={{ color: '#1a4d8f', fontWeight: 600 }}>{drv.join('・')}</span> : <span style={{ color: '#c0392b' }}>未入力</span>
+                const dl = driverLines(drv)
+                const drvCell = drv.length
+                  ? <span style={{ color: '#1a4d8f', fontWeight: 600 }}>{dl.map((ln, i) => <span key={i} style={{ display: i ? 'block' : 'inline' }}>{i ? '　　' : ''}{ln}</span>)}</span>
+                  : <span style={{ color: '#c0392b' }}>未入力</span>
                 const addrCell = addr ? <span style={{ color: '#3a4a5c' }}>{addr}</span> : <span style={{ color: '#c0392b' }}>未入力</span>
                 if (stacked) {
-                  // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.担当+割当 3.住所+設定）。ボタンは同じ幅で左端を揃える
+                  // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.担当+LINE/担当割当 3.住所+住所設定）。ボタンは同じ幅で左端を揃える
                   const cardBtnBase = { flex: '0 0 116px', borderRadius: 8, padding: '8px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' }
                   return (
                     <div key={s.id} style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3966,9 +3988,12 @@ function AssignPage({ isPopup }) {
                         <span style={{ fontWeight: 700 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d' }}>{s.siteName || ''}</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>担当: {drvCell}</span>
-                        <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff' }}>🔁 担当割当</button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>担当: {drvCell}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 116px' }}>
+                          <button type="button" onClick={() => sendLine(s)} style={{ ...cardBtnBase, flex: 'none', border: '1.5px solid #06c755', background: '#06c755', color: '#fff' }}>LINE送信</button>
+                          <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, flex: 'none', border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff' }}>🔁 担当割当</button>
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
@@ -3985,6 +4010,7 @@ function AssignPage({ isPopup }) {
                     <span style={{ flex: '1 1 120px', minWidth: 0 }}>担当: {drvCell}</span>
                     <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                     <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
+                    <button type="button" onClick={() => sendLine(s)} style={{ flex: '0 0 auto', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
                     <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔁 担当割当</button>
                   </div>
                 )
