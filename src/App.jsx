@@ -1662,12 +1662,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     shipments.map(s => (s.tradingCompany || '').trim()).filter(Boolean)
   )).sort()
 
+  // カタカナ→ひらがな正規化。業者名・商社名は顧客マスタのカナ（companyNameKana）も検索対象にする
+  const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+  const kanaOfCompany = (s) => { const c = customers.find(c => c.id === s.companyId) || customers.find(c => c.companyName === s.companyName); return c ? (c.companyNameKana || '') : '' }
+  const kanaOfTrading = (s) => { if (!s.tradingCompany) return ''; const c = customers.find(c => c.companyName === s.tradingCompany); return c ? (c.companyNameKana || '') : '' }
   const filtered = shipments.filter(s => {
     if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
-    const q = search.toLowerCase()
-    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
-      .some(v => String(v || '').toLowerCase().includes(q))
+    const q = toHira(search)
+    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s)]
+      .some(v => toHira(v).includes(q))
   })
   // 直近に登録したものを一番上に（登録日時の新しい順）
   const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
