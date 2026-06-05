@@ -3320,7 +3320,7 @@ function WeeklySchedulePage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, minmax(130px,1fr))', gap: 6, minWidth: 1300 }}>
           {days.map(d => {
             const ds = ymd(d), wd = WD[d.getDay()]
-            const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+            const list = all.filter(s => s.date === ds).sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
             // 便ごとの車種別合計台数を集計（数量があれば加算・無ければ1台）
             const vehStats = (rows) => {
               const c = {}
@@ -3523,7 +3523,7 @@ function SeikonOutputPage({ isPopup }) {
 function ShipReportPage() {
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
-  const rows = all.filter(s => s.date === date).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+  const rows = all.filter(s => s.date === date).sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
   const totalVol = rows.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
   return (
     <div style={RPT.wrap}>
@@ -3571,7 +3571,7 @@ function DriverReportPage() {
       </div>
       {loading ? <div>読み込み中...</div> : names.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日の出荷はありません</div> : (
         names.map(n => {
-          const list = groups[n].sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+          const list = groups[n].sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
           const vol = list.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
           return (
             <div key={n} style={{ marginBottom: 20 }}>
