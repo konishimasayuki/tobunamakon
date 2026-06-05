@@ -3731,16 +3731,15 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
   }
   return (
     <>
-      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>🔁 担当割当・LINE送信</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
       <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
       <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（最大4人・タップで選択／解除）</div>
       <DriverPicker value={sel} options={drivers} onChange={setSel} />
-      <button type="button" onClick={() => doSave(true)} disabled={busy}
-        style={{ width: '100%', marginTop: 18, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '💬 保存してLINE送信'}</button>
-      <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-        <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
-        <button type="button" onClick={() => doSave(false)} disabled={busy} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>保存のみ（送信なし）</button>
+      <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+        <button type="button" onClick={() => doSave(true)} disabled={busy}
+          style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '送信中…' : '💬 LINE送信'}</button>
       </div>
     </>
   )
@@ -3997,7 +3996,7 @@ function AssignPage({ isPopup }) {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         <span style={{ flex: 1, minWidth: 0 }}>担当: {drvCell}</span>
-                        <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff' }}>🔁 担当割当</button>
+                        <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #06c755', background: '#06c755', color: '#fff' }}>💬 LINE送信</button>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
@@ -4014,7 +4013,7 @@ function AssignPage({ isPopup }) {
                     <span style={{ flex: '1 1 120px', minWidth: 0 }}>担当: {drvCell}</span>
                     <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                     <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
-                    <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔁 担当割当</button>
+                    <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 LINE送信</button>
                   </div>
                 )
               })}
