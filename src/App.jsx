@@ -3751,12 +3751,72 @@ function DriverAssignPopupPage({ id }) {
 }
 
 // 伝票キャンセル：伝票を選んでキャンセルすると全リストから非表示になり、ここに保管される
+// 出荷登録の伝票（denpyo）レイアウトを流用した読み取り専用ビュー
+function DenpyoView({ s }) {
+  const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const notes = (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const dmsg = (Array.isArray(s.driverMessages) ? s.driverMessages.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)
+  const cell = (label, flex, content) => (
+    <div className="cell" style={{ flex }}>
+      <div className="lbl">{label}</div>
+      <div style={{ fontSize: 15, color: '#111', minHeight: 18, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>
+    </div>
+  )
+  return (
+    <div className="denpyo">
+      <div className="sheet" style={{ margin: 0 }}>
+        <div className="band">
+          {cell('日 付', '0 0 24%', s.date)}
+          {cell('業 者 名', '1 1 0', s.companyName || '—')}
+          {cell('商 社 名', '1 1 0', s.tradingCompany || '—')}
+        </div>
+        <div className="band">
+          {cell('時 間', '0 0 24%', times.join(' / ') || '—')}
+          {cell('現 場 名', '1 1 0', s.siteName || '—')}
+        </div>
+        <div className="band">
+          {cell('現 場 住 所', '1 1 0', cleanAddr(s.siteAddress) || '未入力')}
+        </div>
+        <div className="band">
+          {cell('車 種', '0 0 16%', vehicleLabel(s) || '—')}
+          {cell('打設箇所', '0 0 16%', s.pourLocation || '—')}
+          {cell('配 合', '1 1 0', mixes.length ? mixes.map((r, i) => <div key={i}>{r.code}{r.note ? `（${r.note}）` : ''}</div>) : '—')}
+          {cell('セメント種', '0 0 12%', s.cementType || '—')}
+          {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—')}
+        </div>
+        <div className="band">
+          {cell('数 量', '0 0 24%', shipVolStr(s) || '—')}
+          {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—')}
+          {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—')}
+        </div>
+        <div className="band">
+          {cell('連 絡 先', '1 1 0', s.orderContact || '—')}
+          {cell('現場連絡先', '1 1 0', s.siteContact || '—')}
+        </div>
+        <div className="band">
+          {cell('備 考', '1 1 0', notes.length ? notes.map((n, i) => <div key={i}>・{n}</div>) : '—')}
+        </div>
+        <div className="band">
+          {cell('担当ドライバー', '0 0 34%', driversOf(s).join('・') || '—')}
+          {cell('ドライバーへの連絡', '1 1 0', dmsg.length ? dmsg.map((n, i) => <div key={i}>・{n}</div>) : '—')}
+          {cell('PDF', '0 0 18%', s.hasPdf
+            ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000') }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
+            : '—')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 伝票キャンセル：伝票を選ぶと出荷登録のフォーム形式で表示し、キャンセルすると全リストから非表示・保管される
 function CancelPage() {
   const [active, setActive] = useState([])
   const [cancelled, setCancelled] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [busy, setBusy] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [detail, setDetail] = useState(null)   // フォーム表示中の伝票
   const load = useCallback(async () => {
     try {
       const [a, c] = await Promise.all([api.get('/api/shipments'), api.get('/api/shipments?cancelled=1')])
@@ -3767,10 +3827,10 @@ function CancelPage() {
   useShipmentsChanged(load)
 
   const setCancel = async (s, val) => {
-    if (val && !window.confirm(`この伝票をキャンセルしますか？\n\n${s.date}　${firstTimeOf(s) || ''}　${s.companyName}\n${s.siteName || ''}\n\nキャンセルすると全リストから非表示になります（このページに保管されます）。`)) return
-    setBusy(s.id)
-    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: val }); notifyShipmentsChanged(); await load() }
-    catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
+    if (val && !window.confirm('この伝票をキャンセルしますか？\nキャンセルすると全リストから非表示になります（このページに保管されます）。')) return
+    setBusy(true)
+    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: val }); notifyShipmentsChanged(); setDetail(null); await load() }
+    catch (e) { alert('エラー: ' + e.message) } finally { setBusy(false) }
   }
 
   const q = search.trim().toLowerCase()
@@ -3779,18 +3839,15 @@ function CancelPage() {
   const activeRows = byDateDesc(active.filter(matchS))
   const cancelledRows = byDateDesc(cancelled.filter(matchS))
 
-  const rowStyle = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '9px 14px' }
-  const cancelBtn = { flex: '0 0 auto', border: '1.5px solid #c0392b', background: '#c0392b', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
-  const restoreBtn = { flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#fff', color: '#1a8f5a', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
+  const rowStyle = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px', cursor: 'pointer' }
   const renderRow = (s, isCancel) => (
-    <div key={s.id} style={{ ...rowStyle, opacity: isCancel ? 0.85 : 1 }}>
+    <div key={s.id} style={{ ...rowStyle, opacity: isCancel ? 0.85 : 1 }} onClick={() => setDetail(s)} title="クリックで伝票を表示">
       <span style={{ flex: '0 0 auto', fontSize: 13, color: '#3a4a5c', minWidth: 110 }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b></span>
       <span style={{ flex: '1 1 220px', minWidth: 0 }}><b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}</span>
-      {isCancel
-        ? <button type="button" disabled={busy === s.id} onClick={() => setCancel(s, false)} style={restoreBtn}>↩ 元に戻す</button>
-        : <button type="button" disabled={busy === s.id} onClick={() => setCancel(s, true)} style={cancelBtn}>✕ キャンセル</button>}
+      <span style={{ flex: '0 0 auto', color: '#1a4d8f', fontWeight: 700, fontSize: 13 }}>📄 表示 ▶</span>
     </div>
   )
+  const isDetailCancelled = detail && cancelled.some(x => x.id === detail.id)
 
   return (
     <div style={RPT.wrap}>
@@ -3799,7 +3856,7 @@ function CancelPage() {
         style={{ width: '100%', maxWidth: 420, padding: '9px 12px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 14 }} />
       {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div> : (
         <>
-          <h3 style={{ fontSize: 14, color: '#3a4a5c', margin: '0 0 8px' }}>出荷一覧（キャンセルする伝票を選択）<span style={{ fontWeight: 400, color: '#9aa7b5' }}> {activeRows.length}件</span></h3>
+          <h3 style={{ fontSize: 14, color: '#3a4a5c', margin: '0 0 8px' }}>出荷一覧（伝票を選んでキャンセル）<span style={{ fontWeight: 400, color: '#9aa7b5' }}> {activeRows.length}件</span></h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {activeRows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>該当する伝票はありません</div> : activeRows.map(s => renderRow(s, false))}
           </div>
@@ -3808,6 +3865,23 @@ function CancelPage() {
             {cancelledRows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>キャンセル済みの伝票はありません</div> : cancelledRows.map(s => renderRow(s, true))}
           </div>
         </>
+      )}
+      {detail && (
+        <div onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 780, borderRadius: 14, padding: 16, margin: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>{isDetailCancelled ? '🗑️ キャンセル済み伝票' : '伝票の確認'}</div>
+              <button type="button" onClick={() => setDetail(null)} style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+            </div>
+            <FitToWidth width={720}><DenpyoView s={detail} /></FitToWidth>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button type="button" onClick={() => setDetail(null)} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>閉じる</button>
+              {isDetailCancelled
+                ? <button type="button" onClick={() => setCancel(detail, false)} disabled={busy} style={{ flex: 1, border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '↩ 元に戻す'}</button>
+                : <button type="button" onClick={() => setCancel(detail, true)} disabled={busy} style={{ flex: 1, border: 'none', background: '#c0392b', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '✕ この伝票をキャンセル'}</button>}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
