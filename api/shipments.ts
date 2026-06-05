@@ -87,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, orderContact, siteContact, drivers, notes, driverMessages, mapView, mapArrows, pdfData, pdfName } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, orderContact, siteContact, drivers, notes, driverMessages, mapView, mapArrows, pdfData, pdfName } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const newId = uuidv4()
@@ -118,6 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         placements: Array.isArray(placements) ? placements : [],
         pourLocation: pourLocation || '',
         noteTags: Array.isArray(noteTags) ? noteTags : [],
+        testTags: Array.isArray(testTags) ? testTags : [],
         orderContact: orderContact || '',
         siteContact: siteContact || '',
         drivers: Array.isArray(drivers) ? drivers : [],
@@ -143,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, orderContact, siteContact, drivers, notes, driverMessages, changedFields, mapView, mapArrows, pdfData, pdfName } = req.body
+    const { date, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, orderContact, siteContact, drivers, notes, driverMessages, changedFields, mapView, mapArrows, pdfData, pdfName } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const existing = await redis.hgetall(`shipment:${id}`)
@@ -180,6 +181,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         placements: Array.isArray(placements) ? placements : [],
         pourLocation: pourLocation !== undefined ? (pourLocation || '') : ((existing as any).pourLocation ?? ''),
         noteTags: Array.isArray(noteTags) ? noteTags : (Array.isArray((existing as any).noteTags) ? (existing as any).noteTags : []),
+        testTags: Array.isArray(testTags) ? testTags : (Array.isArray((existing as any).testTags) ? (existing as any).testTags : []),
         orderContact: orderContact || '',
         siteContact: siteContact || '',
         drivers: Array.isArray(drivers) ? drivers : [],

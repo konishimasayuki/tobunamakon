@@ -882,9 +882,11 @@ function CustomersPage() {
 // ============================================================
 const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
-const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
+const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
-const NOTE_TAGS = ['工TP', '領', '増コン', '追']
+const NOTE_TAGS = ['領', '追']
+const TEST_TAGS = ['現TP', '工TP']            // 試験（現TP=現場 / 工TP=工場）。生コン出荷予定表でのみ集計表示
+const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL']   // 備考に追加できる定型メッセージ
 // カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる）
 const kanaToHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
@@ -939,7 +941,8 @@ const emptyShipForm = {
   placements: [],
   pourLocation: '',
   pourFree: false,      // 打設箇所を自由入力モードにしているか
-  noteTags: [],         // 工TP / 領 / 増コン の選択
+  noteTags: [],         // 領 / 追 の選択
+  testTags: [],         // 試験（現TP / 工TP）
   orderContact: '', siteContact: '',
   drivers: [],
   notes: [{ text: '', important: false }],
@@ -1540,6 +1543,19 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const cur = Array.isArray(f.noteTags) ? f.noteTags : []
     return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
   })
+  const toggleTestTag = (tag) => setForm(f => {
+    const cur = Array.isArray(f.testTags) ? f.testTags : []
+    return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
+  })
+  // 備考に定型メッセージを段落として追加（空段落があればそこへ、無ければ末尾に追加。最大4段落）
+  const addNoteMessage = (msg) => setForm(f => {
+    const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []
+    const empty = notes.findIndex(n => !String(n.text || '').trim())
+    if (empty >= 0) notes[empty] = { ...notes[empty], text: msg }
+    else if (notes.length < 4) notes.push({ text: msg, important: false })
+    else { alert('備考は最大4段落です'); return f }
+    return { ...f, notes }
+  })
 
   const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
@@ -1616,6 +1632,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     pourFree: typeof s.pourFree === 'boolean' ? s.pourFree
       : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
     noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
+    testTags: Array.isArray(s.testTags) ? s.testTags : [],
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
@@ -1720,6 +1737,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   }
 
   const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
+  // コピーして複製：今のフォーム内容を新規扱いにする（保存すると新しい伝票になる。PDF添付は引き継がない）
+  const handleDuplicate = () => {
+    setEditing(null)
+    setEditChanged([])
+    setForm(f => ({ ...f, pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
+    setMapKey(k => k + 1)
+    topRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const handleDelete = async (id) => {
     try {
@@ -1899,9 +1924,23 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       )
                     })()}
                   </div>
-                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
+                  <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
                     <div className="lbl">セメント種</div>
-                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} big />
+                    {/* N / B を縦に並べる */}
+                    <div className="chips big" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                      {CEMENT_TYPES.map(o => (
+                        <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
+                    <div className="lbl">試験</div>
+                    {/* 現TP / 工TP を2段（縦）に配置。生コン出荷予定表でのみ集計表示 */}
+                    <div className="chips big" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                      {TEST_TAGS.map(t => (
+                        <span key={t} className={'chip' + ((form.testTags || []).includes(t) ? ' on' : '')} onClick={() => toggleTestTag(t)}>{t}</span>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <div className="subrow">
@@ -1955,11 +1994,20 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
             </div>
 
-            {/* 6段: 備考 */}
+            {/* 6段: 備考（段落は下に追加）＋ メッセージ追加ボタン */}
             <div className="band">
-              <div className="cell" style={{ flex: 1 }}>
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={redIf('notes')}>備 考</div>
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={2} max={2} height={90} addLabel="＋ 段落を追加" />
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={1} max={4} height={90} addLabel="＋ 段落を追加" />
+              </div>
+              <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+                  {NOTE_MESSAGES.map(m => (
+                    <button key={m} type="button" onClick={() => addNoteMessage(m)}
+                      style={{ border: '1.5px solid #1b4ea8', background: '#eef4ff', color: '#1b4ea8', borderRadius: 6, padding: '7px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>＋ {m}</button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1987,7 +2035,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 {/* 縦に段落追加（段落を追加で上の段落の下に追加） */}
                 <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={1} max={4} height={80} addLabel="＋ 段落を追加" />
               </div>
-              {/* 選択したものだけ表示（工TP / 領 / 増コン） */}
+              {/* 特記（領 / 追） */}
               <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>特記</div>
                 <div className="chips">
@@ -2040,6 +2088,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 </>
               }
             />
+            {/* 矢印/戻す/消去・リセット/登録 の下の段左：コピーして複製 */}
+            <div style={{ marginTop: 10, display: 'flex' }}>
+              <button type="button" onClick={handleDuplicate}
+                style={{ border: '1.5px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📋 コピーして複製</button>
+            </div>
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
             {(() => {
               // mix0/note0 等のサブキーは親(配合/備考)に集約し、ラベルが付くものだけ重複なく表示
@@ -3383,6 +3436,11 @@ function SeikonOutputPage({ isPopup }) {
   const rows = all.filter(s => s.date === date && inAmPm(s))
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
+  // 試験集計（その日の全出荷から：現TP=現場 / 工TP=工場）
+  const dayShips = all.filter(s => s.date === date)
+  const testGen = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('現TP')).length
+  const testKo = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('工TP')).length
+
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
 
@@ -3499,6 +3557,7 @@ function SeikonOutputPage({ isPopup }) {
           <span className="st-ampm">
             <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
           </span>
+          <span className="st-test">試験　現場:{testGen}件　工場:{testKo}件</span>
         </div>
         <table className="seikon-table">
           <colgroup>
