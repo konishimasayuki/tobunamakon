@@ -1655,20 +1655,51 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditId, shipments])
 
+  // フォームから保存用ペイロードを組み立てる（handleSubmit と 行切替保存で共通）
+  const buildPayload = () => {
+    const payload = {
+      ...form,
+      times: form.times.map(t => t.text).filter(t => t.trim() !== ''),
+      notes: form.notes.filter(n => n.text.trim() !== ''),
+      driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
+    }
+    // PDF: 削除指示なら空を送って消す／新規選択時はその本体を送る／いずれでもなければ既存維持のためキーを外す
+    if (form.pdfRemove) payload.pdfData = ''
+    else if (!form.pdfData) delete payload.pdfData
+    return payload
+  }
+
+  // 編集中の伝票を「更新」と同じ処理で保存（UIはリセットしない＝直後に別伝票へ切替できる）
+  const saveCurrentEdit = async () => {
+    const payload = buildPayload()
+    const orig = shipments.find(x => x.id === editing) || {}
+    const changed = diffChangedFields(orig, payload)
+    const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
+    const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
+    setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
+    notifyShipmentsChanged()
+    return updated
+  }
+
+  // 一覧で別の伝票を選んだとき：編集中なら更新と同じ保存を走らせてから切り替える
+  const onRowClick = async (s) => {
+    if (editing === s.id) return
+    if (editing) {
+      if (!form.date || !form.companyName) { setError('日付と業者名は必須です（更新できないため切り替えできません）'); return }
+      setSaving(true)
+      try { await saveCurrentEdit() }
+      catch (err) { setError(err.message); setSaving(false); return }
+      setSaving(false)
+    }
+    startEdit(s)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSaving(true)
     try {
-      const payload = {
-        ...form,
-        times: form.times.map(t => t.text).filter(t => t.trim() !== ''),
-        notes: form.notes.filter(n => n.text.trim() !== ''),
-        driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
-      }
-      // PDF: 削除指示なら空を送って消す／新規選択時はその本体を送る／いずれでもなければ既存維持のためキーを外す
-      if (form.pdfRemove) payload.pdfData = ''
-      else if (!form.pdfData) delete payload.pdfData
+      const payload = buildPayload()
       if (editing) {
         // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目（配合は桁ごと・備考は行ごと）を積む
         const orig = shipments.find(x => x.id === editing) || {}
@@ -2078,7 +2109,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </thead>
               <tbody>
                 {pageRows.map(s => (
-                  <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => startEdit(s)}>
+                  <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => onRowClick(s)}>
                     <td style={S.td}>{s.date}</td>
                     <td style={{ ...S.td, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {s.hasPdf
