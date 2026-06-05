@@ -2238,6 +2238,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return localToday()
   })
   useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
+  const [ampm, setAmpm] = useState('both')   // 表示の絞り込み（'both' | 'AM' | 'PM'）
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
@@ -2293,19 +2294,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
   useShipmentsChanged(refetch)
 
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
-  // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
+  // 時間を分に変換してソート。午前/AM=11:59(719分)・午後/PM=23:59(1439分)扱い、空欄は最後。"08:30"と"8:30"は同一
   const timeToMin = (t) => {
     const str = String(t || '').trim()
     if (!str) return 100000
     const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
     if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
-    if (str.includes('午前')) return 11 * 60 + 59   // 11:59
-    if (str.includes('午後')) return 23 * 60 + 59   // 23:59
+    const up = str.toUpperCase()
+    if (str.includes('午前') || up.includes('AM')) return 11 * 60 + 59   // 11:59
+    if (str.includes('午後') || up.includes('PM')) return 23 * 60 + 59   // 23:59
     const h = str.match(/(\d{1,2})\s*時/)
     if (h) return parseInt(h[1], 10) * 60
     return 99999   // 解析できない文字 → 空欄の手前
   }
-  const rows = all.filter(s => s.date === date)
+  const inAmPm = (s) => { if (ampm === 'both') return true; const mm = timeToMin(firstT(s)); return ampm === 'AM' ? mm < 720 : mm >= 720 }
+  const rows = all.filter(s => s.date === date && inAmPm(s))
     .sort((a, b) => timeToMin(firstT(a)) - timeToMin(firstT(b)) || String(firstT(a)).localeCompare(String(firstT(b))))
 
   const isChanged = (s, f) => Array.isArray(s.changedFields) && s.changedFields.includes(f)
@@ -2655,6 +2658,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
   }
 
+  // AM/PM表示切替（未選択=全体）。印刷には出さない
+  const ampmButtons = (
+    <span className="no-print" style={{ display: 'inline-flex', gap: 6 }}>
+      {['AM', 'PM'].map(p => (
+        <button key={p} type="button" onClick={() => setAmpm(a => a === p ? 'both' : p)}
+          style={{ border: ampm === p ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === p ? '#0f3060' : '#fff', color: ampm === p ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{p}</button>
+      ))}
+    </span>
+  )
+
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
@@ -2664,6 +2677,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
             <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
+            {ampmButtons}
           </div>
           <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
           <div className="no-print" style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, display: 'flex', gap: 8 }}>
@@ -2682,6 +2696,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
+          {ampmButtons}
         </div>
       </div>
       )}
@@ -3139,14 +3154,15 @@ const WD = ['日', '月', '火', '水', '木', '金', '土']
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const mondayOf = (dateStr) => { const d = new Date(dateStr); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return d }
 const firstTimeOf = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
-// 時間文字列を分に変換（午前=11:59 / 午後=23:59 / 空欄や未解析は最後）
+// 時間文字列を分に変換（午前/AM=11:59 / 午後/PM=23:59 / 空欄や未解析は最後）。"08:30"と"8:30"は同一
 const timeToMin = (t) => {
   const str = String(t || '').trim()
   if (!str) return 100000
   const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
   if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
-  if (str.includes('午前')) return 11 * 60 + 59
-  if (str.includes('午後')) return 23 * 60 + 59
+  const up = str.toUpperCase()
+  if (str.includes('午前') || up.includes('AM')) return 11 * 60 + 59
+  if (str.includes('午後') || up.includes('PM')) return 23 * 60 + 59
   const h = str.match(/(\d{1,2})\s*時/)
   if (h) return parseInt(h[1], 10) * 60
   return 99999
@@ -3450,7 +3466,7 @@ function SeikonOutputPage({ isPopup }) {
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center' }}>{r.vol}</td>
         <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
-        <td className="seikon-phone">{s.orderContact || ''}</td>
+        <td className="seikon-phone">{s.siteContact || ''}</td>
         <td className="seikon-tekiyo">
           <div>{notesOf(s)}</div>
           <div>{tekiyo2}</div>
