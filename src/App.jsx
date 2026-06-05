@@ -995,26 +995,32 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(-1)
   const wrapRef = useRef(null)
+  // ▼ボタンで開いたときは全件表示。入力中は絞り込み
+  const [showAll, setShowAll] = useState(false)
   const q = kanaToHira(value)
-  const filtered = (value ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 50)
+  const filtered = ((value && !showAll) ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 200)
   useEffect(() => {
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setShowAll(false) } }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
-  const pick = (o) => { onPick(o); setOpen(false); setHi(-1) }
+  const pick = (o) => { onPick(o); setOpen(false); setShowAll(false); setHi(-1) }
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
       <input className={className} style={style} value={value} placeholder={placeholder} required={required}
-        onChange={e => { onChange(e); setOpen(true); setHi(-1) }}
+        onChange={e => { onChange(e); setOpen(true); setShowAll(false); setHi(-1) }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onBlur={() => setTimeout(() => { setOpen(false); setShowAll(false) }, 150)}
         onKeyDown={e => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(h => Math.min(filtered.length - 1, h + 1)) }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(0, h - 1)) }
           else if (e.key === 'Enter' && open && hi >= 0 && filtered[hi]) { e.preventDefault(); e.stopPropagation(); pick(filtered[hi]) }
-          else if (e.key === 'Escape') { setOpen(false) }
+          else if (e.key === 'Escape') { setOpen(false); setShowAll(false) }
         }} />
+      {/* プルダウンを開く▼ボタン（全件表示） */}
+      <button type="button" tabIndex={-1} title="一覧から選択"
+        onMouseDown={(e) => { e.preventDefault(); setOpen(o => !o); setShowAll(true); setHi(-1) }}
+        style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 12, padding: '0 4px', alignSelf: 'center' }}>▼</button>
       {open && filtered.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.15)', maxHeight: 260, overflowY: 'auto' }}>
           {filtered.map((o, i) => (
@@ -1704,7 +1710,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   )).sort()
   // 業者名・商社名のカナ付き候補（ひらがな/カタカナで絞り込み可能）
   const companyComboOptions = customers.map(c => ({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }))
-  const tradingComboOptions = tradingOptions.map(t => { const c = customers.find(c => c.companyName === t); return { label: t, kana: c ? (c.companyNameKana || '') : '' } })
+  // 商社名：顧客マスタ（カナ付き）＋出荷履歴の商社名を結合（重複は除外）
+  const tradingComboOptions = (() => {
+    const seen = new Set()
+    const out = []
+    customers.forEach(c => { if (c.companyName && !seen.has(c.companyName)) { seen.add(c.companyName); out.push({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }) } })
+    tradingOptions.forEach(t => { if (t && !seen.has(t)) { seen.add(t); out.push({ label: t, kana: '' }) } })
+    return out
+  })()
 
   // カタカナ→ひらがな正規化。業者名・商社名は顧客マスタのカナ（companyNameKana）も検索対象にする
   const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
