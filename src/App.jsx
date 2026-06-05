@@ -3431,7 +3431,7 @@ function SeikonOutputPage({ isPopup }) {
       return (
         <tr key={key}>
           <td></td><td></td><td></td><td></td>
-          <td>{r.mix}</td>
+          <td className="seikon-mix">{r.mix}</td>
           <td></td>
           <td style={{ textAlign: 'center' }}>{r.vol}</td>
           <td></td><td></td><td></td>
@@ -3446,11 +3446,11 @@ function SeikonOutputPage({ isPopup }) {
         <td>{s.siteName || ''}</td>
         <td>{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
-        <td>{r.mix}</td>
+        <td className="seikon-mix">{r.mix}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center' }}>{r.vol}</td>
         <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
-        <td>{s.orderContact || ''}</td>
+        <td className="seikon-phone">{s.orderContact || ''}</td>
         <td className="seikon-tekiyo">
           <div>{notesOf(s)}</div>
           <div>{tekiyo2}</div>
@@ -3461,7 +3461,7 @@ function SeikonOutputPage({ isPopup }) {
 
   const ROWS = 23
   const blanks = Math.max(0, ROWS - lineRows.length)
-  const cols = ['業者名', '現場名', '打設場所', '車両', '配合', 'セメント種', '数量', '時間', '担当連絡先', '摘要']
+  const cols = ['業者名', '現場名', '打設', '車両', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
   return (
@@ -3488,7 +3488,7 @@ function SeikonOutputPage({ isPopup }) {
           <colgroup>
             <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '4%' }} />
             <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '21%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '19%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
