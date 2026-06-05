@@ -1040,14 +1040,16 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
       <button type="button" tabIndex={-1} title="一覧から選択"
         onMouseDown={(e) => { e.preventDefault(); open ? close() : openMenu(true) }}
         style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 12, padding: '0 4px', alignSelf: 'center' }}>▼</button>
-      {open && filtered.length > 0 && rect && createPortal(
-        <div ref={dropRef} style={{ position: 'fixed', left: rect.left, top: rect.top, width: Math.max(rect.width, 180), zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 280, overflowY: 'auto' }}>
-          {filtered.map((o, i) => (
+      {open && rect && createPortal(
+        <div ref={dropRef} style={{ position: 'fixed', left: rect.left, top: rect.top, width: Math.max(rect.width, 200), zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 280, overflowY: 'auto' }}>
+          {filtered.length > 0 ? filtered.map((o, i) => (
             <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => { e.preventDefault(); pick(o) }} onMouseEnter={() => setHi(i)}
               style={{ padding: '8px 10px', fontSize: 14, cursor: 'pointer', background: i === hi ? '#eef5ff' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111' }}>
               {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
             </div>
-          ))}
+          )) : (
+            <div style={{ padding: '8px 10px', fontSize: 12, color: '#9aa7b5', lineHeight: 1.5 }}>該当なし<br />（ひらがな検索には顧客管理で「会社名カナ」の登録が必要です）</div>
+          )}
         </div>,
         document.body
       )}
