@@ -251,7 +251,9 @@ input, textarea, select { font-family: inherit; }
 .seikon-title .st-ampm { font-size:14px; font-weight:700; color:#111; border:1px solid #111; border-radius:4px; padding:1px 10px; margin-left:auto; }
 .seikon-table { width:100%; border-collapse:collapse; table-layout:fixed; font-family:'Noto Sans JP',sans-serif; border:1px solid #111; box-sizing:border-box; }
 .seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:14px; line-height:1.25; word-break:break-all; vertical-align:middle; color:#111; }
-.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:17px; }
+.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:16px; overflow:hidden; }
+/* 打設列：単一の値は改行しない（複数要素は摘要のように別行で扱う） */
+.seikon-table td.seikon-datsu { white-space:nowrap; }
 .seikon-table td { height:30px; }
 /* 車両は文字を5pt大きく */
 .seikon-table td.seikon-veh { font-size:19px; font-weight:700; text-align:center; }

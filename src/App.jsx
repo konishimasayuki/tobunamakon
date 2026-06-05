@@ -3460,7 +3460,7 @@ function SeikonOutputPage({ isPopup }) {
       <tr key={key}>
         <td>{s.companyName || ''}</td>
         <td>{s.siteName || ''}</td>
-        <td>{s.pourLocation || ''}</td>
+        <td className="seikon-datsu">{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
         <td className="seikon-mix">{r.mix}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
@@ -3502,9 +3502,9 @@ function SeikonOutputPage({ isPopup }) {
         </div>
         <table className="seikon-table">
           <colgroup>
-            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '4%' }} />
-            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '19%' }} />
+            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '5%' }} />
+            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '5%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '11%' }} /><col style={{ width: '18%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
