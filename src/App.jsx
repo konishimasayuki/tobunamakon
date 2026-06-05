@@ -992,36 +992,33 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
 }
 
 // カナ（ひらがな/カタカナ）でも絞り込めるオートコンプリート入力（業者名・商社名用）
-// 候補リストは画面端の overflow:hidden で隠れないよう、ポータルで最前面(fixed)に描画する
+// 候補リストは画面端の overflow:hidden で隠れないよう body 直下のポータルに描画する。
+// iOSのキーボード時の position:fixed 不具合を避けるため、ドキュメント座標の absolute で配置する。
 function KanaCombo({ value, onChange, onPick, options, placeholder, className = 'f', style, required }) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(-1)
   const [showAll, setShowAll] = useState(false)   // ▼で開いたら全件、入力中は絞り込み
-  const [rect, setRect] = useState(null)          // 入力欄の画面座標（ポータル位置）
+  const [pos, setPos] = useState(null)            // 入力欄のドキュメント座標
   const inputRef = useRef(null)
   const dropRef = useRef(null)
   const q = kanaToHira(value)
   const filtered = ((value && !showAll) ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 200)
 
-  const updateRect = () => { const el = inputRef.current; if (el) { const r = el.getBoundingClientRect(); setRect({ left: r.left, top: r.bottom, width: r.width }) } }
-  const openMenu = (all) => { setShowAll(!!all); updateRect(); setOpen(true) }
+  const place = () => { const el = inputRef.current; if (!el) return; const r = el.getBoundingClientRect(); setPos({ left: r.left + window.scrollX, top: r.bottom + window.scrollY, width: r.width }) }
+  const openMenu = (all) => { setShowAll(!!all); place(); setOpen(true) }
   const close = () => { setOpen(false); setShowAll(false); setHi(-1) }
   const pick = (o) => { onPick(o); close() }
 
   useEffect(() => {
     if (!open) return
-    updateRect()
-    const on = () => updateRect()
-    const onDoc = (e) => {
-      const t = e.target
-      if (inputRef.current && inputRef.current.contains(t)) return
-      if (dropRef.current && dropRef.current.contains(t)) return
-      close()
-    }
-    window.addEventListener('scroll', on, true)
+    place()
+    const on = () => place()
+    const onDoc = (e) => { const t = e.target; if ((inputRef.current && inputRef.current.contains(t)) || (dropRef.current && dropRef.current.contains(t))) return; close() }
     window.addEventListener('resize', on)
+    window.addEventListener('scroll', on, true)
     document.addEventListener('mousedown', onDoc)
-    return () => { window.removeEventListener('scroll', on, true); window.removeEventListener('resize', on); document.removeEventListener('mousedown', onDoc) }
+    document.addEventListener('touchstart', onDoc)
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('scroll', on, true); document.removeEventListener('mousedown', onDoc); document.removeEventListener('touchstart', onDoc) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -1030,7 +1027,7 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
       <input ref={inputRef} className={className} style={style} value={value} placeholder={placeholder} required={required}
         onChange={e => { onChange(e); openMenu(false) }}
         onFocus={() => openMenu(false)}
-        onBlur={() => setTimeout(close, 150)}
+        onClick={() => openMenu(false)}
         onKeyDown={e => {
           if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) openMenu(false); setHi(h => Math.min(filtered.length - 1, h + 1)) }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(0, h - 1)) }
@@ -1039,16 +1036,16 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
         }} />
       <button type="button" tabIndex={-1} title="一覧から選択"
         onMouseDown={(e) => { e.preventDefault(); open ? close() : openMenu(true) }}
-        style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 12, padding: '0 4px', alignSelf: 'center' }}>▼</button>
-      {open && rect && createPortal(
-        <div ref={dropRef} style={{ position: 'fixed', left: rect.left, top: rect.top, width: Math.max(rect.width, 200), zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 280, overflowY: 'auto' }}>
+        style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 13, padding: '0 6px', alignSelf: 'center' }}>▼</button>
+      {open && pos && createPortal(
+        <div ref={dropRef} style={{ position: 'absolute', left: pos.left, top: pos.top, width: Math.max(pos.width, 200), zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 280, overflowY: 'auto' }}>
           {filtered.length > 0 ? filtered.map((o, i) => (
-            <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => { e.preventDefault(); pick(o) }} onMouseEnter={() => setHi(i)}
-              style={{ padding: '8px 10px', fontSize: 14, cursor: 'pointer', background: i === hi ? '#eef5ff' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111' }}>
+            <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setHi(i)}
+              style={{ padding: '9px 10px', fontSize: 14, cursor: 'pointer', background: i === hi ? '#eef5ff' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111', borderBottom: '1px solid #f2f4f8' }}>
               {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
             </div>
           )) : (
-            <div style={{ padding: '8px 10px', fontSize: 12, color: '#9aa7b5', lineHeight: 1.5 }}>該当なし<br />（ひらがな検索には顧客管理で「会社名カナ」の登録が必要です）</div>
+            <div style={{ padding: '9px 10px', fontSize: 12, color: '#9aa7b5', lineHeight: 1.5 }}>該当なし<br />（ひらがな検索には顧客管理で「会社名カナ」の登録が必要です）</div>
           )}
         </div>,
         document.body
