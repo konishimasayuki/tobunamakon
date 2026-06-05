@@ -1741,14 +1741,18 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const handleDuplicate = () => {
     setEditing(null)
     setEditChanged([])
-    setForm(f => ({ ...f, pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
+    // 複製と分かるよう現場名に「 コピー」を付ける。PDF添付は引き継がない
+    setForm(f => ({ ...f, siteName: ((f.siteName || '') + ' コピー').trim(), pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
     setMapKey(k => k + 1)
     topRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    alert('コピーされました')
   }
 
+  // 出荷一覧の「削除」はキャンセル（ソフト削除）。キャンセル伝票に保管され、復元できる
   const handleDelete = async (id) => {
     try {
-      await api.del(`/api/shipments/${id}`)
+      await api.put(`/api/shipments/${id}?cancel=1`, { cancelled: true })
+      notifyShipmentsChanged()
       setDeleteConfirm(null)
       setShipments(ss => ss.filter(s => s.id !== id))
     } catch (e) { alert('エラー: ' + e.message) }
@@ -1783,9 +1787,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   // 直近に登録したものを一番上に（登録日時の新しい順）
   const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   // 10件ずつページング
-  const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
-  const curPage = Math.min(page, pageCount - 1)
-  const pageRows = sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
+  // 日付ボタンで絞り込み中（その日表示）は、ページ送りせず全部1ページに表示する
+  const noPaging = !!dateFilter
+  const pageCount = noPaging ? 1 : Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
+  const curPage = noPaging ? 0 : Math.min(page, pageCount - 1)
+  const pageRows = noPaging ? sortedList : sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
   // 検索・日付絞り込みが変わったら1ページ目へ
   useEffect(() => { setPage(0) }, [search, dateFilter])
 
@@ -2138,7 +2144,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             })}
           </div>
         </div>
-        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
+        <div style={S.countBar}>{loading ? '読み込み中...' : noPaging ? `${dateFilter} の伝票 ${filtered.length} 件を表示` : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
 
         {loading ? (
           <div style={S.empty}>読み込み中...</div>
@@ -2185,7 +2191,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
           </div>
         )}
 
-        {!loading && filtered.length > PAGE_SIZE && (
+        {!loading && !noPaging && filtered.length > PAGE_SIZE && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '12px 16px' }}>
             <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={curPage === 0}
               style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage === 0 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage === 0 ? 'default' : 'pointer' }}>← 戻る</button>
@@ -2199,9 +2205,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {deleteConfirm && (
         <div style={S.overlay}>
           <div style={S.confirmBox}>
-            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>この出荷登録を削除しますか？</p>
+            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>この伝票を削除（キャンセル）しますか？<br /><span style={{ fontSize: 12, color: '#6b7a8d' }}>「キャンセル伝票」に保管され、復元できます。</span></p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>キャンセル</button>
+              <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>やめる</button>
               <button style={S.dangerBtn} onClick={() => handleDelete(deleteConfirm)}>削除する</button>
             </div>
           </div>
@@ -3809,76 +3815,63 @@ function DenpyoView({ s }) {
   )
 }
 
-// 伝票キャンセル：伝票を選ぶと出荷登録のフォーム形式で表示し、キャンセルすると全リストから非表示・保管される
+// キャンセル伝票：削除（キャンセル）した伝票の保管庫。復元すると元に戻り一覧から消える
 function CancelPage() {
-  const [active, setActive] = useState([])
   const [cancelled, setCancelled] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [detail, setDetail] = useState(null)   // フォーム表示中の伝票
+  const [busy, setBusy] = useState(null)        // 復元処理中の伝票id
+  const [detail, setDetail] = useState(null)    // フォーム表示中の伝票
   const load = useCallback(async () => {
-    try {
-      const [a, c] = await Promise.all([api.get('/api/shipments'), api.get('/api/shipments?cancelled=1')])
-      setActive(Array.isArray(a) ? a : []); setCancelled(Array.isArray(c) ? c : [])
-    } catch (e) { console.error(e) } finally { setLoading(false) }
+    try { const c = await api.get('/api/shipments?cancelled=1'); setCancelled(Array.isArray(c) ? c : []) }
+    catch (e) { console.error(e) } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
   useShipmentsChanged(load)
 
-  const setCancel = async (s, val) => {
-    if (val && !window.confirm('この伝票をキャンセルしますか？\nキャンセルすると全リストから非表示になります（このページに保管されます）。')) return
-    setBusy(true)
-    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: val }); notifyShipmentsChanged(); setDetail(null); await load() }
-    catch (e) { alert('エラー: ' + e.message) } finally { setBusy(false) }
+  const restore = async (s) => {
+    setBusy(s.id)
+    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: false }); notifyShipmentsChanged(); setDetail(null); await load() }
+    catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
   }
 
   const q = search.trim().toLowerCase()
   const matchS = (s) => !q || [s.date, s.companyName, s.tradingCompany, s.siteName, firstTimeOf(s)].some(v => String(v || '').toLowerCase().includes(q))
-  const byDateDesc = (arr) => [...arr].sort((a, b) => String(b.date + (firstTimeOf(b) || '')).localeCompare(String(a.date + (firstTimeOf(a) || ''))))
-  const activeRows = byDateDesc(active.filter(matchS))
-  const cancelledRows = byDateDesc(cancelled.filter(matchS))
-
-  const rowStyle = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px', cursor: 'pointer' }
-  const renderRow = (s, isCancel) => (
-    <div key={s.id} style={{ ...rowStyle, opacity: isCancel ? 0.85 : 1 }} onClick={() => setDetail(s)} title="クリックで伝票を表示">
-      <span style={{ flex: '0 0 auto', fontSize: 13, color: '#3a4a5c', minWidth: 110 }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b></span>
-      <span style={{ flex: '1 1 220px', minWidth: 0 }}><b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}</span>
-      <span style={{ flex: '0 0 auto', color: '#1a4d8f', fontWeight: 700, fontSize: 13 }}>📄 表示 ▶</span>
-    </div>
-  )
-  const isDetailCancelled = detail && cancelled.some(x => x.id === detail.id)
+  const rows = [...cancelled.filter(matchS)].sort((a, b) => String(b.cancelledAt || b.date || '').localeCompare(String(a.cancelledAt || a.date || '')))
 
   return (
     <div style={RPT.wrap}>
-      <h2 style={{ margin: '0 0 12px', color: '#1a2332' }}>🗑️ 伝票キャンセル</h2>
+      <h2 style={{ margin: '0 0 6px', color: '#1a2332' }}>🗑️ キャンセル伝票</h2>
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>削除（キャンセル）した伝票がここに保管されます。右の「復元」を押すと元に戻り、この一覧から消えます。</div>
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 日付・業者名・現場名で絞り込み"
         style={{ width: '100%', maxWidth: 420, padding: '9px 12px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 14 }} />
-      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div> : (
-        <>
-          <h3 style={{ fontSize: 14, color: '#3a4a5c', margin: '0 0 8px' }}>出荷一覧（伝票を選んでキャンセル）<span style={{ fontWeight: 400, color: '#9aa7b5' }}> {activeRows.length}件</span></h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {activeRows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>該当する伝票はありません</div> : activeRows.map(s => renderRow(s, false))}
-          </div>
-          <h3 style={{ fontSize: 14, color: '#3a4a5c', margin: '24px 0 8px' }}>キャンセル済み伝票（保管）<span style={{ fontWeight: 400, color: '#9aa7b5' }}> {cancelledRows.length}件</span></h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {cancelledRows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>キャンセル済みの伝票はありません</div> : cancelledRows.map(s => renderRow(s, true))}
-          </div>
-        </>
-      )}
+      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
+        : rows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>キャンセル伝票はありません</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px', opacity: 0.92 }}>
+                  <span onClick={() => setDetail(s)} style={{ flex: '1 1 260px', minWidth: 0, cursor: 'pointer' }} title="クリックで伝票を表示">
+                    <span style={{ fontSize: 13, color: '#3a4a5c' }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b>　</span>
+                    <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
+                  </span>
+                  <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
+                  <button type="button" disabled={busy === s.id} onClick={() => restore(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.7 : 1 }}>{busy === s.id ? '復元中…' : '↩ 復元'}</button>
+                </div>
+              ))}
+            </div>
+          )}
       {detail && (
         <div onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 780, borderRadius: 14, padding: 16, margin: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>{isDetailCancelled ? '🗑️ キャンセル済み伝票' : '伝票の確認'}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>🗑️ キャンセル伝票</div>
               <button type="button" onClick={() => setDetail(null)} style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
             </div>
             <FitToWidth width={720}><DenpyoView s={detail} /></FitToWidth>
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button type="button" onClick={() => setDetail(null)} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>閉じる</button>
-              {isDetailCancelled
-                ? <button type="button" onClick={() => setCancel(detail, false)} disabled={busy} style={{ flex: 1, border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '↩ 元に戻す'}</button>
-                : <button type="button" onClick={() => setCancel(detail, true)} disabled={busy} style={{ flex: 1, border: 'none', background: '#c0392b', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '✕ この伝票をキャンセル'}</button>}
+              <button type="button" onClick={() => restore(detail)} disabled={busy} style={{ flex: 1, border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '復元中…' : '↩ 復元する'}</button>
             </div>
           </div>
         </div>
@@ -4130,7 +4123,7 @@ const TABS = [
   { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
   { id: 'seikon', label: '生コン出荷予定表出力', icon: '📝' },
   { id: 'assign', label: '配送割り当て', icon: '🔁' },
-  { id: 'cancel', label: '伝票キャンセル', icon: '🗑️' },
+  { id: 'cancel', label: 'キャンセル伝票', icon: '🗑️' },
   { id: 'settings', label: '設定', icon: '⚙️' },
   { id: 'customers', label: '顧客管理', icon: '👥' },
   { id: 'employees', label: '従業員管理', icon: '👷' },
