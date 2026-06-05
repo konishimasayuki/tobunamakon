@@ -2743,16 +2743,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
-        /* 別ウィンドウ: タイトルを画面中央に絶対配置し、日付(左)/閉じる(右)を両端に重ねる */
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', position: 'relative', zIndex: 1 }}>
+        /* 別ウィンドウ: 日付/AM・PM(左)・タイトル(中央)・閉じる(右)。狭い画面では折り返して重ならないようにする */
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, flex: '0 1 auto' }}>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
             <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
             {ampmButtons}
           </div>
-          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
-          <div className="no-print" style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, display: 'flex', gap: 8 }}>
+          <div style={{ flex: '1 1 120px', textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap' }}>出荷予定表</div>
+          <div className="no-print" style={{ flex: '0 0 auto', display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => window.close()}
               style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
           </div>
@@ -3953,8 +3953,6 @@ function AssignPage({ isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
   }
   const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null); setAddrTarget(null) }
-  // 担当者を2名ずつの行に分ける
-  const driverLines = (drv) => { const lines = []; for (let i = 0; i < drv.length; i += 2) lines.push(drv.slice(i, i + 2).join('・')); return lines }
   const wd = (() => { const d = new Date(date); return isNaN(d.getTime()) ? '' : WD[d.getDay()] })()
 
   return (
@@ -3978,14 +3976,9 @@ function AssignPage({ isPopup }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {rows.map(s => {
                 const addr = cleanAddr(s.siteAddress)
-                const drv = driversOf(s)
-                const dl = driverLines(drv)
-                const drvCell = drv.length
-                  ? <span style={{ color: '#1a4d8f', fontWeight: 600 }}>{dl.map((ln, i) => <span key={i} style={{ display: i ? 'block' : 'inline' }}>{i ? '　　' : ''}{ln}</span>)}</span>
-                  : <span style={{ color: '#c0392b' }}>未入力</span>
                 const addrCell = addr ? <span style={{ color: '#3a4a5c' }}>{addr}</span> : <span style={{ color: '#c0392b' }}>未入力</span>
                 if (stacked) {
-                  // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.担当+担当割当 3.住所+住所設定）。ボタンは同じ幅で左端を揃える
+                  // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.LINE送信 3.住所+住所設定）。ボタンは同じ幅で右端を揃える
                   const cardBtnBase = { flex: '0 0 116px', borderRadius: 8, padding: '8px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' }
                   return (
                     <div key={s.id} style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3994,13 +3987,13 @@ function AssignPage({ isPopup }) {
                         <span style={{ fontWeight: 700 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d' }}>{s.siteName || ''}</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                        <span style={{ flex: 1, minWidth: 0 }}>担当: {drvCell}</span>
-                        <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #06c755', background: '#06c755', color: '#fff' }}>💬 LINE送信</button>
-                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ ...cardBtnBase, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f' }}>📍 住所設定</button>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ flex: 1, minWidth: 0 }} />
+                        <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #06c755', background: '#06c755', color: '#fff' }}>💬 LINE送信</button>
                       </div>
                     </div>
                   )
@@ -4010,7 +4003,6 @@ function AssignPage({ isPopup }) {
                     <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 600 }}>{s.companyName}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
-                    <span style={{ flex: '1 1 120px', minWidth: 0 }}>担当: {drvCell}</span>
                     <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                     <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
                     <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 LINE送信</button>
