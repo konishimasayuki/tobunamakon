@@ -3701,7 +3701,7 @@ function DriverPicker({ value, options, onChange }) {
 // 担当者振替の本体（モーダル／別ウィンドウ共用）
 // 担当者を選び、「保存してLINE送信」で割り当て＋選択ドライバーへLINE通知を行う
 function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
-  const [sel, setSel] = useState(Array.isArray(shipment.drivers) ? shipment.drivers.map(d => ({ id: d.id || '', name: d.name })) : [])
+  const [sel, setSel] = useState([])   // 開いた時点では誰も選択しない（PC/モバイル共通）
   const [busy, setBusy] = useState(false)
   const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
   // 保存（担当割り当て）。withLine=true のとき選択ドライバーへLINEも送信する
