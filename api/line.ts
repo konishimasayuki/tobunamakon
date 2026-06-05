@@ -172,7 +172,7 @@ function volumeDisplay(s: any): string {
 // 配合行（複数）: mixRows があれば各行 {code,note}、無ければ mixCode/mixNotes 1行
 function mixRowsOf(s: any): Array<{ code: string; note: string }> {
   const rows = asArr(s.mixRows)
-  if (rows.length) return rows.map((r: any) => ({ code: asArr(r.parts).slice(0, 3).join('-').replace(/-+$/, ''), note: String(r.note || '') }))
+  if (rows.length) return rows.map((r: any) => { const c = asArr(r.parts).slice(0, 3).join('-'); return { code: /[0-9]/.test(c) ? c : '', note: String(r.note || '') } })
   const mn = asArr(s.mixNotes)
   return [{ code: String(s.mixCode || ''), note: String(mn[1] || '') }]
 }

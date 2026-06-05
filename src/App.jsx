@@ -905,9 +905,14 @@ function vehicleLabel(s) {
   return s.vehicleType || ''
 }
 // 配合表示: mixRows があれば各行を配列で（{code,note}）、無ければ mixCode/mixNotes 1行
+// 配合は3枠の位置を保持（例: 中央のみ→「-20-」、先頭のみ→「20--」）。数字が無い時は空。
+function mixCodeOf(parts) {
+  const c = (parts || []).slice(0, 3).join('-')
+  return /[0-9]/.test(c) ? c : ''
+}
 function mixRowsOfShip(s) {
   if (Array.isArray(s.mixRows) && s.mixRows.length) {
-    return s.mixRows.map(r => ({ code: (r.parts || []).slice(0, 3).join('-').replace(/-+$/, ''), note: r.note || '' }))
+    return s.mixRows.map(r => ({ code: mixCodeOf(r.parts), note: r.note || '' }))
   }
   return [{ code: s.mixCode || '', note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
 }
@@ -1777,11 +1782,18 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
   const kanaOfCompany = (s) => { const c = customers.find(c => c.id === s.companyId) || customers.find(c => c.companyName === s.companyName); return c ? (c.companyNameKana || '') : '' }
   const kanaOfTrading = (s) => { if (!s.tradingCompany) return ''; const c = customers.find(c => c.companyName === s.tradingCompany); return c ? (c.companyNameKana || '') : '' }
+  // 日付を色々な表記で検索できるように（例: 6/4・06/04・6月4日・6-4）
+  const dateVariants = (dateStr) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ''))
+    if (!m) return [String(dateStr || '')]
+    const [, y, mo, d] = m, moN = String(+mo), dN = String(+d)
+    return [dateStr, `${y}/${mo}/${d}`, `${y}/${moN}/${dN}`, `${mo}/${d}`, `${moN}/${dN}`, `${moN}月${dN}日`, `${mo}-${d}`, `${moN}-${dN}`]
+  }
   const filtered = shipments.filter(s => {
     if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
     const q = toHira(search)
-    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s)]
+    return [s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s), ...dateVariants(s.date)]
       .some(v => toHira(v).includes(q))
   })
   // 日付ボタンで絞り込み中（その日表示）は時間順（週間予定表と同条件）、それ以外は登録日時の新しい順
@@ -3408,9 +3420,9 @@ function WeeklySchedulePage() {
                   const st = vehStats(bl)
                   const lb = BIN_LABELS[bi]
                   return (
-                    <div key={bi} style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
-                      <div style={{ fontWeight: 700, color: '#0f3060' }}>{lb.main}{lb.sub && <br />}{lb.sub} 計{st.total}台</div>
-                      <div>{st.summary || '—'}</div>
+                    <div key={bi} style={{ padding: '6px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 13, color: '#3a4a5c', lineHeight: 1.45 }}>
+                      <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>{lb.main}{lb.sub && <br />}{lb.sub} <span style={{ fontSize: 14 }}>計{st.total}台</span></div>
+                      <div style={{ fontSize: 13, marginTop: 1 }}>{st.summary || '—'}</div>
                     </div>
                   )
                 })}
@@ -3466,6 +3478,7 @@ function SeikonOutputPage({ isPopup }) {
   const timesArr = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
   const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
+  const testOf = (s) => (Array.isArray(s.testTags) ? s.testTags : []).filter(Boolean).join('・')
   const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
 
   const placementsOf = (s) => (Array.isArray(s.placements) ? s.placements : []).filter(Boolean).join('・')
@@ -3520,7 +3533,7 @@ function SeikonOutputPage({ isPopup }) {
       )
     }
     const ts = timesArr(s)
-    const tekiyo2 = [placementsOf(s), tagsOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記
+    const tekiyo2 = [placementsOf(s), tagsOf(s), testOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記 / 試験(現TP・工TP)
     return (
       <tr key={key}>
         <td>{s.companyName || ''}</td>
