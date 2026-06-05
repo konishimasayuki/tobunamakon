@@ -3593,14 +3593,10 @@ function DriverReportPage() {
   )
 }
 
-// 出荷の担当者だけを更新（他項目は元のまま保持してPUT）
+// 出荷の担当者だけを更新（ログイン不要の assign エンドポイント。担当者以外は保持）
 async function saveShipmentDrivers(shipment, newDrivers) {
   const nd = newDrivers.map(d => ({ id: d.id, name: d.name }))
-  const key = (arr) => JSON.stringify((arr || []).map(d => ({ id: d.id || '', name: d.name })))
-  const same = key(shipment.drivers) === key(nd)
-  const prevCf = Array.isArray(shipment.changedFields) ? shipment.changedFields : []
-  const changedFields = same ? prevCf : Array.from(new Set([...prevCf, 'drivers']))
-  return api.put(`/api/shipments/${shipment.id}`, { ...shipment, drivers: nd, changedFields })
+  return api.put(`/api/shipments/${shipment.id}?assign=1`, { drivers: nd })
 }
 
 // 担当者を選ぶUI（チップ・最大4人）
@@ -3653,7 +3649,7 @@ function DriverAssignPopupPage({ id }) {
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
-    Promise.all([api.get('/api/shipments'), api.get('/api/employees')])
+    Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
       .then(([ss, es]) => { setShipment(ss.find(x => x.id === id) || null); setDrivers(es.filter(e => e.type === 'driver')) })
       .catch(e => console.error(e)).finally(() => setLoading(false))
   }, [id])
@@ -3662,17 +3658,20 @@ function DriverAssignPopupPage({ id }) {
   return <div style={{ padding: 18, maxWidth: 480, margin: '0 auto' }}><DriverAssignBody shipment={shipment} drivers={drivers} onSaved={() => window.close()} onClose={() => window.close()} /></div>
 }
 
-// 配送臨時割り当て：当日の出荷を時間順に表示し、担当者を素早く振り替える
-function AssignPage() {
-  const stacked = useIsMobile(1101)   // スマホ/iPadはモーダル、PCは別ウィンドウ
-  const [date, setDate] = useState(() => localToday())   // 既定は当日
+// 配送臨時割り当て：当日(既定)の出荷を時間順に表示し、担当者を素早く振り替える
+// isPopup: 別ウィンドウ（ログイン不要で誰でも振替可能）
+function AssignPage({ isPopup }) {
+  const stacked = useIsMobile(1101)   // スマホ/iPad
+  const useModal = isPopup || stacked   // 別ウィンドウ内 or スマホ/iPad は振替モーダル、PC(アプリ内)は別ウィンドウ
+  const urlDate = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search).get('date') : null
+  const [date, setDate] = useState(() => (isPopup && urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : localToday())
   const [all, setAll] = useState([])
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   const [assignTarget, setAssignTarget] = useState(null)
   const load = useCallback(async () => {
     try {
-      const [s, e] = await Promise.all([api.get('/api/shipments'), api.get('/api/employees')])
+      const [s, e] = await Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
       setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }, [])
@@ -3682,8 +3681,13 @@ function AssignPage() {
   const rows = all.filter(s => s.date === date)
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
+  const openBoard = () => {
+    const url = `${window.location.pathname}?view=assign&popup=1&date=${encodeURIComponent(date)}`
+    const w = window.open(url, '_blank', 'width=860,height=900,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
+  }
   const openAssign = (s) => {
-    if (stacked) { setAssignTarget(s); return }
+    if (useModal) { setAssignTarget(s); return }
     const url = `${window.location.pathname}?view=assigndriver&id=${encodeURIComponent(s.id)}&popup=1`
     const w = window.open(url, '_blank', 'width=520,height=640,scrollbars=yes,resizable=yes')
     if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
@@ -3694,9 +3698,17 @@ function AssignPage() {
   return (
     <div style={RPT.wrap}>
       <div style={RPT.head}>
-        <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送臨時割り当て</h2>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送臨時割り当て{isPopup ? '（共有）' : ''}</h2>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
-        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）{stacked ? '' : '／担当者振替はPCでは別ウィンドウで開きます'}</span>
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）</span>
+        {!isPopup && (
+          <button type="button" onClick={openBoard}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く（ログイン不要・共有可）</button>
+        )}
+        {isPopup && (
+          <button type="button" onClick={() => window.close()}
+            style={{ marginLeft: 'auto', border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+        )}
       </div>
       {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
         : rows.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
@@ -4021,9 +4033,9 @@ function AppInner() {
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
-  // 掲示板形式の出荷予定表（別ウィンドウ・閲覧専用）はログイン不要で開けるようにする
-  const isBoard = isPopup && view === 'schedule' && !initialEditId
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : 'dashboard'))
+  // 別ウィンドウ（ログイン不要）：出荷予定表(掲示板)・配送臨時割り当て・担当者振替
+  const isBoard = isPopup && (view === 'schedule' || view === 'assign' || view === 'assigndriver') && !initialEditId
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : view === 'assign' ? 'assign' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
   // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
@@ -4055,7 +4067,7 @@ function AppInner() {
     : activeTab === 'seikon' ? (isMobile && !isPopup
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
-    : activeTab === 'assign' ? <AssignPage />
+    : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />

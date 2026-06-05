@@ -5,13 +5,33 @@ import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = requireAuth(req)
-  // 掲示板形式（出荷予定表）の別ウィンドウはログイン不要で閲覧できるよう、GET は認証なしで許可する。
-  // 作成・更新・削除（POST/PUT/DELETE）は従来どおり認証必須。
-  if (!user && req.method !== 'GET') return res.status(401).json({ error: '認証が必要です' })
-
   const idParam = req.query.id
   const id = Array.isArray(idParam) ? idParam[0] : idParam
   const hasId = !!id
+
+  // 担当者の振替だけはログイン不要で許可（配送臨時割り当ての別ウィンドウ用）。担当者以外は変更しない。
+  const isAssign = req.method === 'PUT' && hasId && (req.query.assign === '1' || req.query.assign === 'true')
+
+  // 掲示板形式（出荷予定表）の別ウィンドウはログイン不要で閲覧できるよう、GET は認証なしで許可する。
+  // 作成・更新・削除（POST/PUT/DELETE）は従来どおり認証必須（担当者振替の assign を除く）。
+  if (!user && req.method !== 'GET' && !isAssign) return res.status(401).json({ error: '認証が必要です' })
+
+  // 担当者の振替（ログイン不要・担当者のみ更新）
+  if (isAssign) {
+    try {
+      const existing = await redis.hgetall(`shipment:${id}`)
+      if (!existing || Object.keys(existing).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
+      const drivers = Array.isArray((req.body as any)?.drivers) ? (req.body as any).drivers.map((d: any) => ({ id: d.id || '', name: d.name || '' })) : []
+      const prevCf = Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []
+      const changedFields = Array.from(new Set([...prevCf, 'drivers']))
+      const updated = { ...existing, drivers, changedFields, updatedAt: new Date().toISOString() }
+      await redis.hset(`shipment:${id}`, updated)
+      return res.status(200).json(updated)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
 
   // 添付PDFの取得（プレビュー用）: ?id=...&pdf=1 → application/pdf を返す
   if (req.method === 'GET' && hasId && (req.query.pdf === '1' || req.query.pdf === 'true')) {
