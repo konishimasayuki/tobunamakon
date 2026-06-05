@@ -3252,18 +3252,18 @@ function DashboardPage() {
 function WeeklySchedulePage() {
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
-  const ms = new Date(date)   // 選択日（既定は本日）を左端に7日分表示
-  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
+  const ms = new Date(date)   // 選択日（既定は本日）を左端に10日分表示
+  const days = Array.from({ length: 10 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
   const todayStr = localToday()
   return (
     <div style={RPT.wrap}>
       <div style={RPT.head}>
         <h2 style={{ margin: 0, color: '#1a2332' }}>🗓️ 週間出荷予定表</h2>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
-        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{ymd(days[0])} 〜 {ymd(days[6])}</span>
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{ymd(days[0])} 〜 {ymd(days[9])}</span>
       </div>
       {loading ? <div>読み込み中...</div> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, minWidth: 900 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, minmax(130px,1fr))', gap: 6, minWidth: 1300 }}>
           {days.map(d => {
             const ds = ymd(d), wd = WD[d.getDay()]
             const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
@@ -3393,7 +3393,7 @@ function SeikonOutputPage({ isPopup }) {
         <td>{s.companyName || ''}</td>
         <td>{s.siteName || ''}</td>
         <td>{s.pourLocation || ''}</td>
-        <td>{vehicleLabel(s) || ''}</td>
+        <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
         <td>{mix}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center' }}>{vol}</td>
@@ -3434,9 +3434,9 @@ function SeikonOutputPage({ isPopup }) {
         </div>
         <table className="seikon-table">
           <colgroup>
-            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '8%' }} />
-            <col style={{ width: '6%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '16%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '6%' }} />
+            <col style={{ width: '10%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '14%' }} /><col style={{ width: '9%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>

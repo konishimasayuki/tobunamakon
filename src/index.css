@@ -252,6 +252,8 @@ input, textarea, select { font-family: inherit; }
 .seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:12px; line-height:1.3; word-break:break-all; vertical-align:middle; color:#111; }
 .seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; }
 .seikon-table td { height:30px; }
+/* 車両は文字を5pt大きく */
+.seikon-table td.seikon-veh { font-size:18px; font-weight:700; text-align:center; }
 /* 担当連絡先セル：上段＝備考・特記／下段＝電話番号 */
 .seikon-contact-top { border-bottom:1px dotted #999; padding-bottom:1px; margin-bottom:1px; min-height:1.3em; }
 .seikon-contact-bottom { min-height:1.3em; }
@@ -270,6 +272,7 @@ input, textarea, select { font-family: inherit; }
   /* テーブル高さを用紙いっぱいに指定し、各行を均等に引き伸ばして最下部まで埋める */
   .seikon-table { height:186mm; }
   .seikon-table th, .seikon-table td { font-size:9.5px; padding:0 3px; line-height:1.15; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .seikon-table td.seikon-veh { font-size:14px; }
   .seikon-table td { height:auto; }
   .seikon-contact-top, .seikon-contact-bottom { min-height:0; }
   .seikon-table, .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
