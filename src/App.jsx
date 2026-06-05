@@ -3412,16 +3412,17 @@ function SeikonOutputPage({ isPopup }) {
   const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
   const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
 
-  // 配合が2種／数量が2種（片方だけでも）あれば、下に分割用の行を追加する（他セルは元行のコピー）
+  const placementsOf = (s) => (Array.isArray(s.placements) ? s.placements : []).filter(Boolean).join('・')
+
+  // 配合/数量が2種ある行は、下に分割行（数値のみ・その他はコピーしない）を出す
   const lineRows = []
   rows.forEach(s => {
     const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     const split = mixes.length >= 2 || !!v2
-    lineRows.push({ s, mix: mixes[0] || '', vol: v1, volNum: s.volume || '' })
-    // 分割行：2種目が無い側は1種目をコピーして必ず埋める
-    if (split) lineRows.push({ s, mix: mixes[1] || mixes[0] || '', vol: v2 || v1, volNum: (s.volume2 || s.volume) || '' })
+    lineRows.push({ s, mix: mixes[0] || '', vol: v1, volNum: s.volume || '', primary: true })
+    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '', volNum: s.volume2 || '', primary: false })
   })
 
   // 販売大臣CSVエクスポート（カンマ区切り・ダブルクォーテーション囲み・タイトル行あり・UTF-8 BOM）
@@ -3448,24 +3449,37 @@ function SeikonOutputPage({ isPopup }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  // 1行を描画（分割行も元行のコピー＋その行の配合/数量で出力）
-  const renderRow = (s, mix, vol, key) => {
+  // 1行を描画。分割行（!primary）は配合・数量のみ（その他はコピーしない）
+  const renderRow = (r, key) => {
+    const s = r.s
+    if (!r.primary) {
+      return (
+        <tr key={key}>
+          <td></td><td></td><td></td><td></td>
+          <td>{r.mix}</td>
+          <td></td>
+          <td style={{ textAlign: 'center' }}>{r.vol}</td>
+          <td></td><td></td><td></td>
+        </tr>
+      )
+    }
     const ts = timesArr(s)
+    const tekiyo2 = [placementsOf(s), tagsOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記
     return (
       <tr key={key}>
         <td>{s.companyName || ''}</td>
         <td>{s.siteName || ''}</td>
         <td>{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
-        <td>{mix}</td>
+        <td>{r.mix}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
-        <td style={{ textAlign: 'center' }}>{vol}</td>
-        <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : <>&nbsp;</>}</td>
-        <td>
-          <div className="seikon-contact-top">{[notesOf(s), tagsOf(s)].filter(Boolean).join('　')}&nbsp;</div>
-          <div className="seikon-contact-bottom">{s.orderContact || ''}&nbsp;</div>
+        <td style={{ textAlign: 'center' }}>{r.vol}</td>
+        <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
+        <td>{s.orderContact || ''}</td>
+        <td className="seikon-tekiyo">
+          <div>{notesOf(s)}</div>
+          <div>{tekiyo2}</div>
         </td>
-        <td>&nbsp;</td>
       </tr>
     )
   }
@@ -3497,13 +3511,13 @@ function SeikonOutputPage({ isPopup }) {
         </div>
         <table className="seikon-table">
           <colgroup>
-            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '6%' }} />
-            <col style={{ width: '10%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '14%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '4%' }} />
+            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '21%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
-            {lineRows.map((r, ri) => renderRow(r.s, r.mix, r.vol, r.s.id + '_' + ri))}
+            {lineRows.map((r, ri) => renderRow(r, r.s.id + '_' + ri + (r.primary ? '' : '_s')))}
             {Array.from({ length: blanks }).map((_, i) => (
               <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
             ))}
