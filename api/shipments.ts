@@ -16,15 +16,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 作成・更新・削除（POST/PUT/DELETE）は従来どおり認証必須（担当者振替の assign を除く）。
   if (!user && req.method !== 'GET' && !isAssign) return res.status(401).json({ error: '認証が必要です' })
 
-  // 担当者の振替（ログイン不要・担当者のみ更新）
+  // 配送割り当て：担当者・現場住所の更新（ログイン不要。指定された項目だけ更新）
   if (isAssign) {
     try {
       const existing = await redis.hgetall(`shipment:${id}`)
       if (!existing || Object.keys(existing).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
-      const drivers = Array.isArray((req.body as any)?.drivers) ? (req.body as any).drivers.map((d: any) => ({ id: d.id || '', name: d.name || '' })) : []
+      const body: any = req.body || {}
+      const patch: any = {}
+      const changed: string[] = []
+      if (Array.isArray(body.drivers)) { patch.drivers = body.drivers.map((d: any) => ({ id: d.id || '', name: d.name || '' })); changed.push('drivers') }
+      if (body.siteAddress !== undefined) patch.siteAddress = String(body.siteAddress || '')
+      if (body.mapView !== undefined) patch.mapView = body.mapView || null
+      if (Array.isArray(body.mapArrows)) patch.mapArrows = body.mapArrows
       const prevCf = Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []
-      const changedFields = Array.from(new Set([...prevCf, 'drivers']))
-      const updated = { ...existing, drivers, changedFields, updatedAt: new Date().toISOString() }
+      const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
+      const updated = { ...existing, ...patch, changedFields, updatedAt: new Date().toISOString() }
       await redis.hset(`shipment:${id}`, updated)
       return res.status(200).json(updated)
     } catch (e) {

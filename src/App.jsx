@@ -3689,7 +3689,7 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
   }
   return (
     <>
-      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>🔁 担当者振替</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>🔁 担当割当</div>
       <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
       <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（最大4人・タップで選択／解除）</div>
@@ -3697,6 +3697,39 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button type="button" onClick={onClose} disabled={saving} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
         <button type="button" onClick={save} disabled={saving} style={{ flex: 1, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? '保存中…' : '保存'}</button>
+      </div>
+    </>
+  )
+}
+
+// 現場住所のジオコード余り（緯度経度メモ）を除いた表示用住所
+function cleanAddr(a) { return String(a || '').replace(/（緯度経度:[^）]*）/g, '').trim() }
+
+// 住所設定（モーダル共用）：住所入力＋地図反映で登録
+function AddressAssignBody({ shipment, onSaved, onClose }) {
+  const [address, setAddress] = useState(shipment.siteAddress || '')
+  const [mapView, setMapView] = useState(shipment.mapView || null)
+  const [arrows, setArrows] = useState(Array.isArray(shipment.mapArrows) ? shipment.mapArrows : [])
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
+    try {
+      const u = await api.put(`/api/shipments/${shipment.id}?assign=1`, { siteAddress: address, mapView, mapArrows: arrows })
+      notifyShipmentsChanged(); onSaved && onSaved(u)
+    } catch (e) { alert('エラー: ' + e.message); setSaving(false) }
+  }
+  return (
+    <>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>📍 住所設定</div>
+      <div style={{ fontSize: 14, color: '#3a4a5c' }}><b>{shipment.companyName}</b></div>
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 10 }}>{shipment.siteName || ''}</div>
+      <label style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', display: 'block', marginBottom: 4 }}>現場住所（入力すると地図に反映されます）</label>
+      <input value={address} onChange={e => setAddress(e.target.value)} placeholder={DEFAULT_SITE_ADDRESS}
+        style={{ width: '100%', fontSize: 15, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, boxSizing: 'border-box', marginBottom: 10 }} />
+      <SiteMap address={address} onAddressChange={setAddress} mapView={mapView} onMapViewChange={setMapView} arrows={arrows} onArrowsChange={setArrows} />
+      <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+        <button type="button" onClick={onClose} disabled={saving} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+        <button type="button" onClick={save} disabled={saving} style={{ flex: 1, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? '保存中…' : '登録'}</button>
       </div>
     </>
   )
@@ -3791,6 +3824,7 @@ function AssignPage({ isPopup }) {
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   const [assignTarget, setAssignTarget] = useState(null)
+  const [addrTarget, setAddrTarget] = useState(null)
   const load = useCallback(async () => {
     try {
       const [s, e] = await Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
@@ -3814,13 +3848,13 @@ function AssignPage({ isPopup }) {
     const w = window.open(url, '_blank', 'width=520,height=640,scrollbars=yes,resizable=yes')
     if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
   }
-  const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null) }
+  const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null); setAddrTarget(null) }
   const wd = (() => { const d = new Date(date); return isNaN(d.getTime()) ? '' : WD[d.getDay()] })()
 
   return (
     <div style={RPT.wrap}>
       <div style={RPT.head}>
-        <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送臨時割り当て{isPopup ? '（共有）' : ''}</h2>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送割り当て{isPopup ? '（共有）' : ''}</h2>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
         <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）</span>
         {!isPopup && (
@@ -3836,20 +3870,33 @@ function AssignPage({ isPopup }) {
         : rows.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {rows.map(s => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px' }}>
-                  <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
-                  <span style={{ flex: '1 1 220px', minWidth: 0 }}><b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}</span>
-                  <span style={{ flex: '1 1 160px', minWidth: 0, fontWeight: 600 }}>担当: {driversOf(s).length ? <span style={{ color: '#1a4d8f' }}>{driversOf(s).join('・')}</span> : <span style={{ color: '#c0392b' }}>未割当</span>}</span>
-                  <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔁 担当者振替</button>
-                </div>
-              ))}
+              {rows.map(s => {
+                const addr = cleanAddr(s.siteAddress)
+                return (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px' }}>
+                    <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
+                    <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 600 }}>{s.companyName}</span>
+                    <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
+                    <span style={{ flex: '1 1 120px', minWidth: 0 }}>担当: {driversOf(s).length ? <span style={{ color: '#1a4d8f', fontWeight: 600 }}>{driversOf(s).join('・')}</span> : <span style={{ color: '#c0392b' }}>未割当</span>}</span>
+                    <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addr ? <span style={{ color: '#3a4a5c' }}>{addr}</span> : <span style={{ color: '#c0392b' }}>未入力</span>}</span>
+                    <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
+                    <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔁 担当割当</button>
+                  </div>
+                )
+              })}
             </div>
           )}
       {assignTarget && (
         <div onClick={() => setAssignTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
             <DriverAssignBody shipment={assignTarget} drivers={drivers} onSaved={onModalSaved} onClose={() => setAssignTarget(null)} />
+          </div>
+        </div>
+      )}
+      {addrTarget && (
+        <div onClick={() => setAddrTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 560, borderRadius: 14, padding: 18, maxHeight: '92dvh', overflowY: 'auto' }}>
+            <AddressAssignBody shipment={addrTarget} onSaved={onModalSaved} onClose={() => setAddrTarget(null)} />
           </div>
         </div>
       )}
@@ -4008,7 +4055,7 @@ const TABS = [
   { id: 'schedule', label: '出荷予定表', icon: '📋' },
   { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
   { id: 'seikon', label: '生コン出荷予定表出力', icon: '📝' },
-  { id: 'assign', label: '配送臨時割り当て', icon: '🔁' },
+  { id: 'assign', label: '配送割り当て', icon: '🔁' },
   { id: 'cancel', label: '伝票キャンセル', icon: '🗑️' },
   { id: 'settings', label: '設定', icon: '⚙️' },
   { id: 'customers', label: '顧客管理', icon: '👥' },
