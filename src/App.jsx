@@ -1784,11 +1784,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s)]
       .some(v => toHira(v).includes(q))
   })
-  // 直近に登録したものを一番上に（登録日時の新しい順）
-  const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
-  // 10件ずつページング
-  // 日付ボタンで絞り込み中（その日表示）は、ページ送りせず全部1ページに表示する
+  // 日付ボタンで絞り込み中（その日表示）は時間順（週間予定表と同条件）、それ以外は登録日時の新しい順
   const noPaging = !!dateFilter
+  const sortedList = noPaging
+    ? [...filtered].sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+    : [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  // 10件ずつページング（日付絞り込み中はページ送りせず全部1ページ）
   const pageCount = noPaging ? 1 : Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
   const curPage = noPaging ? 0 : Math.min(page, pageCount - 1)
   const pageRows = noPaging ? sortedList : sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
