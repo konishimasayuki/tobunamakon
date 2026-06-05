@@ -885,6 +885,8 @@ const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
 const NOTE_TAGS = ['工TP', '領', '増コン', '追']
+// カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる）
+const kanaToHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
 
 // 数量表示（m³・+a・? と2段目の量をまとめる）
@@ -985,6 +987,45 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
     <input ref={ref} className={className} type={type} value={value}
       onChange={e => { onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
+  )
+}
+
+// カナ（ひらがな/カタカナ）でも絞り込めるオートコンプリート入力（業者名・商社名用）
+function KanaCombo({ value, onChange, onPick, options, placeholder, className = 'f', style, required }) {
+  const [open, setOpen] = useState(false)
+  const [hi, setHi] = useState(-1)
+  const wrapRef = useRef(null)
+  const q = kanaToHira(value)
+  const filtered = (value ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 50)
+  useEffect(() => {
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+  const pick = (o) => { onPick(o); setOpen(false); setHi(-1) }
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
+      <input className={className} style={style} value={value} placeholder={placeholder} required={required}
+        onChange={e => { onChange(e); setOpen(true); setHi(-1) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(h => Math.min(filtered.length - 1, h + 1)) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(0, h - 1)) }
+          else if (e.key === 'Enter' && open && hi >= 0 && filtered[hi]) { e.preventDefault(); e.stopPropagation(); pick(filtered[hi]) }
+          else if (e.key === 'Escape') { setOpen(false) }
+        }} />
+      {open && filtered.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.15)', maxHeight: 260, overflowY: 'auto' }}>
+          {filtered.map((o, i) => (
+            <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => { e.preventDefault(); pick(o) }} onMouseEnter={() => setHi(i)}
+              style={{ padding: '7px 10px', fontSize: 14, cursor: 'pointer', background: i === hi ? '#eef5ff' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111' }}>
+              {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1661,6 +1702,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const tradingOptions = Array.from(new Set(
     shipments.map(s => (s.tradingCompany || '').trim()).filter(Boolean)
   )).sort()
+  // 業者名・商社名のカナ付き候補（ひらがな/カタカナで絞り込み可能）
+  const companyComboOptions = customers.map(c => ({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }))
+  const tradingComboOptions = tradingOptions.map(t => { const c = customers.find(c => c.companyName === t); return { label: t, kana: c ? (c.companyNameKana || '') : '' } })
 
   // カタカナ→ひらがな正規化。業者名・商社名は顧客マスタのカナ（companyNameKana）も検索対象にする
   const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
@@ -1701,17 +1745,15 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell" style={{ flex: '0 0 45%' }}>
                 <div className="lbl" style={redIf('companyName')}>業 者 名</div>
-                <input className="f" style={redIf('companyName')} list="customerList" value={form.companyName} onChange={handleCompanyInput} placeholder="入力して検索" required />
-                <datalist id="customerList">
-                  {customers.map(c => <option key={c.id} value={c.companyName} />)}
-                </datalist>
+                <KanaCombo value={form.companyName} onChange={handleCompanyInput}
+                  onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
+                  options={companyComboOptions} placeholder="入力して検索（ひらがな可）" style={redIf('companyName')} required />
               </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
-                <input className="f" style={redIf('tradingCompany')} list="tradingList" value={form.tradingCompany} onChange={set('tradingCompany')} placeholder="入力して選択" />
-                <datalist id="tradingList">
-                  {tradingOptions.map(t => <option key={t} value={t} />)}
-                </datalist>
+                <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
+                  onPick={o => setVal('tradingCompany', o.label)}
+                  options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" style={redIf('tradingCompany')} />
               </div>
             </div>
 
