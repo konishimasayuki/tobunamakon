@@ -194,13 +194,13 @@ const S = {
   loginBtn:   { background: 'linear-gradient(135deg, #1a4d8f, #1a6a9f)', color: '#fff', border: 'none', borderRadius: 8, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 4 },
   appRoot:    { display: 'flex', height: '100dvh', overflow: 'hidden' },
   sidebar:    { width: 200, background: '#0f3060', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)' },
+  sideHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '18px 14px 16px', paddingTop: 'calc(18px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 },
   coName:     { color: '#fff', fontWeight: 700, fontSize: 13, lineHeight: 1.3 },
   syName:     { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 },
-  nav:        { flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 },
+  nav:        { flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 },
   navItem:    { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left', width: '100%' },
   navActive:  { background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 600 },
-  sideFoot:   { padding: '10px 14px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.1)' },
+  sideFoot:   { padding: '10px 14px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 },
   userName:   { color: '#fff', fontWeight: 600, fontSize: 12 },
   userRole:   { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 1 },
   logoutBtn:  { width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, padding: '6px 0', fontSize: 11, fontWeight: 500, cursor: 'pointer', marginTop: 8 },
@@ -288,7 +288,7 @@ function FitToWidth({ width = 700, max = 1, children, style }) {
       if (avail <= 0) return
       const s = Math.min(max, avail / width)
       setScale(s)
-      setH(inner.current.offsetHeight * s)   // 実高さ×倍率（transformは offsetHeight に影響しない）
+      setH(Math.ceil(inner.current.offsetHeight * s) + 2)   // 実高さ×倍率（+端数切上で最終行の見切れ防止）
     }
     calc()
     const ro = new ResizeObserver(calc)
@@ -430,7 +430,7 @@ function CustomerModal({ customer, onSave, onClose }) {
             <Field label="担当者名" value={form.contactPerson} onChange={set('contactPerson')} />
           </div>
           <Field label="住所" value={form.address} onChange={set('address')} fullWidth />
-          <Field label="LINEユーザーID（「現場」自動返信用）" value={form.lineUserId} onChange={set('lineUserId')} fullWidth />
+          <Field label="LINEユーザーID（「現場情報取得」自動返信用）" value={form.lineUserId} onChange={set('lineUserId')} fullWidth />
           {error && <div style={S.error}>{error}</div>}
           <div style={S.actions}>
             <button type="button" style={S.cancelBtn} onClick={onClose}>キャンセル</button>
@@ -763,11 +763,13 @@ function CustomersPage() {
 
   useEffect(() => { load() }, [load])
 
+  // カタカナ→ひらがなに正規化（ひらがなで検索してもカナ欄にヒットする）
+  const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
   const filtered = customers.filter(c => {
     if (!search) return true
-    const q = String(search).toLowerCase()
+    const q = toHira(search)
     return [c.customerCode, c.companyName, c.companyNameKana, c.phone, c.address, c.contactPerson]
-      .some(v => String(v || '').toLowerCase().includes(q))
+      .some(v => toHira(v).includes(q))
   })
 
   const handleSave = async (data) => {
@@ -881,7 +883,32 @@ function CustomersPage() {
 const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
+const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
+const NOTE_TAGS = ['工TP', '領', '増コン', '追']
+// カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる）
+const kanaToHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
+
+// 数量表示（m³・+a・? と2段目の量をまとめる）
+function shipVolStr(s) {
+  const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
+  return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
+}
+
+// 車種表示: vehicleItems があれば車種名を「・」連結、無ければ vehicleType をそのまま（台数は表記しない）
+function vehicleLabel(s) {
+  if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) {
+    return s.vehicleItems.map(v => v.type).join('・')
+  }
+  return s.vehicleType || ''
+}
+// 配合表示: mixRows があれば各行を配列で（{code,note}）、無ければ mixCode/mixNotes 1行
+function mixRowsOfShip(s) {
+  if (Array.isArray(s.mixRows) && s.mixRows.length) {
+    return s.mixRows.map(r => ({ code: (r.parts || []).slice(0, 3).join('-').replace(/-+$/, ''), note: r.note || '' }))
+  }
+  return [{ code: s.mixCode || '', note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
+}
 
 const emptyShipForm = {
   date: localToday(),
@@ -892,13 +919,27 @@ const emptyShipForm = {
   siteAddress: '',
   vehicleType: '',
   truckCount: '',
+  vehicleItems: [],     // [{ type:'4t', qty:'2' }] 車種＋数量。vehicleType は表示互換用に同期
   mixCode: '',
   specialNote: '',
   mixNotes: ['', '', ''],
+  mixRows: [{ parts: ['', '', ''], note: '' }],   // 配合の複数行。1行目を mixCode/mixNotes に同期
   cementType: '',
   volume: '',
   volumeUncertain: false,
+  volumePlusA: false,        // 量に「+a」を付ける
+  hasVolume2: false,         // 2段目の量を使うか（UI用）
+  volume2: '',
+  volumeUncertain2: false,
+  volumePlusA2: false,
+  pdfName: '',               // 添付PDFのファイル名
+  pdfData: '',               // 添付PDFの本体(dataURL)。保存時のみ送信、未変更は空
+  hasPdf: false,             // 既存伝票にPDFが添付済みか
+  pdfRemove: false,          // 既存PDFを削除する指示（保存時に反映）
   placements: [],
+  pourLocation: '',
+  pourFree: false,      // 打設箇所を自由入力モードにしているか
+  noteTags: [],         // 工TP / 領 / 増コン の選択
   orderContact: '', siteContact: '',
   drivers: [],
   notes: [{ text: '', important: false }],
@@ -946,6 +987,45 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
     <input ref={ref} className={className} type={type} value={value}
       onChange={e => { onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
+  )
+}
+
+// カナ（ひらがな/カタカナ）でも絞り込めるオートコンプリート入力（業者名・商社名用）
+// 顧客管理の検索と同じ「インライン描画」方式で確実に表示する（ポータル/座標計算は使わない）
+function KanaCombo({ value, onChange, onPick, options, placeholder, className = 'f', style, required }) {
+  const [open, setOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)   // ▼で開いたら全件、入力中は絞り込み
+  const wrapRef = useRef(null)
+  const q = kanaToHira(value)
+  const filtered = ((value && !showAll) ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 200)
+  useEffect(() => {
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setShowAll(false) } }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('touchstart', onDoc)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('touchstart', onDoc) }
+  }, [])
+  const pick = (o) => { onPick(o); setOpen(false); setShowAll(false) }
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
+      <input className={className} style={style} value={value} placeholder={placeholder} required={required}
+        onChange={e => { onChange(e); setShowAll(false); setOpen(true) }}
+        onFocus={() => setOpen(true)} />
+      <button type="button" tabIndex={-1} title="一覧から選択"
+        onMouseDown={(e) => { e.preventDefault(); setShowAll(true); setOpen(o => !o) }}
+        style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 16, padding: '0 6px', alignSelf: 'center' }}>▼</button>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 260, overflowY: 'auto' }}>
+          {filtered.length > 0 ? filtered.map((o, i) => (
+            <div key={(o.id || o.label) + '_' + i} onClick={() => pick(o)}
+              style={{ padding: '9px 10px', fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111', borderBottom: '1px solid #f2f4f8' }}>
+              {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
+            </div>
+          )) : (
+            <div style={{ padding: '9px 10px', fontSize: 12, color: '#9aa7b5', lineHeight: 1.5 }}>該当なし（顧客管理で会社名カナを登録してください）</div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1267,8 +1347,10 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   useEffect(() => {
     if (!geocoderRef.current) return
     if (drawMode) return                         // 描画中は住所変更で地図を動かさない
-    if ((arrowsRef.current || []).length) return // 矢印がある＝位置確定済み。勝手に動かさない
     if (address === selfSetRef.current) return   // ピンドラッグ由来→再ジオコードしない
+    // ユーザーが住所を編集した → 旧住所用に描いた矢印は破棄し、新住所へ地図を移動して再同期する。
+    // （矢印が残ると地図が動かず、保存される地図位置と住所がズレてLINEの地図画像が一致しなくなる）
+    if ((arrowsRef.current || []).length) onArrowsChange([])
     const target = (address && address.trim()) ? address : DEFAULT_SITE_ADDRESS
     const t = setTimeout(() => doGeocode(target), 800)
     return () => clearTimeout(t)
@@ -1334,7 +1416,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
   const [page, setPage]             = useState(0)
+  const [mapKey, setMapKey]         = useState(0)   // 別伝票を開いた/リセット時にSiteMapを再マウント（描画モード解除＋新住所で再描画）
   const topRef = useRef(null)
+  const formRef = useRef(null)   // Enter/桁送りでの次項目フォーカス移動に使う
   const PAGE_SIZE = 10
   // 直近7日（本日起点）の日付配列
   const weekDates = (() => {
@@ -1364,6 +1448,35 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
   const setVal = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
+  // 入力が終わったら次の項目へフォーカスを移す（Enter／配合は規定桁到達で自動送り）
+  const focusNextField = (fromEl) => {
+    const root = formRef.current
+    if (!root || !fromEl) return
+    const all = Array.from(root.querySelectorAll('input, select, textarea'))
+      .filter(el => !el.disabled && el.type !== 'hidden' && el.tabIndex !== -1 && el.offsetParent !== null)
+    const i = all.indexOf(fromEl)
+    if (i >= 0 && i + 1 < all.length) all[i + 1].focus()
+  }
+  const focusNextHg = (fromEl) => {
+    const root = formRef.current
+    if (!root) return
+    const hgs = Array.from(root.querySelectorAll('input.hg'))
+    const i = hgs.indexOf(fromEl)
+    if (i >= 0 && i + 1 < hgs.length) hgs[i + 1].focus()
+  }
+  // 配合セル：値を反映しつつ2桁入力で次のセルへ自動送り
+  const onHg = (ri, i) => (e) => { setMixCell(ri, i, e.target.value); if (e.target.value.replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
+  const onFormKeyDown = (e) => {
+    if (e.key !== 'Enter') return
+    const t = e.target
+    if (!t || t.tagName === 'TEXTAREA') return
+    if (t.tagName === 'INPUT' && t.type !== 'button' && t.type !== 'submit') {
+      e.preventDefault()
+      if (t.classList && t.classList.contains('hg')) focusNextHg(t)
+      else focusNextField(t)
+    }
+  }
+
   const handleCompany = (e) => {
     const c = customers.find(c => c.id === e.target.value)
     setForm(f => ({ ...f, companyId: c?.id || '', companyName: c?.companyName || '' }))
@@ -1375,20 +1488,58 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     setForm(f => ({ ...f, companyId: c?.id || '', companyName: v }))
   }
 
-  const setMix = (i, v) => setForm(f => {
-    const parts = String(f.mixCode || '').split('-')
-    while (parts.length < 3) parts.push('')
-    parts[i] = v.replace(/\D/g, '').slice(0, 2)
-    return { ...f, mixCode: parts.slice(0, 3).join('-') }
+  // 配合（複数行）: mixRows が真。1行目を mixCode/mixNotes に同期して既存表示と互換を保つ
+  const syncMix = (rows) => {
+    const r0 = rows[0] || { parts: ['', '', ''], note: '' }
+    return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] }
+  }
+  const setMixCell = (row, i, v) => setForm(f => {
+    const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
+    while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' })
+    rows[row].parts[i] = v.replace(/\D/g, '').slice(0, 2)
+    return { ...f, ...syncMix(rows) }
   })
-  const mixPart = (i) => (String(form.mixCode || '').split('-')[i] || '')
-  const setMixNote = (i, v) => setForm(f => {
-    const n = Array.isArray(f.mixNotes) ? [...f.mixNotes] : ['', '', '']
-    while (n.length < 3) n.push('')
-    n[i] = v
-    return { ...f, mixNotes: n }
+  const setMixRowNote = (row, v) => setForm(f => {
+    const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
+    while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' })
+    rows[row].note = v
+    return { ...f, ...syncMix(rows) }
   })
-  const mixNote = (i) => (Array.isArray(form.mixNotes) ? (form.mixNotes[i] || '') : '')
+  const addMixRow = () => setForm(f => {
+    const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
+    if (rows.length >= 2) return f
+    rows.push({ parts: ['', '', ''], note: '' })
+    return { ...f, ...syncMix(rows) }
+  })
+  const delMixRow = (row) => setForm(f => {
+    let rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
+    rows = rows.filter((_, idx) => idx !== row)
+    if (!rows.length) rows = [{ parts: ['', '', ''], note: '' }]
+    return { ...f, ...syncMix(rows) }
+  })
+  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [{ parts: ['', '', ''], note: '' }])
+
+  // 車種（複数・数量付き）: vehicleItems が真。vehicleType（・連結）にも同期して既存表示と互換
+  const syncVeh = (items) => ({ vehicleItems: items, vehicleType: items.map(v => v.type).join('・') })
+  const toggleVehItem = (type) => setForm(f => {
+    const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []
+    const at = items.findIndex(v => v.type === type)
+    if (at >= 0) items.splice(at, 1)
+    else items.push({ type, qty: '' })
+    // VEHICLE_TYPES 並び順を保持
+    items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type))
+    return { ...f, ...syncVeh(items) }
+  })
+  const setVehQty = (type, qty) => setForm(f => {
+    const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: qty.replace(/[^0-9]/g, '').slice(0, 2) } : v)
+    return { ...f, ...syncVeh(items) }
+  })
+  const vehItems = () => (Array.isArray(form.vehicleItems) ? form.vehicleItems : [])
+
+  const toggleNoteTag = (tag) => setForm(f => {
+    const cur = Array.isArray(f.noteTags) ? f.noteTags : []
+    return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
+  })
 
   const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
@@ -1397,6 +1548,34 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] }))
   }
   const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
+
+  // PDFインポート: 画像PDFを読み込み、保存時に開いている伝票へ添付する（更新/新規登録に紐づく）
+  const onPdfImport = (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) { alert('PDFファイルを選択してください'); e.target.value = ''; return }
+    const MAX = 2.5 * 1024 * 1024
+    if (file.size > MAX) { alert(`PDFが大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。\n2.5MB以下に圧縮してください。`); e.target.value = ''; return }
+    const reader = new FileReader()
+    reader.onload = () => setForm(f => ({ ...f, pdfData: String(reader.result || ''), pdfName: file.name, hasPdf: true, pdfRemove: false }))
+    reader.onerror = () => alert('PDFの読み込みに失敗しました')
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  // 添付PDFを削除（保存時に反映）。未保存の選択分はその場でクリア
+  const removePdf = () => setForm(f => ({ ...f, pdfData: '', pdfName: '', hasPdf: false, pdfRemove: true }))
+
+  // 添付PDFをプレビュー（新規ウィンドウで開く＝クイックルック相当）
+  const previewPdf = () => {
+    const feat = 'width=900,height=1000,scrollbars=yes,resizable=yes'
+    if (form.pdfData) {
+      const w = window.open('', '_blank', feat)
+      if (w) { w.document.write(`<title>${form.pdfName || 'PDF'}</title><iframe src="${form.pdfData}" style="border:0;position:absolute;inset:0;width:100%;height:100%"></iframe>`); w.document.close() }
+      return
+    }
+    if (editing && form.hasPdf) window.open(`/api/shipments?id=${encodeURIComponent(editing)}&pdf=1`, '_blank', feat)
+  }
 
   const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
   const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
@@ -1411,13 +1590,32 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     siteAddress: (s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim(),
     vehicleType: s.vehicleType || '',
     truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
+    vehicleItems: (Array.isArray(s.vehicleItems) && s.vehicleItems.length)
+      ? s.vehicleItems.map(v => ({ type: v.type, qty: (v.qty ?? '') === '' ? '' : String(v.qty) }))
+      : String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).map(t => ({ type: t, qty: '' })),
     mixCode: s.mixCode || '',
     specialNote: s.specialNote || '',
     mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
+    mixRows: (Array.isArray(s.mixRows) && s.mixRows.length)
+      ? s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
+      : [{ parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''], note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }],
     cementType: s.cementType || '',
     volume: (s.volume ?? '') === '' ? '' : String(s.volume),
     volumeUncertain: !!s.volumeUncertain,
+    volumePlusA: !!s.volumePlusA,
+    volume2: (s.volume2 ?? '') === '' ? '' : String(s.volume2),
+    volumeUncertain2: !!s.volumeUncertain2,
+    volumePlusA2: !!s.volumePlusA2,
+    hasVolume2: !!(s.volume2 || s.volumeUncertain2 || s.volumePlusA2),
+    pdfName: s.pdfName || '',
+    pdfData: '',
+    hasPdf: !!s.hasPdf,
+    pdfRemove: false,
     placements: Array.isArray(s.placements) ? s.placements : [],
+    pourLocation: s.pourLocation || '',
+    pourFree: typeof s.pourFree === 'boolean' ? s.pourFree
+      : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
+    noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
@@ -1432,6 +1630,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     setEditChanged(Array.isArray(s.changedFields) ? s.changedFields : [])
     setForm(toForm(s))
     setError('')
+    setMapKey(k => k + 1)   // 描画モード中でも地図を作り直して新しい伝票の位置・矢印で再描画する
     requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
   }
 
@@ -1450,23 +1649,62 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditId, shipments])
 
+  // フォームから保存用ペイロードを組み立てる（handleSubmit と 行切替保存で共通）
+  const buildPayload = () => {
+    const payload = {
+      ...form,
+      times: form.times.map(t => t.text).filter(t => t.trim() !== ''),
+      notes: form.notes.filter(n => n.text.trim() !== ''),
+      driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
+    }
+    // PDF: 削除指示なら空を送って消す／新規選択時はその本体を送る／いずれでもなければ既存維持のためキーを外す
+    if (form.pdfRemove) payload.pdfData = ''
+    else if (!form.pdfData) delete payload.pdfData
+    return payload
+  }
+
+  // 編集中の伝票を「更新」と同じ処理で保存（UIはリセットしない＝直後に別伝票へ切替できる）
+  const saveCurrentEdit = async () => {
+    const payload = buildPayload()
+    const orig = shipments.find(x => x.id === editing) || {}
+    const changed = diffChangedFields(orig, payload)
+    const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
+    const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
+    setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
+    notifyShipmentsChanged()
+    return updated
+  }
+
+  // 一覧で別の伝票を選んだとき：編集中なら更新と同じ保存を走らせてから切り替える
+  const onRowClick = async (s) => {
+    if (editing === s.id) return
+    if (editing) {
+      if (!form.date || !form.companyName) { setError('日付と業者名は必須です（更新できないため切り替えできません）'); return }
+      setSaving(true)
+      try { await saveCurrentEdit() }
+      catch (err) { setError(err.message); setSaving(false); return }
+      setSaving(false)
+    }
+    startEdit(s)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSaving(true)
     try {
-      const payload = {
-        ...form,
-        times: form.times.map(t => t.text).filter(t => t.trim() !== ''),
-        notes: form.notes.filter(n => n.text.trim() !== ''),
-        driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
-      }
+      const payload = buildPayload()
       if (editing) {
-        const updated = await api.put(`/api/shipments/${editing}`, payload)
+        // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目（配合は桁ごと・備考は行ごと）を積む
+        const orig = shipments.find(x => x.id === editing) || {}
+        const changed = diffChangedFields(orig, payload)
+        const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
+        const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
         setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
         setEditing(null)
         setEditChanged([])
         setForm({ ...emptyShipForm })
+        setMapKey(k => k + 1)      // 更新後は地図を作り直し（描画モードを解除して初期状態へ）
         notifyShipmentsChanged()   // 他タブ（出荷予定表）に更新を通知
         // PC等で編集用の別ウィンドウとして開かれている場合は、更新後に閉じて元タブへ戻す
         if (isPopup) { window.close(); return }
@@ -1474,13 +1712,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         const created = await api.post('/api/shipments', payload)
         setShipments(ss => sortShip([...ss, created]))
         setForm({ ...emptyShipForm, date: form.date })
+        setMapKey(k => k + 1)
         notifyShipmentsChanged()
       }
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
   }
 
-  const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }) }
+  const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
 
   const handleDelete = async (id) => {
     try {
@@ -1494,13 +1733,27 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const tradingOptions = Array.from(new Set(
     shipments.map(s => (s.tradingCompany || '').trim()).filter(Boolean)
   )).sort()
+  // 業者名・商社名のカナ付き候補（ひらがな/カタカナで絞り込み可能）
+  const companyComboOptions = customers.map(c => ({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }))
+  // 商社名：顧客マスタ（カナ付き）＋出荷履歴の商社名を結合（重複は除外）
+  const tradingComboOptions = (() => {
+    const seen = new Set()
+    const out = []
+    customers.forEach(c => { if (c.companyName && !seen.has(c.companyName)) { seen.add(c.companyName); out.push({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }) } })
+    tradingOptions.forEach(t => { if (t && !seen.has(t)) { seen.add(t); out.push({ label: t, kana: '' }) } })
+    return out
+  })()
 
+  // カタカナ→ひらがな正規化。業者名・商社名は顧客マスタのカナ（companyNameKana）も検索対象にする
+  const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+  const kanaOfCompany = (s) => { const c = customers.find(c => c.id === s.companyId) || customers.find(c => c.companyName === s.companyName); return c ? (c.companyNameKana || '') : '' }
+  const kanaOfTrading = (s) => { if (!s.tradingCompany) return ''; const c = customers.find(c => c.companyName === s.tradingCompany); return c ? (c.companyNameKana || '') : '' }
   const filtered = shipments.filter(s => {
     if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
-    const q = search.toLowerCase()
-    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType]
-      .some(v => String(v || '').toLowerCase().includes(q))
+    const q = toHira(search)
+    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s)]
+      .some(v => toHira(v).includes(q))
   })
   // 直近に登録したものを一番上に（登録日時の新しい順）
   const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
@@ -1518,9 +1771,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     <div ref={topRef} style={{ height: '100%', overflow: 'auto' }}>
       {/* 手配伝票フォーム */}
       <div className="denpyo" style={{ padding: isMobile ? '12px 8px' : '16px 12px', background: '#f3f1ec', borderBottom: '2px solid #dde3ed' }}>
-        <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 28, alignItems: 'stretch', justifyContent: 'center' }}>
-          <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 0 700px', minWidth: 0 }}>
+        <form onSubmit={handleSubmit} ref={formRef} onKeyDown={onFormKeyDown}>
+          <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 20, alignItems: 'stretch', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
+          <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 1 700px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
             {/* 1段: 日付 / 業者名 / 商社名 */}
             <div className="band">
@@ -1530,17 +1783,15 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell" style={{ flex: '0 0 45%' }}>
                 <div className="lbl" style={redIf('companyName')}>業 者 名</div>
-                <input className="f" style={redIf('companyName')} list="customerList" value={form.companyName} onChange={handleCompanyInput} placeholder="入力して検索" required />
-                <datalist id="customerList">
-                  {customers.map(c => <option key={c.id} value={c.companyName} />)}
-                </datalist>
+                <KanaCombo value={form.companyName} onChange={handleCompanyInput}
+                  onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
+                  options={companyComboOptions} placeholder="入力して検索（ひらがな可）" style={redIf('companyName')} required />
               </div>
               <div className="cell" style={{ flex: 1 }}>
                 <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
-                <input className="f" style={redIf('tradingCompany')} list="tradingList" value={form.tradingCompany} onChange={set('tradingCompany')} placeholder="入力して選択" />
-                <datalist id="tradingList">
-                  {tradingOptions.map(t => <option key={t} value={t} />)}
-                </datalist>
+                <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
+                  onPick={o => setVal('tradingCompany', o.label)}
+                  options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" style={redIf('tradingCompany')} />
               </div>
             </div>
 
@@ -1568,36 +1819,85 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 4段: 車種 / 配合・m³ / セメント種・配置 */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 24%', minHeight: 140, justifyContent: 'space-between' }}>
-                <div>
-                  <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                  <Chips options={VEHICLE_TYPES} value={form.vehicleType} onChange={v => setVal('vehicleType', v)} multiStr big />
+              <div className="cell stack" style={{ flex: '0 0 24%', minHeight: 140, padding: 0 }}>
+                <div className="subrow" style={{ flex: '0 0 auto' }}>
+                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="lbl" style={redIf('vehicleType')}>車 種</div>
+                    {/* 車種：選択ボタン（台数なし） */}
+                    <div className="chips big">
+                      {VEHICLE_TYPES.map(o => {
+                        const it = vehItems().find(v => v.type === o)
+                        return (
+                          <span key={o} className={'chip' + (it ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div className="inline" style={{ justifyContent: 'flex-end' }}>
-                  <input className="num" type="number" min="0" inputMode="numeric" value={form.truckCount} onChange={set('truckCount')} />
-                  <span className="unit">台</span>
+                <div className="subrow" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
+                    {/* 打設箇所：プルダウン or 自由入力。文字大きく中央揃え（位置はプルダウン基準で統一） */}
+                    {!form.pourFree ? (
+                      <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
+                        onChange={e => {
+                          if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
+                          else setVal('pourLocation', e.target.value)
+                        }}>
+                        <option value=""></option>
+                        {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ position: 'relative' }}>
+                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={15} placeholder="打設箇所を入力"
+                          style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 30px 5px 6px', boxSizing: 'border-box' }} />
+                        <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
+                          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
                   <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
                     <div className="lbl" style={redIf('mixCode')}>配 合</div>
-                    <div className="haigou3" style={redIf('mixCode')}>
-                      <div className="hgcol">
-                        <div className="hgnote-spacer" />
-                        <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(0)} onChange={e => setMix(0, e.target.value)} />
-                      </div>
-                      <span className="hgsep">-</span>
-                      <div className="hgcol">
-                        <input className="hgnote" placeholder="特記" value={mixNote(1)} onChange={e => setMixNote(1, e.target.value)} />
-                        <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(1)} onChange={e => setMix(1, e.target.value)} />
-                      </div>
-                      <span className="hgsep">-</span>
-                      <div className="hgcol">
-                        <div className="hgnote-spacer" />
-                        <input className="hg" inputMode="numeric" maxLength={2} value={mixPart(2)} onChange={e => setMix(2, e.target.value)} />
-                      </div>
-                    </div>
+                    {/* 配合：上半分・下半分の2行まで（各行に特記）。1行/2行で高さを完全に揃える（常にcompact＋固定高） */}
+                    {(() => {
+                      const rows = mixRowsOf()
+                      const two = rows.length > 1
+                      return (
+                        <div className={'mixwrap' + (two ? ' two' : ' one')}>
+                          {rows.map((r, ri) => (
+                            <div key={ri} className="mixrow">
+                              <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
+                                <div className="hgcol">
+                                  <div className="hgnote-spacer" />
+                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} />
+                                </div>
+                                <span className="hgsep">-</span>
+                                <div className="hgcol">
+                                  <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
+                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} />
+                                </div>
+                                <span className="hgsep">-</span>
+                                <div className="hgcol">
+                                  <div className="hgnote-spacer" />
+                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} />
+                                </div>
+                              </div>
+                              {ri > 0 && (
+                                <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
+                                  style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
+                              )}
+                            </div>
+                          ))}
+                          {rows.length < 2 && (
+                            <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px' }} onClick={addMixRow}>＋ 配合を追加</button>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                     <div className="lbl">セメント種</div>
@@ -1605,12 +1905,36 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   </div>
                 </div>
                 <div className="subrow">
-                  <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, justifyContent: 'center' }}>
-                    <div className="inline" style={{ justifyContent: 'center' }}>
-                      <input type="number" min="0" step="0.01" inputMode="decimal" style={redIf('volume')} value={form.volume} onChange={set('volume')} />
-                      <span className="unit" style={redIf('volume')}>m<sup>3</sup><span className={'qmark' + (form.volumeUncertain ? ' on' : '')}>?</span></span>
-                    </div>
-                    <label className="qtoggle"><input type="checkbox" checked={form.volumeUncertain} onChange={e => setVal('volumeUncertain', e.target.checked)} />？を付ける</label>
+                  <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, flexDirection: 'column', justifyContent: 'center' }}>
+                    {/* 量（1段目／2段目）。各段に「?」「+a」ボタン */}
+                    {[0, 1].map(idx => {
+                      if (idx === 1 && !form.hasVolume2) return null
+                      const vKey = idx === 0 ? 'volume' : 'volume2'
+                      const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
+                      const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+                      return (
+                        <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
+                          {/* 先頭の×スロット（1段目は空スペーサーで数字の開始位置を揃える） */}
+                          <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
+                            {idx === 1 ? (
+                              <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
+                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                            ) : null}
+                          </span>
+                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]} onChange={e => setVal(vKey, e.target.value.replace(/[^0-9.]/g, ''))} />
+                          <span className="unit" style={redIf('volume')}>m<sup>3</sup>
+                            {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
+                            <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
+                          </span>
+                          <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
+                          <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
+                        </div>
+                      )
+                    })}
+                    {!form.hasVolume2 && (
+                      <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }}
+                        onClick={() => setForm(f => ({ ...f, hasVolume2: true }))}>＋ 量を追加</button>
+                    )}
                   </div>
                   <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                     <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
@@ -1658,15 +1982,49 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   </select>
                 )}
               </div>
-              <div className="cell" style={{ flex: 1 }}>
+              <div className="cell" style={{ flex: '0 0 34%', minWidth: 0 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>ドライバーへの連絡</div>
-                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={2} height={80} addLabel="＋ 段落を追加" />
+                {/* 縦に段落追加（段落を追加で上の段落の下に追加） */}
+                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={1} max={4} height={80} addLabel="＋ 段落を追加" />
+              </div>
+              {/* 選択したものだけ表示（工TP / 領 / 増コン） */}
+              <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>特記</div>
+                <div className="chips">
+                  {NOTE_TAGS.map(t => (
+                    <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
+                  ))}
+                </div>
+              </div>
+              {/* PDFインポート（保存時に開いている伝票へ添付。プレビュー可） */}
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>PDFインポート</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px dashed #999', background: '#fafafa', borderRadius: 5, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: '#333' }}>
+                    📄 PDFを選択
+                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
+                  </label>
+                  {(form.pdfData || (form.hasPdf && editing)) && (
+                    <button type="button" onClick={previewPdf}
+                      style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>👁 プレビュー</button>
+                  )}
+                  {(form.pdfData || form.hasPdf) && (
+                    <button type="button" onClick={removePdf}
+                      style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🗑 削除</button>
+                  )}
+                </div>
+                {(form.pdfName || form.hasPdf) && (
+                  <div style={{ fontSize: 11, color: '#1a8f5a', marginTop: 4, wordBreak: 'break-all' }}>
+                    {form.pdfData ? '選択中: ' : '添付済: '}{form.pdfName || 'shipment.pdf'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
           </FitToWidth>
-          <div style={{ flex: stacked ? '0 0 auto' : '0 0 640px', width: stacked ? '100%' : undefined, minWidth: stacked ? 0 : 280 }}>
+          <div style={{ flex: stacked ? '0 0 auto' : '1 1 480px', width: stacked ? '100%' : undefined, minWidth: 0, maxWidth: stacked ? undefined : 640 }}>
             <SiteMap
+              key={mapKey}
               address={form.siteAddress}
               onAddressChange={(a) => setVal('siteAddress', a)}
               mapView={form.mapView}
@@ -1683,7 +2041,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               }
             />
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
-            {editing && editChanged.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {editChanged.map(f => SCHEDULE_FIELD_LABELS[f] || f).join('・')}</div>}
+            {(() => {
+              // mix0/note0 等のサブキーは親(配合/備考)に集約し、ラベルが付くものだけ重複なく表示
+              const labels = Array.from(new Set(editChanged.map(f => SCHEDULE_FIELD_LABELS[f]).filter(Boolean)))
+              return editing && labels.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {labels.join('・')}</div>
+            })()}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
           </div>
           </div>
@@ -1734,25 +2096,31 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '台数', '配合', 'セメント', 'm³', '配置', ''].map((h, i) => (
+                  {['日付', 'PDF', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map(s => (
-                  <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => startEdit(s)}>
+                  <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => onRowClick(s)}>
                     <td style={S.td}>{s.date}</td>
+                    <td style={{ ...S.td, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {s.hasPdf
+                        ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes') }}
+                            style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a>
+                        : '—'}
+                    </td>
                     <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
                     <td style={S.td}>{s.tradingCompany || '—'}</td>
                     <td style={S.td}>{s.siteName || '—'}</td>
                     <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
-                    <td style={S.td}>{s.vehicleType || '—'}</td>
-                    <td style={S.td}>{s.truckCount ? `${s.truckCount}台` : '—'}</td>
-                    <td style={S.td}>{s.mixCode || '—'}</td>
+                    <td style={S.td}>{vehicleLabel(s) || '—'}</td>
+                    <td style={S.td}>{mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ') || '—'}</td>
                     <td style={S.td}>{s.cementType || '—'}</td>
-                    <td style={S.td}>{s.volume ? `${s.volume}m³${s.volumeUncertain ? '?' : ''}` : (s.volumeUncertain ? '?' : '—')}</td>
+                    <td style={S.td}>{shipVolStr(s) || '—'}</td>
                     <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                       <button style={S.delBtn} onClick={(e) => { e.stopPropagation(); setDeleteConfirm(s.id) }}>削除</button>
@@ -1795,8 +2163,61 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 // ============================================================
 const SCHEDULE_FIELD_LABELS = {
   companyName: '業者名', tradingCompany: '商社名', siteName: '現場名',
-  vehicleType: '車種', mixCode: '配合', volume: '量', drivers: '担当',
-  times: '時間', notes: '備考', siteContact: '現場連絡先',
+  vehicleType: '車種', mixCode: '配合', volume: '数量', drivers: '担当',
+  times: '時間', notes: '備考', siteContact: '現場連絡先', pourLocation: '打設箇所',
+}
+
+// 編集前(orig)と保存値(next)を比べ、変更項目の配列を返す。
+// 配合は桁グループごと(mix0/mix1/mix2)＋中央特記(mixnote)、備考は行ごと(note0,note1,…)に細分化し、
+// 一部だけ変えたときに該当サブ要素だけ赤くできるようにする。
+function diffChangedFields(orig, next) {
+  const norm = (v) => String(v ?? '').trim()
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+  const changed = []
+  const origTimes = (Array.isArray(orig.times) ? orig.times.map(t => (t && t.text != null) ? t.text : t) : []).map(norm).filter(Boolean)
+  const nextTimes = (Array.isArray(next.times) ? next.times.map(t => (t && t.text != null) ? t.text : t) : []).map(norm).filter(Boolean)
+  if (!eq(origTimes, nextTimes)) changed.push('times')
+  if (norm(orig.date) !== norm(next.date)) changed.push('date')
+  if (norm(orig.companyName) !== norm(next.companyName)) changed.push('companyName')
+  if (norm(orig.tradingCompany) !== norm(next.tradingCompany)) changed.push('tradingCompany')
+  if (norm(orig.siteName) !== norm(next.siteName)) changed.push('siteName')
+  if (norm(orig.siteAddress) !== norm(next.siteAddress)) changed.push('siteAddress')
+  if (norm(orig.vehicleType) !== norm(next.vehicleType)) changed.push('vehicleType')
+  // 配合：桁グループごとに比較（mix0/mix1/mix2）。1つでも違えば 'mixCode' も付与（旧表示の互換）
+  const op = norm(orig.mixCode).split('-')
+  const np = norm(next.mixCode).split('-')
+  let mixDiff = false
+  for (let i = 0; i < 3; i++) { if ((op[i] || '') !== (np[i] || '')) { changed.push('mix' + i); mixDiff = true } }
+  // 中央特記
+  const on = (Array.isArray(orig.mixNotes) ? orig.mixNotes : []).map(norm)
+  const nn = (Array.isArray(next.mixNotes) ? next.mixNotes : []).map(norm)
+  if ((on[1] || '') !== (nn[1] || '')) { changed.push('mixnote'); mixDiff = true }
+  if (mixDiff) changed.push('mixCode')
+  if (norm(orig.cementType) !== norm(next.cementType)) changed.push('cementType')
+  if (norm(orig.volume) !== norm(next.volume) || !!orig.volumeUncertain !== !!next.volumeUncertain
+    || !!orig.volumePlusA !== !!next.volumePlusA
+    || norm(orig.volume2) !== norm(next.volume2) || !!orig.volumeUncertain2 !== !!next.volumeUncertain2
+    || !!orig.volumePlusA2 !== !!next.volumePlusA2) changed.push('volume')
+  const origPlace = Array.isArray(orig.placements) ? orig.placements : []
+  const nextPlace = Array.isArray(next.placements) ? next.placements : []
+  if (!eq(origPlace, nextPlace)) changed.push('placements')
+  const origTags = Array.isArray(orig.noteTags) ? orig.noteTags : []
+  const nextTags = Array.isArray(next.noteTags) ? next.noteTags : []
+  if (!eq(origTags, nextTags)) changed.push('noteTags')
+  if (norm(orig.pourLocation) !== norm(next.pourLocation)) changed.push('pourLocation')
+  const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
+  const nextDrivers = (Array.isArray(next.drivers) ? next.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
+  if (!eq(origDrivers, nextDrivers)) changed.push('drivers')
+  // 備考：行ごとに比較（note0,note1,…）。追加/変更された行だけ赤くする
+  const origNotes = (Array.isArray(orig.notes) ? orig.notes : []).map(n => norm(n.text)).filter(Boolean)
+  const nextNotes = (Array.isArray(next.notes) ? next.notes : []).map(n => norm(n.text)).filter(Boolean)
+  let noteDiff = false
+  for (let i = 0; i < nextNotes.length; i++) { if (nextNotes[i] !== (origNotes[i] || '')) { changed.push('note' + i); noteDiff = true } }
+  if (nextNotes.length < origNotes.length) noteDiff = true   // 行が減った場合も変更扱い
+  if (noteDiff) changed.push('notes')
+  if (norm(orig.orderContact) !== norm(next.orderContact)) changed.push('orderContact')
+  if (norm(orig.siteContact) !== norm(next.siteContact)) changed.push('siteContact')
+  return changed
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
@@ -1808,7 +2229,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const compact = isMobile && !isPopup
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
-  const [date, setDate] = useState(() => localToday())
+  // 別ウィンドウからは ?date= で表示日を引き継ぐ
+  const [date, setDate] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('date')
+      if (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) return p
+    }
+    return localToday()
+  })
   useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1824,6 +2252,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
   useEffect(() => {
     api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
   }, [])
+
+  // ?print=1 の別ウィンドウ（設定のPDF出力）は、データ読み込み完了後に自動で印刷ダイアログ（A4横）を開く
+  useEffect(() => {
+    if (loading) return
+    const wantPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
+    if (!wantPrint) return
+    const t = setTimeout(() => { try { window.print() } catch {} }, 600)   // 描画・フォント反映を待つ
+    return () => clearTimeout(t)
+  }, [loading])
 
   // 差分更新：別ウィンドウ（閲覧専用）では1分ごとに再取得し、変更があった伝票だけ差し替える。
   // 全画面 reload しないのでスクロール位置やピンチズーム状態を保ったまま最新化できる。
@@ -1884,8 +2321,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
         return lines.join('\n')
       }
       case 'times': return (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).join('\n')  // 1つごとに改行
+      case 'vehicleType': return vehicleLabel(s)   // 数量付き（4t×2・7t）
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
-      case 'volume': return (s.volume == null ? '' : String(s.volume)) + (s.volumeUncertain ? '  ?' : '')
+      case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
+      case 'volume': {
+        const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '  ?' : ''}` }
+        return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
+      }
       default: return s[f] == null ? '' : String(s[f])
     }
   }
@@ -1962,11 +2404,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
         className={cls}
         defaultValue={getVal(s, f)}
         placeholder={ph || ''}
-        readOnly={compact}
-        tabIndex={compact ? -1 : undefined}
-        style={compact ? { pointerEvents: 'none' } : undefined}
-        onInput={compact ? undefined : (e => fitOne(e.target))}
-        onBlur={compact ? undefined : (e => saveField(s, f, e.target.value))}
+        readOnly
+        tabIndex={-1}
+        style={{ pointerEvents: 'none' }}
       />
     )
   }
@@ -1986,8 +2426,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
         rows={rows}
         defaultValue={v}
         placeholder={ph || ''}
-        onInput={e => fitOne(e.target)}
-        onBlur={e => saveField(s, f, e.target.value)}
+        readOnly
+        tabIndex={-1}
+        style={{ pointerEvents: 'none' }}
       />
     )
   }
@@ -2015,6 +2456,78 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 配合：複数行対応。各行は桁グループごとに分割描画。変更された桁(mix0/mix1/mix2)だけ赤くする（1行目のみ桁単位、追加行は行単位）
+  const cellMix = (s, opts = {}) => {
+    const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
+    const rows = mixRowsOfShip(s).filter(r => r.code || r.note)
+    if (!rows.length) {
+      return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none' }} />
+    }
+    const wholeRed = isChanged(s, 'mixCode') && !['mix0', 'mix1', 'mix2'].some(k => isChanged(s, k))
+    return (
+      <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '') + '_n' + rows.length} style={{ pointerEvents: 'none' }}>
+        {rows.map((r, ri) => {
+          const parts = String(r.code || '').split('-')
+          // 各配合行の下にその行の特記を表示（配合→特記→配合→特記…）
+          const noteRed = ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))
+          return (
+            <Fragment key={ri}>
+              {r.code ? (
+                <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
+                  {parts.map((p, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <span>-</span>}
+                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
+                    </Fragment>
+                  ))}
+                </span>
+              ) : null}
+              {(r.note && r.note.trim()) ? (
+                <span className="sc-mixnote-line" style={noteRed ? { color: '#c81e1e' } : undefined}>{r.note}</span>
+              ) : null}
+            </Fragment>
+          )
+        })}
+      </span>
+    )
+  }
+
+  // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）
+  const cellVolume = (s) => {
+    const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '?' : ''}` }
+    const lines = [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean)
+    if (lines.length <= 1) return cell(s, 'volume', '', { center: true, big: true })
+    const red = isChanged(s, 'volume')
+    return (
+      <span ref={fitRef} className="sc-mixcode big center" style={{ pointerEvents: 'none', color: red ? '#c81e1e' : undefined }}>
+        {lines.map((l, i) => <span key={i} style={{ display: 'block', whiteSpace: 'nowrap' }}>{l}</span>)}
+      </span>
+    )
+  }
+
+  // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
+  const cellNotes = (s, opts = {}) => {
+    const arr = Array.isArray(s.notes) ? s.notes : []
+    const cls = 'sc-in sc-notes' + (opts.plain ? ' plain' : '')
+    const wholeRed = isChanged(s, 'notes') && !arr.some((_, i) => isChanged(s, 'note' + i))
+    if (!arr.length) {
+      return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', color: '#cbd2dc' }}>{opts.ph || '備考'}</span>
+    }
+    return (
+      <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '')} style={{ pointerEvents: 'none' }}>
+        {arr.map((n, i) => {
+          const red = wholeRed || isChanged(s, 'note' + i) || (n && n.important)
+          return (
+            <Fragment key={i}>
+              {i > 0 && <span> / </span>}
+              <span style={{ color: red ? '#c81e1e' : undefined, fontWeight: (n && n.important) ? 700 : undefined }}>{n.text}</span>
+            </Fragment>
+          )
+        })}
+      </span>
+    )
+  }
+
   // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
   // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
   const cellDrivers = (s, opts = {}) => {
@@ -2027,11 +2540,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
     const display = lines.length ? lines : ['']
     const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '')
-    const saveAll = (container) => {
-      const inputs = Array.from(container.querySelectorAll('input.sc-driverline'))
-      const joined = inputs.map(i => i.value.trim()).filter(Boolean).join('\n')
-      saveField(s, 'drivers', joined)
-    }
     return (
       <div className="sc-drivers" key={'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + display.length}>
         {display.map((line, i) => (
@@ -2041,8 +2549,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
             className={cls}
             defaultValue={line}
             placeholder={i === 0 ? '担当' : ''}
-            onInput={e => fitOne(e.target)}
-            onBlur={e => saveAll(e.target.closest('.sc-drivers'))}
+            readOnly
+            tabIndex={-1}
+            style={{ pointerEvents: 'none' }}
           />
         ))}
       </div>
@@ -2093,6 +2602,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
+
+  // 添付PDFを新規ウィンドウで開く
+  const openPdfWin = (id) => window.open(`/api/shipments?id=${encodeURIComponent(id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')
 
   const sendLine = async (s) => {
     const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
@@ -2154,8 +2666,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
           </div>
           <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
-          <button type="button" onClick={() => window.close()}
-            style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+          <div className="no-print" style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => window.close()}
+              style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+          </div>
         </div>
       ) : (
       <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -2197,14 +2711,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box sc-vehbox"><span className="sc-lbl">車種</span>
                       <div className="sc-veh">
                         {cell(s, 'vehicleType', '', { center: true, big: true })}
-                        {s.truckCount ? <span className="sc-truck">{s.truckCount}台</span> : null}
                       </div>
                     </div>
-                    <div className="sc-box"><span className="sc-lbl">配合</span>{cell(s, 'mixCode', '', { center: true, big: true })}{(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? <div style={{ fontSize: 11, color: '#c81e1e', fontWeight: 700, textAlign: 'center' }}>{s.mixNotes[1]}</div> : null}</div>
-                    <div className="sc-box sc-volbox"><span className="sc-lbl">量</span>{cell(s, 'volume', '', { center: true, big: true })}</div>
+                    <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
+                    <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cellVolume(s)}</div>
                   </div>
+                  {/* PDF（添付があれば新規ウィンドウで開く） */}
+                  {s.hasPdf && (
+                    <div className="sc-row"><span className="sc-lbl">PDF</span><span className="sc-val">
+                      <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }}
+                        style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
+                    </span></div>
+                  )}
                   {/* 備考（横並び） */}
-                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cell(s, 'notes', '備考', { plain: true })}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
                   {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
@@ -2231,20 +2751,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
         const inner = (<>
         <table>
           <colgroup>
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '14%' }} />
             {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>車種</th><th>配合</th><th>量</th><th>担当</th><th>時間</th>
+              <th>現場名</th><th>📄PDF</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2254,19 +2775,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
-                <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
-                <td className="sc-nowrap">
-                  {cell(s, 'mixCode', '', { center: true, big: true })}
-                  {(Array.isArray(s.mixNotes) && (s.mixNotes[1] || '').trim()) ? (
-                    <div className="sc-mixnotes">
-                      <span /><span>{s.mixNotes[1]}</span><span />
-                    </div>
-                  ) : null}
+                <td className="sc-nowrap" style={{ textAlign: 'center' }}>
+                  {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}
                 </td>
-                <td className="sc-nowrap">{cell(s, 'volume', '', { center: true, big: true })}</td>
+                <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
+                <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
+                <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
-                <td>{cell(s, 'notes', '備考', { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
+                <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
                     <button type="button" onClick={() => openEditWindow(s)}
@@ -2284,7 +2801,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
         ) : rows.length === 0 ? (
           <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
         ) : (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', padding: isPopup ? '8px 8px 0' : 0 }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', lineHeight: 1.5, padding: isPopup ? '8px 8px 16px' : 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
         )}
@@ -2331,35 +2848,51 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
   const [companyName, setCompanyName] = useState(s.companyName || '')
   const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
   const [siteName, setSiteName] = useState(s.siteName || '')
-  const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結
-  const [truckCount, setTruckCount] = useState((s.truckCount ?? '') === '' ? '' : String(s.truckCount))
-  const [mixParts, setMixParts] = useState(() => {
+  const [pourLocation, setPourLocation] = useState(s.pourLocation || '')
+  const [pourFree, setPourFree] = useState(() => !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)))
+  const [siteAddress, setSiteAddress] = useState(s.siteAddress || '')
+  const [mapView, setMapView] = useState(s.mapView || null)
+  const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
+  const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結（台数なし）
+  const [mixRows, setMixRows] = useState(() => {
+    if (Array.isArray(s.mixRows) && s.mixRows.length) {
+      return s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
+    }
     const p = String(s.mixCode || '').split('-')
-    return [p[0] || '', p[1] || '', p[2] || '']
-  })
-  const [mixNotes, setMixNotes] = useState(() => {
     const n = Array.isArray(s.mixNotes) ? s.mixNotes : []
-    return [n[0] || '', n[1] || '', n[2] || '']
+    return [{ parts: [p[0] || '', p[1] || '', p[2] || ''], note: n[1] || '' }]
   })
   const [volume, setVolume] = useState(s.volume == null ? '' : String(s.volume))
   const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
+  const [volumePlusA, setVolumePlusA] = useState(!!s.volumePlusA)
+  const [volume2, setVolume2] = useState(s.volume2 == null ? '' : String(s.volume2))
+  const [volumeUncertain2, setVolumeUncertain2] = useState(!!s.volumeUncertain2)
+  const [volumePlusA2, setVolumePlusA2] = useState(!!s.volumePlusA2)
+  const [hasVolume2, setHasVolume2] = useState(!!(s.volume2 || s.volumeUncertain2 || s.volumePlusA2))
   const [drivers, setDrivers] = useState(initDrivers)
   const [notes, setNotes] = useState(Array.isArray(s.notes) ? s.notes.map(n => n.text).join('\n') : '')
+  const [noteTags, setNoteTags] = useState(Array.isArray(s.noteTags) ? s.noteTags : [])
+  const [placements, setPlacements] = useState(Array.isArray(s.placements) ? s.placements : [])
   const [siteContact, setSiteContact] = useState(s.siteContact || '')
+  const toggleNoteTag = (t) => setNoteTags(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
+  const togglePlacement = (t) => setPlacements(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
   const [saving, setSaving] = useState(false)
 
   // 時間：行ごとに編集／追加／削除（最大2）
   const setTime = (i, v) => setTimes(ts => ts.map((t, idx) => idx === i ? v : t))
   const addTime = () => setTimes(ts => ts.length < 2 ? [...ts, ''] : ts)
   const delTime = (i) => setTimes(ts => ts.length > 1 ? ts.filter((_, idx) => idx !== i) : [''])
-  // 配合：3セクション（各2桁）＋各セクションの特記
-  const setMixPart = (i, v) => setMixParts(p => p.map((x, idx) => idx === i ? v : x))
-  const setMixNote = (i, v) => setMixNotes(n => n.map((x, idx) => idx === i ? v : x))
+  // 配合：複数行。各行3セクション（各2桁）＋中央の特記
+  const setMixPart = (ri, i, v) => setMixRows(rs => rs.map((r, idx) => idx === ri ? { ...r, parts: r.parts.map((x, j) => j === i ? v : x) } : r))
+  const setMixNote = (ri, v) => setMixRows(rs => rs.map((r, idx) => idx === ri ? { ...r, note: v } : r))
+  const addMixRow = () => setMixRows(rs => [...rs, { parts: ['', '', ''], note: '' }])
+  const removeMixRow = (ri) => setMixRows(rs => rs.length > 1 ? rs.filter((_, idx) => idx !== ri) : rs)
 
   // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）
   const vehList = vehicleType.split('・').map(x => x.trim()).filter(Boolean)
   const toggleVeh = (o) => {
-    const next = vehList.includes(o) ? vehList.filter(x => x !== o) : [...vehList, o]
+    const isOn = vehList.includes(o)
+    const next = isOn ? vehList.filter(x => x !== o) : [...vehList, o]
     setVehicleType(VEHICLE_TYPES.filter(v => next.includes(v)).join('・'))
   }
 
@@ -2375,34 +2908,32 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
     setSaving(true)
     // 構造化パッチを作り、元と異なるフィールドだけ changed に積む
     const cleanTimes = times.map(t => t.trim()).filter(Boolean)
-    // 配合：3セクションを - 連結（末尾の空欄は落とす）。特記は3要素配列で保持
-    const mixCode = mixParts.map(p => p.trim()).join('-').replace(/-+$/, '')
-    const mixNotesClean = mixNotes.map(n => n.trim())
+    // 配合：複数行を整形（全行空の行は落とす）。1行目を mixCode/mixNotes に同期
+    const cleanRows = mixRows
+      .map(r => ({ parts: [r.parts[0].trim(), r.parts[1].trim(), r.parts[2].trim()], note: (r.note || '').trim() }))
+      .filter(r => r.parts.some(Boolean) || r.note)
+    const finalRows = cleanRows.length ? cleanRows : [{ parts: ['', '', ''], note: '' }]
+    const mixCode = finalRows[0].parts.join('-').replace(/-+$/, '')
+    const mixNotesClean = ['', finalRows[0].note || '', '']
+    // 車種：選択中の車種名のみ（台数は持たない）
+    const vehTypes = String(vehicleType || '').split('・').map(x => x.trim()).filter(Boolean)
+    const vehicleItems = vehTypes.map(t => ({ type: t, qty: '' }))
     const patch = {
       times: cleanTimes,
       date: date || s.date,
-      companyName, tradingCompany, siteName,
-      vehicleType, truckCount, mixCode, mixNotes: mixNotesClean, volume, volumeUncertain,
+      companyName, tradingCompany, siteName, siteAddress, pourLocation,
+      mapView, mapArrows,
+      vehicleType, vehicleItems, mixCode, mixNotes: mixNotesClean, mixRows: finalRows,
+      volume, volumeUncertain, volumePlusA,
+      volume2: hasVolume2 ? volume2 : '', volumeUncertain2: hasVolume2 ? volumeUncertain2 : false, volumePlusA2: hasVolume2 ? volumePlusA2 : false,
       drivers: drivers.map(d => ({ id: d.id, name: d.name })),
       notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
+      noteTags,
+      placements,
       siteContact,
     }
-    const changed = []
-    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-    const origTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
-    if (!eq(origTimes, cleanTimes)) changed.push('times')
-    if (date && (s.date || '') !== date) changed.push('date')
-    if ((s.companyName || '') !== companyName) changed.push('companyName')
-    if ((s.tradingCompany || '') !== tradingCompany) changed.push('tradingCompany')
-    if ((s.siteName || '') !== siteName) changed.push('siteName')
-    if ((s.vehicleType || '') !== vehicleType) changed.push('vehicleType')
-    if (String(s.truckCount ?? '') !== String(truckCount)) changed.push('truckCount')
-    const origMixNotes = (Array.isArray(s.mixNotes) ? s.mixNotes : []).map(n => String(n || '').trim())
-    if ((s.mixCode || '') !== mixCode || !eq(origMixNotes.slice(0, 3), mixNotesClean.filter((_, i) => i < 3))) changed.push('mixCode')
-    if (String(s.volume ?? '') !== String(volume) || !!s.volumeUncertain !== volumeUncertain) changed.push('volume')
-    if (!eq(initDrivers, patch.drivers)) changed.push('drivers')
-    if (!eq(Array.isArray(s.notes) ? s.notes.map(n => n.text) : [], patch.notes.map(n => n.text))) changed.push('notes')
-    if ((s.siteContact || '') !== siteContact) changed.push('siteContact')
+    // 配合は桁ごと・備考は行ごとに変更を検出（共通ヘルパー）
+    const changed = diffChangedFields(s, patch)
     try { await onSave(patch, changed) } catch { setSaving(false) }
   }
 
@@ -2412,25 +2943,25 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '90dvh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: 'calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'sticky', top: 0, background: '#fff', paddingBottom: 4 }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
           <button type="button" onClick={onClose} disabled={saving}
             style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
 
-        {/* 日付（左）／時間（右・最大2）。他のレイアウトは変えない */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'flex-start' }}>
-          <div style={{ flex: '0 0 44%', minWidth: 0 }}>
+        {/* 日付（左・業者名と同じ幅）／時間（右・商社名と同じ開始位置）。下の業者名/商社名グリッドと列を揃える */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14, alignItems: 'start' }}>
+          <div style={{ minWidth: 0 }}>
             <label style={lblS}>日付</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: '100%' }} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: 'auto', maxWidth: '100%', display: 'block' }} />
           </div>
-          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <label style={lblS}>時間（最大2・上から順）</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {times.map((t, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: 1, minWidth: 0 }} />
+                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: '1 1 0', minWidth: 0 }} />
                   {times.length > 1 && (
                     <button type="button" onClick={() => delTime(i)}
                       style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
@@ -2450,50 +2981,104 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
-
-        {/* 車種（3種複数選択）＋台数 */}
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>車種（複数選択可）・台数</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, flex: 1 }}>
-              {VEHICLE_TYPES.map(o => (
-                <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
-              ))}
+          <label style={lblS}>打設箇所</label>
+          {!pourFree ? (
+            <select value={pourLocation} style={{ ...inS, cursor: 'pointer' }}
+              onChange={e => {
+                if (e.target.value === '入力する') { setPourFree(true); setPourLocation('') }
+                else setPourLocation(e.target.value)
+              }}>
+              <option value=""></option>
+              {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={pourLocation} onChange={e => setPourLocation(e.target.value)} placeholder="打設箇所を入力" style={{ ...inS, flex: 1 }} />
+              <button type="button" onClick={() => { setPourFree(false); setPourLocation('') }}
+                style={{ flex: '0 0 auto', border: '1.5px solid #cdd5e0', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>一覧</button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
-              <input value={truckCount} onChange={e => setTruckCount(e.target.value)} inputMode="numeric" placeholder="台数"
-                style={{ ...inS, width: 64, textAlign: 'center', padding: '9px 4px' }} />
-              <span style={{ fontSize: 14, color: '#3a4a5c' }}>台</span>
-            </div>
+          )}
+        </div>
+
+        {/* 現場住所＋地図（住所編集・ピン/矢印編集） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>現場住所</label>
+          <input value={siteAddress} onChange={e => setSiteAddress(e.target.value)} placeholder={DEFAULT_SITE_ADDRESS} style={inS} />
+          <div style={{ marginTop: 8 }}>
+            <SiteMap
+              address={siteAddress}
+              onAddressChange={setSiteAddress}
+              mapView={mapView}
+              onMapViewChange={setMapView}
+              arrows={mapArrows}
+              onArrowsChange={setMapArrows}
+            />
           </div>
         </div>
 
-        {/* 配合（3セクション・各セクションに特記）＋量（?トグル） */}
+        {/* 車種（3種複数選択） */}
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>配合（中央のみ特記可）</label>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {[0, 1, 2].map(i => (
-              <Fragment key={i}>
-                {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {i === 1
-                    ? <input value={mixNotes[1]} onChange={e => setMixNote(1, e.target.value)} placeholder="特記"
-                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
-                    : <div style={{ height: 15 }} />}
-                  <input value={mixParts[i]} onChange={e => setMixPart(i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
-                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
-                </div>
-              </Fragment>
+          <label style={lblS}>車種（複数選択可）</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            {VEHICLE_TYPES.map(o => (
+              <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
             ))}
           </div>
         </div>
+
+        {/* 配合（複数行・3セクション・中央に特記）＋量（?トグル） */}
         <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>量（m³）</label>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input value={volume} onChange={e => setVolume(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
-            <button type="button" onClick={() => setVolumeUncertain(v => !v)}
-              style={{ flex: '0 0 auto', border: volumeUncertain ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: volumeUncertain ? '#c0392b' : '#fff', color: volumeUncertain ? '#fff' : '#8a97a6', borderRadius: 8, width: 42, height: 40, fontSize: 18, fontWeight: 700, cursor: 'pointer' }} title="不確定マーク">?</button>
-          </div>
+          <label style={lblS}>配合（中央のみ特記可）</label>
+          {mixRows.map((row, ri) => (
+            <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 10 : 0 }}>
+              {[0, 1, 2].map(i => (
+                <Fragment key={i}>
+                  {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {i === 1
+                      ? <input value={row.note} onChange={e => setMixNote(ri, e.target.value)} placeholder="特記"
+                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
+                      : <div style={{ height: 15 }} />}
+                    <input value={row.parts[i]} onChange={e => setMixPart(ri, i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
+                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
+                  </div>
+                </Fragment>
+              ))}
+              {ri > 0 && (
+                <button type="button" onClick={() => removeMixRow(ri)} title="この配合を削除"
+                  style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 40, fontSize: 16, cursor: 'pointer' }}>×</button>
+              )}
+            </div>
+          ))}
+          <button type="button" onClick={addMixRow}
+            style={{ marginTop: 8, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 配合を追加</button>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>数量（m³）</label>
+          {(() => {
+            const sqBtn = (on, label, onClick, title) => (
+              <button type="button" onClick={onClick} title={title}
+                style={{ flex: '0 0 auto', border: on ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: on ? '#c0392b' : '#fff', color: on ? '#fff' : '#8a97a6', borderRadius: 8, minWidth: 42, height: 40, padding: '0 8px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{label}</button>
+            )
+            const row = (val, setV, unc, setUnc, plusA, setPlusA, onDel) => (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                <input value={val} onChange={e => setV(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
+                {sqBtn(plusA, '+a', () => setPlusA(v => !v), '+a を付ける')}
+                {sqBtn(unc, '?', () => setUnc(v => !v), '不確定マーク')}
+                {onDel && sqBtn(false, '×', onDel, '2段目を削除')}
+              </div>
+            )
+            return (<>
+              {row(volume, setVolume, volumeUncertain, setVolumeUncertain, volumePlusA, setVolumePlusA, null)}
+              {hasVolume2 && row(volume2, setVolume2, volumeUncertain2, setVolumeUncertain2, volumePlusA2, setVolumePlusA2,
+                () => { setHasVolume2(false); setVolume2(''); setVolumeUncertain2(false); setVolumePlusA2(false) })}
+              {!hasVolume2 && (
+                <button type="button" onClick={() => setHasVolume2(true)}
+                  style={{ border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 量を追加</button>
+              )}
+            </>)
+          })()}
         </div>
 
         {/* 担当（最大4人・選択） */}
@@ -2515,6 +3100,26 @@ function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
           )}
         </div>
 
+        {/* 荷下ろし（クレーン / F1 / ポンプ） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>荷下ろし</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            {PLACEMENT_TYPES.map(t => (
+              <div key={t} onClick={() => togglePlacement(t)} style={chip(placements.includes(t))}>{t}</div>
+            ))}
+          </div>
+        </div>
+
+        {/* 特記（工TP / 領 / 増コン / 追） */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lblS}>特記</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+            {NOTE_TAGS.map(t => (
+              <div key={t} onClick={() => toggleNoteTag(t)} style={chip(noteTags.includes(t))}>{t}</div>
+            ))}
+          </div>
+        </div>
+
         <div style={{ marginBottom: 12 }}><label style={lblS}>備考（複数は改行）</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inS, resize: 'vertical' }} /></div>
         <div style={{ marginBottom: 6 }}><label style={lblS}>現場連絡先</label><input value={siteContact} onChange={e => setSiteContact(e.target.value)} inputMode="tel" style={inS} /></div>
 
@@ -2534,6 +3139,18 @@ const WD = ['日', '月', '火', '水', '木', '金', '土']
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const mondayOf = (dateStr) => { const d = new Date(dateStr); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return d }
 const firstTimeOf = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
+// 時間文字列を分に変換（午前=11:59 / 午後=23:59 / 空欄や未解析は最後）
+const timeToMin = (t) => {
+  const str = String(t || '').trim()
+  if (!str) return 100000
+  const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
+  if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+  if (str.includes('午前')) return 11 * 60 + 59
+  if (str.includes('午後')) return 23 * 60 + 59
+  const h = str.match(/(\d{1,2})\s*時/)
+  if (h) return parseInt(h[1], 10) * 60
+  return 99999
+}
 const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
 
 function useShipments() {
@@ -2554,45 +3171,115 @@ const RPT = {
 
 function DashboardPage() {
   const { all, loading } = useShipments()
+  const isMobile = useIsMobile()
   const today = localToday()
   const ms = mondayOf(today)
   const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return ymd(d) })
   const todays = all.filter(s => s.date === today)
   const weeks = all.filter(s => weekDates.includes(s.date))
-  const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0).toFixed(2)
-  const card = (label, value, sub) => (
-    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '16px 18px', minWidth: 150 }}>
-      <div style={{ fontSize: 12, color: '#6b7a8d' }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#0f3060' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#9aa7b5' }}>{sub}</div>}
+  const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
+  const fmtVol = n => (Math.round(n * 100) / 100).toLocaleString('ja-JP')
+  // 本日分を時間順に並べる（午前=11:59 / 午後=23:59 換算・空欄は最後）
+  const timeMin = (s) => {
+    const t = String(firstTimeOf(s) || '').trim()
+    if (!t) return 99999
+    if (/午前/.test(t)) return 719
+    if (/午後/.test(t)) return 1439
+    const m = t.match(/(\d{1,2}):(\d{2})/)
+    return m ? (+m[1]) * 60 + (+m[2]) : 99999
+  }
+  const todaysSorted = [...todays].sort((a, b) => timeMin(a) - timeMin(b))
+
+  const card = (label, value, unit, sub, accent) => (
+    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div style={{ fontSize: 12, color: '#6b7a8d', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: accent || '#0f3060', lineHeight: 1.1 }}>
+        {value}{unit && <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7a8d', marginLeft: 3 }}>{unit}</span>}
+      </div>
+      {sub && <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 3 }}>{sub}</div>}
     </div>
   )
+  const breakdown = (title, entries, empty) => (
+    <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', flex: '1 1 240px', minWidth: 0 }}>
+      <h3 style={{ fontSize: 13, color: '#3a4a5c', margin: '0 0 10px' }}>{title}</h3>
+      {entries.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>{empty}</div>
+        : entries.map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f2f4f8' }}>
+            <span style={{ color: '#1a2332', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</span>
+            <span style={{ color: '#0f3060', fontWeight: 700, flex: '0 0 auto', marginLeft: 8 }}>{v}件</span>
+          </div>
+        ))}
+    </div>
+  )
+
+  // 便別（第一便=9時まで／第二便=9時以降の午前／午後）の車種別台数
+  const vehStats = (list) => {
+    const c = {}; VEHICLE_TYPES.forEach(v => { c[v] = 0 })
+    list.forEach(s => {
+      if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) s.vehicleItems.forEach(v => { if (v.type) c[v.type] = (c[v.type] || 0) + (parseInt(v.qty, 10) || 1) })
+      else String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).forEach(v => { c[v] = (c[v] || 0) + 1 })
+    })
+    const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
+    const items = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v} ${c[v]}台`)
+    return { items, total }
+  }
+  const binOf = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
+  const todayBins = [0, 1, 2].map(b => todays.filter(s => binOf(s) === b))
+  const BIN_LABELS = [{ main: '第一便', sub: '（9時まで）' }, { main: '第二便', sub: '（9時以降）' }, { main: '午後', sub: '' }]
+
+  const drvEntries = (() => {
+    const m = {}; todays.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => m[n] = (m[n] || 0) + 1) })
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
+  })()
+
   return (
     <div style={RPT.wrap}>
       <h2 style={{ margin: '0 0 16px', color: '#1a2332' }}>📊 ダッシュボード</h2>
       {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div> : (
         <>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
-            {card('今日の出荷', `${todays.length} 件`, today)}
-            {card('今日の合計', `${vol(todays)} m³`)}
-            {card('今週の出荷', `${weeks.length} 件`, `${weekDates[0]}〜${weekDates[6]}`)}
-            {card('今週の合計', `${vol(weeks)} m³`)}
-            {card('登録総数', `${all.length} 件`)}
+          {/* サマリーカード（レスポンシブなグリッドで折り返し） */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+            {card('今日の出荷', todays.length, '件', `${today}（${WD[new Date(today).getDay()]}）`, '#1a6a9f')}
+            {card('今日の合計', fmtVol(vol(todays)), 'm³')}
+            {card('今週の出荷', weeks.length, '件', `${weekDates[0].slice(5)}〜${weekDates[6].slice(5)}`)}
+            {card('今週の合計', fmtVol(vol(weeks)), 'm³')}
+            {card('登録総数', all.length, '件')}
           </div>
-          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-            <div>
-              <h3 style={{ fontSize: 14, color: '#3a4a5c' }}>今日の車種別</h3>
-              {todays.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>なし</div>
-                : Object.entries(todays.reduce((m, s) => { const k = s.vehicleType || '未設定'; m[k] = (m[k] || 0) + 1; return m }, {})).map(([k, v]) => <div key={k} style={{ fontSize: 13 }}>{k}: {v}件</div>)}
+
+          {/* 内訳（車種別＝便別・担当別） */}
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', flex: '1 1 240px', minWidth: 0 }}>
+              <h3 style={{ fontSize: 13, color: '#3a4a5c', margin: '0 0 10px' }}>今日の車種別（便別）</h3>
+              {todays.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>本日の出荷はありません</div>
+                : BIN_LABELS.map((lb, bi) => {
+                  const st = vehStats(todayBins[bi])
+                  return (
+                    <div key={bi} style={{ padding: '6px 0', borderBottom: '1px solid #f2f4f8' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                        <span style={{ color: '#0f3060', fontWeight: 700 }}>{lb.main}{lb.sub}</span>
+                        <span style={{ color: '#0f3060', fontWeight: 700 }}>計{st.total}台</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#3a4a5c', marginTop: 2 }}>{st.items.length ? st.items.join('　') : '—'}</div>
+                    </div>
+                  )
+                })}
             </div>
-            <div>
-              <h3 style={{ fontSize: 14, color: '#3a4a5c' }}>今日の担当別</h3>
-              {(() => {
-                const m = {}; todays.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => m[n] = (m[n] || 0) + 1) })
-                const e = Object.entries(m)
-                return e.length ? e.map(([k, v]) => <div key={k} style={{ fontSize: 13 }}>{k}: {v}件</div>) : <div style={{ fontSize: 12, color: '#9aa7b5' }}>なし</div>
-              })()}
-            </div>
+            {breakdown('今日の担当別', drvEntries, '本日の出荷はありません')}
+          </div>
+
+          {/* 本日の予定（時間順） */}
+          <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px' }}>
+            <h3 style={{ fontSize: 13, color: '#3a4a5c', margin: '0 0 10px' }}>本日の予定（時間順）</h3>
+            {todaysSorted.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>本日の出荷はありません</div>
+              : todaysSorted.map(s => (
+                <div key={s.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, padding: '7px 0', borderBottom: '1px solid #f2f4f8' }}>
+                  <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 52 }}>{firstTimeOf(s) || '—'}</span>
+                  <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
+                  </span>
+                  <span style={{ flex: '0 0 auto', color: '#3a4a5c' }}>{s.vehicleType || ''}{s.volume ? ` ${s.volume}m³` : ''}</span>
+                </div>
+              ))}
           </div>
         </>
       )}
@@ -2603,24 +3290,54 @@ function DashboardPage() {
 function WeeklySchedulePage() {
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
-  const ms = new Date(date)   // 選択日（既定は本日）を左端に7日分表示
-  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
+  const ms = new Date(date)   // 選択日（既定は本日）を左端に10日分表示
+  const days = Array.from({ length: 10 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
   const todayStr = localToday()
   return (
     <div style={RPT.wrap}>
       <div style={RPT.head}>
         <h2 style={{ margin: 0, color: '#1a2332' }}>🗓️ 週間出荷予定表</h2>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
-        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{ymd(days[0])} 〜 {ymd(days[6])}</span>
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{ymd(days[0])} 〜 {ymd(days[9])}</span>
       </div>
       {loading ? <div>読み込み中...</div> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, minWidth: 900 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, minmax(130px,1fr))', gap: 6, minWidth: 1300 }}>
           {days.map(d => {
             const ds = ymd(d), wd = WD[d.getDay()]
             const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+            // 便ごとの車種別合計台数を集計（数量があれば加算・無ければ1台）
+            const vehStats = (rows) => {
+              const c = {}
+              VEHICLE_TYPES.forEach(v => { c[v] = 0 })
+              rows.forEach(s => {
+                if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) {
+                  s.vehicleItems.forEach(v => { if (v.type) c[v.type] = (c[v.type] || 0) + (parseInt(v.qty, 10) || 1) })
+                } else {
+                  String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).forEach(v => { c[v] = (c[v] || 0) + 1 })
+                }
+              })
+              const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
+              const summary = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v}:${c[v]}台`).join(' ')
+              return { summary, total }
+            }
+            // 便の区分：第一便=9時まで(<9:00)／第二便=9時以降の午前(9:00〜11:59)／午後=12:00以降
+            const bin = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
+            const binList = [list.filter(s => bin(s) === 0), list.filter(s => bin(s) === 1), list.filter(s => bin(s) === 2)]
+            const BIN_LABELS = [{ main: '第一便', sub: '（9時まで）' }, { main: '第二便', sub: '（9時以降）' }, { main: '午後', sub: '' }]
             return (
               <div key={ds} style={{ border: '1px solid #dde3ed', borderRadius: 8, minHeight: 220, background: ds === todayStr ? '#eef5ff' : '#fff' }}>
                 <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', fontWeight: 700, fontSize: 13, textAlign: 'center', color: wd === '日' ? '#c0392b' : wd === '土' ? '#1b4ea8' : '#1a2332' }}>{d.getMonth() + 1}/{d.getDate()}（{wd}）</div>
+                {/* 便別サマリー：第一便／第二便／午後の車種別台数と合計台数 */}
+                {binList.map((bl, bi) => {
+                  const st = vehStats(bl)
+                  const lb = BIN_LABELS[bi]
+                  return (
+                    <div key={bi} style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 700, color: '#0f3060' }}>{lb.main}{lb.sub && <br />}{lb.sub} 計{st.total}台</div>
+                      <div>{st.summary || '—'}</div>
+                    </div>
+                  )
+                })}
                 <div style={{ padding: 6 }}>
                   {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
                     : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? ` /${s.volume}m³` : ''}</span></div>)}
@@ -2630,6 +3347,159 @@ function WeeklySchedulePage() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// 生コン出荷予定表（手書き様式に寄せた帳票・印刷/PDF出力）
+function SeikonOutputPage({ isPopup }) {
+  const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  const urlDate = params.get('date') || ''
+  const wantPrint = params.get('print') === '1'
+  const urlAmpm = params.get('ampm') || 'both'
+  const [date, setDate] = useState(urlDate || localToday())
+  const [ampm, setAmpm] = useState(urlAmpm)   // 'both' | 'AM' | 'PM'
+  const { all, loading } = useShipments()
+  const [customers, setCustomers] = useState([])
+  useEffect(() => { api.get('/api/customers').then(setCustomers).catch(() => { /* noop */ }) }, [])
+  const custCode = (s) => { const c = customers.find(c => c.id === s.companyId); return c ? (c.customerCode || '') : '' }
+  const inAmPm = (s) => { if (ampm === 'both') return true; const m = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? m < 720 : m >= 720 }
+  const rows = all.filter(s => s.date === date && inAmPm(s))
+    .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+
+  const d = new Date(date)
+  const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
+
+  // 印刷：別ウィンドウ（サイドバー無し）で開き、読み込み後に自動で印刷ダイアログ（A4縦）
+  const openPrint = () => {
+    const url = `${window.location.pathname}?view=seikon&popup=1&print=1&date=${encodeURIComponent(date)}&ampm=${ampm}`
+    const w = window.open(url, '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+  useEffect(() => {
+    if (loading || !wantPrint) return
+    const t = setTimeout(() => { try { window.print() } catch { /* noop */ } }, 500)
+    return () => clearTimeout(t)
+  }, [loading, wantPrint])
+
+  const timesArr = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
+  const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
+  const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
+
+  const placementsOf = (s) => (Array.isArray(s.placements) ? s.placements : []).filter(Boolean).join('・')
+
+  // 配合/数量が2種ある行は、下に分割行（数値のみ・その他はコピーしない）を出す
+  const lineRows = []
+  rows.forEach(s => {
+    const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
+    const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
+    const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
+    const split = mixes.length >= 2 || !!v2
+    lineRows.push({ s, mix: mixes[0] || '', vol: v1, volNum: s.volume || '', primary: true })
+    if (split) lineRows.push({ s, mix: mixes[1] || '', vol: v2 || '', volNum: s.volume2 || '', primary: false })
+  })
+
+  // 販売大臣CSVエクスポート（カンマ区切り・ダブルクォーテーション囲み・タイトル行あり・UTF-8 BOM）
+  const exportCsv = () => {
+    const header = ['伝票日付', '得意先コード', '業者名', '商社名', '現場名', '打設場所', '車両', '配合', 'セメント種', '数量', '時間', '連絡先', '現場連絡先', '備考', '特記', '荷下ろし', '担当']
+    const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
+    const dateStr = date.replace(/-/g, '/')
+    const out = [header.map(esc).join(',')]
+    lineRows.forEach(r => {
+      const s = r.s
+      out.push([
+        dateStr, custCode(s), s.companyName || '', s.tradingCompany || '', s.siteName || '', s.pourLocation || '',
+        vehicleLabel(s) || '', r.mix, s.cementType || '', r.volNum, timesArr(s).join(' '),
+        s.orderContact || '', s.siteContact || '', notesOf(s), tagsOf(s),
+        (Array.isArray(s.placements) ? s.placements.join('・') : ''), driversOf(s).join('・'),
+      ].map(esc).join(','))
+    })
+    if (lineRows.length === 0) { alert('この日の出荷登録がありません'); return }
+    const blob = new Blob(['﻿' + out.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `生コン出荷予定表_${date}.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  // 1行を描画。分割行（!primary）は配合・数量のみ（その他はコピーしない）
+  const renderRow = (r, key) => {
+    const s = r.s
+    if (!r.primary) {
+      return (
+        <tr key={key}>
+          <td></td><td></td><td></td><td></td>
+          <td className="seikon-mix">{r.mix}</td>
+          <td></td>
+          <td style={{ textAlign: 'center' }}>{r.vol}</td>
+          <td></td><td></td><td></td>
+        </tr>
+      )
+    }
+    const ts = timesArr(s)
+    const tekiyo2 = [placementsOf(s), tagsOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記
+    return (
+      <tr key={key}>
+        <td>{s.companyName || ''}</td>
+        <td>{s.siteName || ''}</td>
+        <td>{s.pourLocation || ''}</td>
+        <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
+        <td className="seikon-mix">{r.mix}</td>
+        <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
+        <td style={{ textAlign: 'center' }}>{r.vol}</td>
+        <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
+        <td className="seikon-phone">{s.orderContact || ''}</td>
+        <td className="seikon-tekiyo">
+          <div>{notesOf(s)}</div>
+          <div>{tekiyo2}</div>
+        </td>
+      </tr>
+    )
+  }
+
+  const ROWS = 23
+  const blanks = Math.max(0, ROWS - lineRows.length)
+  const cols = ['業者名', '現場名', '打設', '車両', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
+  const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
+
+  return (
+    <div className="seikon-wrap" style={{ height: '100%', overflow: 'auto', padding: isPopup ? 8 : 18, background: '#fff' }}>
+      <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ padding: '6px 10px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 16 }} />
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>{reiwa}</span>
+        <button type="button" onClick={() => setAmpm(a => a === 'AM' ? 'both' : 'AM')} style={ampmBtn(ampm === 'AM')}>AM</button>
+        <button type="button" onClick={() => setAmpm(a => a === 'PM' ? 'both' : 'PM')} style={ampmBtn(ampm === 'PM')}>PM</button>
+        <button type="button" onClick={openPrint}
+          style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🖨 印刷 / PDF出力</button>
+        <button type="button" onClick={exportCsv}
+          style={{ border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📥 販売大臣CSVエクスポート</button>
+      </div>
+      <div className="seikon-sheet">
+        <div className="seikon-title">
+          <span className="st-name">生コン出荷予定表</span>
+          <span className="st-date">{reiwa}</span>
+          <span className="st-ampm">
+            <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
+          </span>
+        </div>
+        <table className="seikon-table">
+          <colgroup>
+            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '4%' }} />
+            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '19%' }} />
+          </colgroup>
+          <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
+          <tbody>
+            {lineRows.map((r, ri) => renderRow(r, r.s.id + '_' + ri + (r.primary ? '' : '_s')))}
+            {Array.from({ length: blanks }).map((_, i) => (
+              <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+        {loading && <div style={{ padding: 12, color: '#6b7a8d' }} className="no-print">読み込み中...</div>}
+      </div>
     </div>
   )
 }
@@ -2658,7 +3528,7 @@ function ShipReportPage() {
                 <td style={RPT.td}>{s.siteName || ''}</td>
                 <td style={RPT.td}>{s.vehicleType || ''}</td>
                 <td style={RPT.td}>{s.mixCode || ''}</td>
-                <td style={RPT.td}>{s.volume ? `${s.volume}m³` : ''}{s.volumeUncertain ? '?' : ''}</td>
+                <td style={RPT.td}>{shipVolStr(s)}</td>
                 <td style={RPT.td}>{driversOf(s).join('・')}</td>
               </tr>
             ))}
@@ -2695,7 +3565,7 @@ function DriverReportPage() {
                 <tbody>{list.map(s => (
                   <tr key={s.id}>
                     <td style={RPT.td}>{firstTimeOf(s)}</td><td style={RPT.td}>{s.companyName}</td><td style={RPT.td}>{s.siteName || ''}</td>
-                    <td style={RPT.td}>{s.vehicleType || ''}</td><td style={RPT.td}>{s.mixCode || ''}</td><td style={RPT.td}>{s.volume ? `${s.volume}m³` : ''}{s.volumeUncertain ? '?' : ''}</td>
+                    <td style={RPT.td}>{s.vehicleType || ''}</td><td style={RPT.td}>{s.mixCode || ''}</td><td style={RPT.td}>{shipVolStr(s)}</td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -2725,6 +3595,14 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [usersOpen, setUsersOpen] = useState(false)
+  const [pdfDate, setPdfDate] = useState(() => localToday())
+
+  // PDF出力：出荷予定表を A4横で別ウィンドウに開き、読み込み後に自動で印刷ダイアログを出す
+  const openSchedulePdf = () => {
+    const url = `${window.location.pathname}?view=schedule&popup=1&print=1&date=${encodeURIComponent(pdfDate)}`
+    const w = window.open(url, '_blank', 'width=1200,height=820,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
+  }
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -2766,6 +3644,20 @@ function SettingsPage() {
         <label style={{ fontSize: 12, color: '#6b7a8d' }}>チャネルアクセストークン {data.hasToken && <span style={{ color: '#1a8f5a' }}>（設定済み）</span>}</label>
         <input style={{ ...inp, marginTop: 4 }} value={token} onChange={e => setToken(e.target.value)} placeholder={data.hasToken ? '変更する場合のみ入力' : 'LINE Messaging API のチャネルアクセストークン'} />
         <button onClick={saveSettings} disabled={saving} style={{ ...S.saveBtn, marginTop: 12, opacity: saving ? 0.7 : 1 }}>{saving ? '保存中...' : '保存'}</button>
+      </div>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🖨 出荷予定表 PDF出力（暫定）</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          指定日の出荷予定表を A4横・1ページで印刷（PDF保存）します。<br />
+          別ウィンドウが開き、自動で印刷ダイアログが表示されます（用紙: A4／向き: 横 を選択してください）。
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="date" value={pdfDate} onChange={e => setPdfDate(e.target.value)}
+            style={{ ...inp, width: 'auto', fontSize: 14, padding: '8px 10px' }} />
+          <button onClick={openSchedulePdf}
+            style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>🖨 PDF出力</button>
+        </div>
       </div>
 
       <div style={box}>
@@ -2846,6 +3738,7 @@ const TABS = [
   { id: 'shipments', label: '出荷登録', icon: '🚛' },
   { id: 'schedule', label: '出荷予定表', icon: '📋' },
   { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
+  { id: 'seikon', label: '生コン出荷予定表出力', icon: '📝' },
   { id: 'assign', label: '配送臨時割り当て', icon: '🔁' },
   { id: 'shipreport', label: '出荷日報', icon: '📑' },
   { id: 'driverreport', label: '運行日報', icon: '🚚' },
@@ -2859,6 +3752,8 @@ function Layout({ children, activeTab, onTabChange }) {
   const [open, setOpen]   = useState(false)
   const isMobile = useIsMobile()
   const isPC = !isMobile
+  // スマホでは生コン出荷予定表出力タブを表示しない
+  const navTabs = TABS.filter(t => !(isMobile && t.id === 'seikon'))
 
   // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
@@ -2896,7 +3791,7 @@ function Layout({ children, activeTab, onTabChange }) {
           </div>
         </div>
         <nav style={S.nav}>
-          {TABS.map(tab => (
+          {navTabs.map(tab => (
             <button key={tab.id} style={{ ...S.navItem, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => onTabChange(tab.id)}>
               <span style={{ fontSize: 15 }}>{tab.icon}</span>{tab.label}
             </button>
@@ -2927,7 +3822,7 @@ function Layout({ children, activeTab, onTabChange }) {
             <button style={{ ...S.hamburger, color: '#fff' }} onClick={closeSidebar}>✕</button>
           </div>
           <nav style={S.nav}>
-            {TABS.map(tab => (
+            {navTabs.map(tab => (
               <button key={tab.id} style={{ ...S.navItem, padding: '13px 12px', fontSize: 15, ...(activeTab === tab.id ? S.navActive : {}) }} onClick={() => handleTab(tab.id)}>
                 <span style={{ fontSize: 17 }}>{tab.icon}</span>{tab.label}
               </button>
@@ -2986,11 +3881,14 @@ function LockedPage({ onUnlock }) {
 
 function AppInner() {
   const { user, loading } = useAuth()
+  const isMobile = useIsMobile()
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : 'dashboard'))
+  // 掲示板形式の出荷予定表（別ウィンドウ・閲覧専用）はログイン不要で開けるようにする
+  const isBoard = isPopup && view === 'schedule' && !initialEditId
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
   // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
@@ -3006,7 +3904,7 @@ function AppInner() {
     </div>
   )
 
-  if (!user) return <LoginPage />
+  if (!user && !isBoard) return <LoginPage />
 
   let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
@@ -3014,6 +3912,9 @@ function AppInner() {
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
+    : activeTab === 'seikon' ? (isMobile && !isPopup
+      ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
+      : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
@@ -3025,7 +3926,7 @@ function AppInner() {
   }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
+  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
 
   return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }

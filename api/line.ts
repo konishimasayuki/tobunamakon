@@ -152,18 +152,46 @@ function asArr(v: any): any[] {
   return []
 }
 
+// 車種ラベル（数量付き）: vehicleItems があれば「4t×2・7t」、無ければ vehicleType
+function vehicleLabelOf(s: any): string {
+  const items = asArr(s.vehicleItems)
+  if (items.length) return items.map((v: any) => v.type).join('・')
+  return String(s.vehicleType || '')
+}
+// 数量表示（+a・? と2段目の量をまとめる）
+function volumeOne(v: any, plusA: any, uncertain: any): string {
+  const base = (v == null ? '' : String(v)).trim()
+  if (!base && !plusA && !uncertain) return ''
+  return `${base}${base ? 'm³' : ''}${plusA ? '+a' : ''}${uncertain ? '?' : ''}`
+}
+function volumeDisplay(s: any): string {
+  const a = volumeOne(s.volume, s.volumePlusA, s.volumeUncertain)
+  const b = volumeOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
+  return [a, b].filter(Boolean).join(' / ')
+}
+// 配合行（複数）: mixRows があれば各行 {code,note}、無ければ mixCode/mixNotes 1行
+function mixRowsOf(s: any): Array<{ code: string; note: string }> {
+  const rows = asArr(s.mixRows)
+  if (rows.length) return rows.map((r: any) => ({ code: asArr(r.parts).slice(0, 3).join('-').replace(/-+$/, ''), note: String(r.note || '') }))
+  const mn = asArr(s.mixNotes)
+  return [{ code: String(s.mixCode || ''), note: String(mn[1] || '') }]
+}
+
 // 出荷データから Google Static Maps の画像URLを作る（ピン＋矢印を線で描画）
 function staticMapUrl(ship: any): string | null {
-  const key = process.env.VITE_GMAPS_API_KEY || process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''
+  // LINEのサーバーが画像を取得するためリファラーが無い。制限なしのサーバー用キー（GMAPS_API_KEY）を優先する。
+  // VITE_GMAPS_API_KEY はリファラー制限ありのフロント用なので、サーバー側静的地図には使わない（403で真っ白になる）。
+  const key = process.env.GMAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GMAPS_API_KEY || ''
   if (!key) return null
   const view = asObj(ship.mapView)
   const hasView = view && typeof view.lat === 'number'
   const coords = extractLatLng(ship.siteAddress || '')
   // 中心: 固定ビュー > 住所内座標 > 住所文字列（Static Mapsは住所も中心に使える）
   const addrText = String(ship.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
+  const c5 = (n: number) => Number(n.toFixed(5))   // URL短縮のため座標は5桁（約1m精度）に丸める
   let center: string | null = null
-  if (hasView) center = `${view.lat},${view.lng}`
-  else if (coords) center = `${coords.lat},${coords.lng}`
+  if (hasView) center = `${c5(view.lat)},${c5(view.lng)}`
+  else if (coords) center = `${c5(coords.lat)},${c5(coords.lng)}`
   else if (addrText) center = encodeURIComponent(addrText)
   if (!center) return null
   const zoom = hasView ? Math.round(view.zoom || 18) : 17
@@ -173,14 +201,42 @@ function staticMapUrl(ship: any): string | null {
     `markers=color:red%7C${center}`,
     `language=ja`, `region=JP`, `key=${key}`,
   ]
-  // 矢印（緯度経度2点）を赤い太線で描画
+  // 矢印（緯度経度2点）を赤い線＋矢じりで描画。
+  // Static Maps の path は直線しか描けないため、終点に矢じり線を足す。
+  // URL長制限（2000字）対策: 座標は5桁に丸め、矢じりは head1→tip→head2 の1本のpathにまとめる。
   const arrows = asArr(ship.mapArrows)
-  for (const a of arrows.slice(0, 10)) {
+  const r5 = (n: number) => Number(n.toFixed(5))   // 約1mの精度。桁を削ってURLを短縮
+  const seg = '%7C'
+  const pushPath = (pts: Array<[number, number]>) =>
+    params.push(`path=color:0xe8211cff%7Cweight:5${seg}${pts.map(([la, ln]) => `${r5(la)},${r5(ln)}`).join(seg)}`)
+  for (const a of arrows.slice(0, 8)) {
     if (a && typeof a.lat1 === 'number' && typeof a.lat2 === 'number') {
-      params.push(`path=color:0xe8211cff%7Cweight:5%7C${a.lat1},${a.lng1}%7C${a.lat2},${a.lng2}`)
+      pushPath([[a.lat1, a.lng1], [a.lat2, a.lng2]])   // 本体（線）
+      // 終点(lat2,lng2)から始点方向へ±28°の矢じり。head1→tip→head2 を1本のpathで描く
+      const cosLat = Math.cos((a.lat2 * Math.PI) / 180) || 1
+      const dLat = a.lat1 - a.lat2
+      const dLng = (a.lng1 - a.lng2) * cosLat
+      const len = Math.hypot(dLat, dLng) || 1e-9
+      const ux = dLat / len, uy = dLng / len
+      const headLen = len * 0.28
+      const ang = (28 * Math.PI) / 180
+      const ca = Math.cos(ang), sa = Math.sin(ang)
+      const head = (s: number): [number, number] => {
+        const rx = ux * ca - uy * (sa * s)
+        const ry = ux * (sa * s) + uy * ca
+        return [a.lat2 + rx * headLen, a.lng2 + (ry * headLen) / cosLat]
+      }
+      pushPath([head(1), [a.lat2, a.lng2], head(-1)])
     }
   }
-  return `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+  let url = `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+  // LINEのimage.urlは2000字まで。超える場合は末尾のpath（矢印）から順に落として収める。
+  while (url.length > 1990 && params.some(p => p.startsWith('path='))) {
+    const lastPath = params.map((p, i) => (p.startsWith('path=') ? i : -1)).filter(i => i >= 0).pop()!
+    params.splice(lastPath, 1)
+    url = `https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}`
+  }
+  return url
 }
 
 // 出荷情報を読みやすいテキストに整形（フォールバック用）
@@ -191,12 +247,20 @@ function formatShipment(s: any): string {
   lines.push(`■ ${s.companyName || ''}${s.tradingCompany ? `（${s.tradingCompany}）` : ''}`)
   if (s.siteName) lines.push(`現場: ${s.siteName}`)
   if (times.length) lines.push(`時間: ${times.join(' / ')}`)
-  if (s.vehicleType) lines.push(`車種: ${s.vehicleType}${s.truckCount ? ` ${s.truckCount}台` : ''}`)
-  if (s.mixCode) lines.push(`配合: ${s.mixCode}`)
-  if (s.volume) lines.push(`量: ${s.volume}m³${s.volumeUncertain ? '?' : ''}`)
+  if (vehicleLabelOf(s)) lines.push(`車種: ${vehicleLabelOf(s)}`)
+  { const mr = mixRowsOf(s).filter(r => r.code); if (mr.length) lines.push(`配合: ${mr.map(r => r.code).join(' / ')}`) }
+  { const vd = volumeDisplay(s); if (vd) lines.push(`数量: ${vd}`) }
   if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
   if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
   return lines.join('\n')
+}
+
+// アプリの公開ベースURL（PDFなど絶対URLが必要なリンク用）。本番ドメイン優先。
+function appBaseUrl(): string {
+  const env = process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || ''
+  if (env) return env.replace(/\/+$/, '')
+  const v = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || ''
+  return v ? `https://${v}` : ''
 }
 
 // 現場住所のGoogleマップURL（住所がURLならそのまま、テキストなら検索URL）
@@ -216,6 +280,7 @@ function shipmentBubble(s: any): any {
   const driverMsgArr = asArr(s.driverMessages).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
   const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
   const mapUrl = mapsUrlOf(s)
+  const mapImg = staticMapUrl(s)   // 地図画像をカード内（hero）に入れて1メッセージにまとめる
 
   // 配合表示：20-50-20 ＋ 特記（中央のみ等は元の配列をそのまま / で）
   const mixLine = String(s.mixCode || '').trim()
@@ -253,18 +318,30 @@ function shipmentBubble(s: any): any {
       ],
     },
     sep(),
-    // 現場名（大きく中央）
+    // 現場名（大きく中央）＋打設箇所
     { type: 'text', text: s.siteName || '（現場名なし）', weight: 'bold', size: 'xl', color: '#111111', align: 'center', wrap: true },
+    ...(s.pourLocation ? [{ type: 'text', text: `打設箇所: ${s.pourLocation}`, size: 'sm', color: '#3a4a5c', align: 'center', wrap: true }] : []),
     sep(),
     // 主要項目
     row('担当', drivers.join('、'), { big: true }),
-    row('車種', `${s.vehicleType || '—'}${s.truckCount ? `  ${s.truckCount}台` : ''}`),
-    row('配合', mixLine, { big: true, color: '#c0392b' }),
+    row('車種', vehicleLabelOf(s) || '—'),
   ]
-  if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
+  // 配合（複数行）。各行 code＋（特記）を表示
+  const mrows = mixRowsOf(s).filter(r => r.code || r.note)
+  if (mrows.length) {
+    mrows.forEach((r, i) => {
+      contents.push(row(i === 0 ? '配合' : '　', r.code || '—', { big: true, color: '#c0392b' }))
+      if (r.note) contents.push(row('（特記）', r.note, { color: '#c0392b' }))
+    })
+  } else {
+    contents.push(row('配合', mixLine || '—', { big: true, color: '#c0392b' }))
+    if (mixNoteLine) contents.push(row('（特記）', mixNoteLine, { color: '#c0392b' }))
+  }
   contents.push(row('セメント種', String(s.cementType || '')))
-  contents.push(row('量', s.volume ? `${s.volume}m³${s.volumeUncertain ? ' ?' : ''}` : '—'))
-  contents.push(row('配置', placements.join('・')))
+  contents.push(row('数量', volumeDisplay(s) || '—'))
+  contents.push(row('荷下ろし', placements.join('・')))
+  const noteTags = asArr(s.noteTags).filter(Boolean)
+  if (noteTags.length) contents.push(row('特記', noteTags.join('・')))
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))
@@ -275,10 +352,21 @@ function shipmentBubble(s: any): any {
 
   const bubble: any = {
     type: 'bubble', size: 'mega',
+    // 地図画像をカード上部（hero）に表示。タップでGoogleマップを開く
+    ...(mapImg ? {
+      hero: {
+        type: 'image', url: mapImg, size: 'full', aspectRatio: '16:10', aspectMode: 'cover',
+        ...(mapUrl ? { action: { type: 'uri', label: 'map', uri: mapUrl } } : {}),
+      },
+    } : {}),
     body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px', contents },
     footer: {
       type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px',
       contents: [
+        // Googleマップリンクの上にPDFを開くボタン（タップで新規ウィンドウ）
+        ...((s.hasPdf && appBaseUrl())
+          ? [{ type: 'button', style: 'secondary', height: 'sm', action: { type: 'uri', label: '📄 PDFを開く', uri: `${appBaseUrl()}/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1` } }]
+          : []),
         mapUrl
           ? { type: 'button', style: 'primary', color: '#1a4d8f', height: 'sm', action: { type: 'uri', label: '📍 Googleマップで開く', uri: mapUrl } }
           : { type: 'text', text: '住所未登録', size: 'sm', color: '#9aa7b5', align: 'center' },
@@ -294,33 +382,33 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const want = String(lineUserId || '').trim()
   const today = todayJST()
 
-  // 1) 従業員（ドライバー）として照合
-  const empIds = (await redis.smembers('employees')) || []
-  let employee: any = null
-  for (const eid of empIds) {
-    const e = await redis.hgetall<Record<string, any>>(`employee:${eid}`)
-    const have = String((e && e.lineId) || '').trim()
-    if (e && have && have === want) { employee = e; break }
+  // 高速化: ID一覧と各レコードを直列awaitせず、pipelineで一括取得（往復回数を大幅削減）
+  const mget = async (key: string, prefix: string): Promise<any[]> => {
+    const ids = (await redis.smembers(key)) || []
+    if (!ids.length) return []
+    const p = redis.pipeline()
+    ids.forEach((id: string) => p.hgetall(`${prefix}${id}`))
+    return (await p.exec<Record<string, any>[]>()) || []
   }
+  // 従業員・顧客・出荷を並列に取得
+  const [employees, customers, allShips] = await Promise.all([
+    mget('employees', 'employee:'),
+    mget('customers', 'customer:'),
+    mget('shipments', 'shipment:'),
+  ])
 
+  // 1) 従業員（ドライバー）として照合
+  const employee = employees.find((e: any) => e && String(e.lineId || '').trim() === want) || null
   // 2) 顧客（業者）として照合
-  const custIds = (await redis.smembers('customers')) || []
-  let customer: any = null
-  for (const cid of custIds) {
-    const c = await redis.hgetall<Record<string, any>>(`customer:${cid}`)
-    const have = String((c && c.lineUserId) || '').trim()
-    if (c && have && have === want) { customer = c; break }
-  }
+  const customer = customers.find((c: any) => c && String(c.lineUserId || '').trim() === want) || null
 
   if (!employee && !customer) {
     return [{ type: 'text', text: `登録情報が見つかりませんでした。\n\n受信ID:\n${want}\n\n従業員管理の「LINE ID」または顧客管理の「LINEユーザーID」に、このIDを登録してください。` }]
   }
 
   // 本日の出荷を抽出（従業員＝担当に含まれる出荷／顧客＝その業者の出荷）
-  const shipIds = (await redis.smembers('shipments')) || []
   const ships: any[] = []
-  for (const sid of shipIds) {
-    const s = await redis.hgetall<Record<string, any>>(`shipment:${sid}`)
+  for (const s of allShips) {
     if (!s) continue
     if (String(s.date) !== today) continue
     let hit = false
@@ -342,7 +430,7 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const ft = (s: any) => Array.isArray(s.times) && s.times.length ? String(s.times[0]?.text ?? s.times[0] ?? '') : ''
   ships.sort((a, b) => ft(a).localeCompare(ft(b)))
 
-  // reply上限は5メッセージ。伝票カード(carousel)で1枠、残りで地図画像を別メッセージに。
+  // 地図画像は各カード内（hero）に内包するため、テキスト＋カード(carousel)の2メッセージで完結
   const target = ships.slice(0, 12)
   const bubbles = target.map(shipmentBubble)
   const messages: any[] = [
@@ -353,12 +441,6 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
       contents: bubbles.length === 1 ? bubbles[0] : { type: 'carousel', contents: bubbles },
     },
   ]
-  // 地図画像を別リプライで（残り枠ぶん。reply合計5まで）
-  for (const s of target) {
-    if (messages.length >= 5) break
-    const img = staticMapUrl(s)
-    if (img) messages.push({ type: 'image', originalContentUrl: img, previewImageUrl: img })
-  }
   return messages
 }
 
@@ -377,39 +459,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!token) return res.status(400).json({ error: 'LINEチャネルアクセストークンが未設定です（設定画面で登録してください）' })
     const s = await redis.hgetall<Record<string, any>>(`shipment:${shipmentId}`)
     if (!s || Object.keys(s).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
-    // 「現場」返信と同じ：伝票カード＋矢印付き地図画像
+    // 伝票カード（地図画像をカード内に内包＝1メッセージ）
     const pushMsgs: any[] = [
       { type: 'flex', altText: `出荷予定 ${s.siteName || s.companyName || ''}`, contents: shipmentBubble(s) },
     ]
-    const mapImg = staticMapUrl(s)
-    if (mapImg) pushMsgs.push({ type: 'image', originalContentUrl: mapImg, previewImageUrl: mapImg })
 
     const known = (await redis.hgetall<Record<string, string>>(USERS_KEY)) || {}
-    const rs: Array<{ to: string; ok: boolean; error?: string }> = []
-    for (const to of ids) {
+    // 高速化: ①宛先を並列送信 ②まずpushを送り、失敗時だけprofileで原因診断（成功ケースは1往復で完結）
+    const sendOne = async (to: string): Promise<{ to: string; ok: boolean; error?: string }> => {
       try {
-        const prof = await fetch(`https://api.line.me/v2/bot/profile/${to}`, { headers: { Authorization: `Bearer ${token}` } })
-        if (!prof.ok) {
-          const inList = Object.prototype.hasOwnProperty.call(known, to)
-          const hint = inList ? 'このIDは登録済みですが現在送信できません（ブロック/退会の可能性）。' : 'このIDはこの公式アカウントの友だちとして取得されていません。'
-          rs.push({ to, ok: false, error: `友だち未確認(HTTP${prof.status}) ${hint}` })
-          continue
-        }
         const r = await fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ to, messages: pushMsgs }),
         })
-        if (r.ok) rs.push({ to, ok: true })
-        else {
-          const body = await r.text()
-          const reqId = r.headers.get('x-line-request-id') || ''
-          rs.push({ to, ok: false, error: `HTTP${r.status} ${body.slice(0, 300)}${reqId ? ` [req:${reqId}]` : ''}` })
-        }
+        if (r.ok) return { to, ok: true }
+        const body = await r.text()
+        const reqId = r.headers.get('x-line-request-id') || ''
+        // 失敗時のみ：友だち状態を確認して原因を補足（成功ケースには影響しない）
+        let hint = ''
+        try {
+          const prof = await fetch(`https://api.line.me/v2/bot/profile/${to}`, { headers: { Authorization: `Bearer ${token}` } })
+          if (!prof.ok) {
+            const inList = Object.prototype.hasOwnProperty.call(known, to)
+            hint = ' ' + (inList ? 'このIDは登録済みですが現在送信できません（ブロック/退会の可能性）。' : 'このIDはこの公式アカウントの友だちとして取得されていません。')
+          }
+        } catch { /* 診断失敗は無視 */ }
+        return { to, ok: false, error: `HTTP${r.status} ${body.slice(0, 300)}${reqId ? ` [req:${reqId}]` : ''}${hint}` }
       } catch (e) {
-        rs.push({ to, ok: false, error: e instanceof Error ? e.message : String(e) })
+        return { to, ok: false, error: e instanceof Error ? e.message : String(e) }
       }
     }
+    const rs = await Promise.all(ids.map(sendOne))
     return res.status(200).json({ sent: rs.filter(r => r.ok).length, total: ids.length, results: rs })
   }
 
@@ -502,17 +583,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (ev.type === 'unfollow') {
           await redis.hdel(USERS_KEY, userId)
         } else if (ev.type === 'follow' || ev.type === 'message') {
-          let name = String(userId)
-          if (token) { const p = await fetchProfile(userId, token); if (p) name = p }
-          await redis.hset(USERS_KEY, { [userId]: name })
+          // キーフレーズ「現場情報取得」→ 返信を最優先（プロフィール更新で返信を待たせない）
+          const isGenba = ev.type === 'message' && ev?.message?.type === 'text'
+            && String(ev.message.text || '').trim() === '現場情報取得'
+          if (isGenba) {
+            const messages = await buildGenbaReply(userId)
+            await replyMessages(ev.replyToken, messages, token)
+          }
 
-          // キーフレーズ「現場」→ そのユーザーに紐づく本日の出荷情報を返信
-          if (ev.type === 'message' && ev?.message?.type === 'text') {
-            const text = String(ev.message.text || '').trim()
-            if (text === '現場' || text === 'げんば' || text === 'ゲンバ') {
-              const messages = await buildGenbaReply(userId)
-              await replyMessages(ev.replyToken, messages, token)
-            }
+          // ユーザー名の登録/更新（返信の後に実行＝返信遅延に影響させない）
+          {
+            let name = String(userId)
+            if (token) { const p = await fetchProfile(userId, token); if (p) name = p }
+            await redis.hset(USERS_KEY, { [userId]: name })
           }
         }
       }

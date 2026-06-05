@@ -44,11 +44,18 @@ input, textarea, select { font-family: inherit; }
 .denpyo .inline { display:flex; align-items:baseline; gap:4px; }
 .denpyo .num { width:54px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
 .denpyo .unit { font-size:15px; }
-.denpyo .m3 input[type="number"] { width:70px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
+.denpyo .m3 input { width:70px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
 .denpyo .qmark { display:none; margin-left:6px; font-weight:700; font-size:34px; line-height:0; vertical-align:-2px; color:#222; }
 .denpyo .qmark.on { display:inline; }
 .denpyo .qtoggle { position:absolute; bottom:4px; right:6px; font-size:11px; font-family:'Noto Sans JP',sans-serif; color:#555; display:flex; align-items:center; gap:2px; cursor:pointer; user-select:none; }
 .denpyo .qtoggle input { margin:0; }
+/* m³値の下：丸み四角チェック（中央）＋「？を付ける」枠（右） */
+.denpyo .qrow { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:6px; font-family:'Noto Sans JP',sans-serif; }
+.denpyo .qlabel { border:1px solid #999; border-radius:4px; padding:2px 8px; font-size:12px; color:#555; cursor:pointer; user-select:none; white-space:nowrap; margin-left:8px; font-family:'Noto Sans JP',sans-serif; align-self:center; }
+.denpyo .qlabel.on { border-color:#c81e1e; background:#fdecec; color:#c81e1e; font-weight:700; }
+/* 車種の数量入力（チップ横） */
+.denpyo .vehqty { width:2.2em; text-align:center; border:none; border-bottom:1.5px solid #111; font-size:16px; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
+.denpyo .vehqty::placeholder { color:#bbb; font-size:11px; }
 .denpyo .haigou-head { display:flex; align-items:baseline; gap:12px; }
 .denpyo .haigou-head .lbl { margin-bottom:0; flex:0 0 auto; }
 .denpyo .tokki { flex:1 1 auto; width:auto; min-width:0; font-size:10px; color:#c81e1e; font-weight:700; }
@@ -56,7 +63,7 @@ input, textarea, select { font-family: inherit; }
 .denpyo .haigou { width:100%; font-size:90px; font-weight:700; margin-top:6px; line-height:1.1; text-align:center; }
 /* 車種チップ大きく・m³大きく */
 .denpyo .chips.big .chip { font-size:20px; padding:5px 14px; }
-.denpyo .m3 input[type="number"] { font-size:30px; width:78px; max-width:55%; min-width:0; }
+.denpyo .m3 input { font-size:30px; width:78px; max-width:55%; min-width:0; }
 .denpyo .m3 .unit { font-size:20px; }
 .denpyo .m3 .inline { max-width:100%; min-width:0; }
 /* 配合：2桁×3フィールド（各数値の上に小さく特記事項） */
@@ -68,6 +75,21 @@ input, textarea, select { font-family: inherit; }
 /* 特記は中央のみ。左右はレイアウト維持のため同じ高さの空きを確保 */
 .denpyo .haigou3 .hgnote-spacer { width:3.4em; height:calc(10px + 2px); }
 .denpyo .haigou3 .hg { width:1.7em; text-align:center; border:none; border-bottom:3px solid #111; font-size:44px; font-weight:700; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
+/* 配合：常にcompactサイズ。1行/2行で配合エリアの高さを完全に揃えるため mixwrap を固定高にする */
+.denpyo .haigou3.compact { margin-top:0; gap:4px; }
+.denpyo .haigou3.compact .hg { font-size:22px; border-bottom-width:2px; }
+.denpyo .haigou3.compact .hgsep { font-size:18px; }
+.denpyo .haigou3.compact .hgnote { font-size:9px; width:3em; }
+.denpyo .haigou3.compact .hgnote-spacer { width:3em; height:calc(9px + 1px); }
+/* 各行：中央揃え。×ボタンは行末 */
+.denpyo .mixrow { display:flex; align-items:flex-end; justify-content:center; gap:4px; position:relative; }
+/* 固定高（2行ぶん）。中央に配置。縦を少し広げる */
+.denpyo .mixwrap { display:flex; flex-direction:column; align-items:stretch; justify-content:center; height:118px; gap:6px; overflow:hidden; }
+.denpyo .mixwrap.two { gap:8px; }
+/* 1行のときは数字をできるだけ大きく（固定高96pxに収まる範囲で拡大）・中央揃え */
+.denpyo .mixwrap.one .haigou3 .hg { font-size:48px; }
+.denpyo .mixwrap.one .haigou3 .hgsep { font-size:40px; }
+.denpyo .mixwrap.one .addrow { align-self:center; }
 /* 地図キャンバス（モバイルは低め＝全画面化を避ける） */
 .sitemap-canvas { width:100%; height:560px; border-radius:8px; background:#e8eaed; }
 @media (max-width:760px){ .sitemap-canvas { height:300px; } }
@@ -96,6 +118,8 @@ input, textarea, select { font-family: inherit; }
 .schedule th, .schedule td { border:1px solid #111; padding:2px 4px; vertical-align:middle; overflow:hidden; }
 /* 見出し行（業者名・商社など）は文字間に余白を設けて可読性を高める */
 .schedule thead th, .schedule thead th > div { letter-spacing:0.35em !important; }
+/* 狭い列の見出しは字間を詰めて見切れを防ぐ（打設箇所など） */
+.schedule thead th.th-tight, .schedule thead th.th-tight > div { letter-spacing:0.04em !important; }
 .schedule th { background:#fafafa; color:#111; font-weight:700; font-size:clamp(11px,1.5cqi,16px); text-align:center; white-space:nowrap; padding:8px 4px; line-height:1.8; }
 .schedule td { height:36px; }
 .schedule .sc-in { width:100%; border:none; outline:none; background:transparent; font-size:clamp(12px,1.7cqi,18px); color:#111; font-weight:700; font-family:inherit; padding:2px 2px; }
@@ -110,6 +134,12 @@ input, textarea, select { font-family: inherit; }
 .schedule .sc-in.xl { font-size:clamp(18px,3.1cqi,40px); }
 .schedule .sc-in.changed { color:#c81e1e; }
 .schedule .sc-in.imp { color:#c81e1e; font-weight:700; }
+/* 配合（桁ごと赤）・備考（行ごと赤）はspanで分割描画。sc-in同等のサイズ・自動リサイズ対象 */
+.schedule .sc-mixcode { display:block; width:100%; color:#111; font-weight:700; font-family:inherit; padding:2px 2px; font-size:clamp(12px,1.7cqi,18px); }
+.schedule .sc-mixcode.big { font-size:clamp(14px,2.1cqi,24px); }
+.schedule .sc-mixcode.big.center { font-size:clamp(15px,2.4cqi,30px); }
+.schedule .sc-mixcode.center { text-align:center; }
+.schedule .sc-notes { display:block; width:100%; color:#111; font-weight:400; font-family:inherit; padding:2px 2px; font-size:clamp(12px,1.7cqi,18px); white-space:normal; word-break:break-word; }
 .schedule textarea.sc-ta { resize:none; line-height:1.3; overflow:hidden; white-space:pre-wrap; display:block; }
 /* 担当：1行=2人。各行を独立要素にして行ごとに自動リサイズ */
 .schedule .sc-drivers { display:flex; flex-direction:column; width:100%; }
@@ -119,6 +149,7 @@ input, textarea, select { font-family: inherit; }
 .schedule td.sc-nowrap .sc-in { white-space:nowrap; text-overflow:clip; }
 .schedule td.sc-nowrap textarea.sc-ta { white-space:nowrap; }
 /* 配合の特記事項を配合の3フィールド（数字3つ）に合わせて3分割表示 */
+.schedule .sc-mixnote-line { display:block; width:100%; font-size:clamp(9px,1.1cqi,13px); color:#c81e1e; font-weight:700; text-align:center; line-height:1.25; white-space:nowrap; }
 .schedule .sc-mixnotes { display:flex; width:100%; }
 .schedule .sc-mixnotes span { flex:1; text-align:center; font-size:clamp(9px,0.85vw,13px); color:#c81e1e; font-weight:700; min-width:0; white-space:nowrap; }
 
@@ -156,10 +187,10 @@ input, textarea, select { font-family: inherit; }
 .sc-card .sc-site .sc-in { font-size:24px; font-weight:700; text-align:center; }
 /* 車種：中央に大きく、台数は値の右側・縦中央にバッジ的に配置 */
 .sc-card .sc-vehbox { position:relative; }
-/* 7tは中央のまま固定。台数は中央から値の右へ少しだけ離して絶対配置 */
-.sc-card .sc-veh { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-width:0; }
-.sc-card .sc-veh .sc-in { width:auto; flex:0 1 auto; min-width:0; text-align:center; }
-.sc-card .sc-truck { position:absolute; left:calc(50% + 1.3em); top:50%; transform:translateY(-50%); font-size:14px; font-weight:700; color:#3a4a5c; white-space:nowrap; }
+/* 車種は1行（横幅に合わせ自動縮小）／台数はその下の行に配置。ブロックの高さ・位置は不変 */
+.sc-card .sc-veh { display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; min-width:0; line-height:1.05; }
+.sc-card .sc-veh .sc-in { width:100%; flex:none; min-width:0; text-align:center; font-size:20px; line-height:1.05; }
+.sc-card .sc-truck { font-size:13px; font-weight:700; color:#3a4a5c; white-space:nowrap; line-height:1.05; }
 /* 量：数字・記号を大きく */
 .sc-card .sc-volbox .sc-in { font-size:28px; font-weight:700; }
 /* 担当ブロック：1人=特大、2人以上=各行2名を均等幅で並べる（縮小せず同じ大きさ） */
@@ -187,3 +218,72 @@ input, textarea, select { font-family: inherit; }
 }
 .schedule-popup-root .schedule.popup-view { box-sizing:border-box; max-width:100%; }
 .schedule-popup-root .schedule.popup-view table { table-layout:fixed; }
+
+/* PDF出力（印刷）: 用紙はA4横。23行を1ページに収め、画像の帳票のように罫線付きで出す */
+@media print {
+  @page { size: A4 landscape; margin: 4mm; }
+  html, body { background:#fff !important; }
+  .no-print { display:none !important; }
+  /* 別ウィンドウは表だけを印刷（FitToWidthの縮小スケールを解除して実寸で） */
+  .schedule-popup-root, .schedule-popup-root .schedule.popup-view { padding:0 !important; max-width:none !important; overflow:visible !important; }
+  .schedule.popup-view { transform:none !important; }
+  .schedule.popup-view table { width:100% !important; min-width:0 !important; table-layout:fixed; }
+  /* 1ページ(横A4 ≒ 高さ190mm)に収まるよう行を圧縮（ヘッダー＋23行） */
+  .schedule.popup-view td, .schedule.popup-view th { padding:1px 3px !important; line-height:1.15 !important; border:1px solid #111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .schedule.popup-view td { height:7.3mm !important; }
+  .schedule.popup-view thead th, .schedule.popup-view thead th > div { letter-spacing:0.04em !important; font-size:11px !important; padding:2px 3px !important; line-height:1.2 !important; }
+  .schedule.popup-view .sc-in, .schedule.popup-view .sc-mixcode, .schedule.popup-view .sc-notes { font-size:12px !important; line-height:1.15 !important; padding:0 1px !important; }
+  .schedule.popup-view .sc-in.big, .schedule.popup-view .sc-mixcode.big { font-size:13px !important; }
+  .schedule.popup-view .sc-in.xl { font-size:14px !important; }
+  /* 色は黒基調、変更箇所のみ赤を保持 */
+  .schedule .sc-in, .schedule .sc-mixcode, .schedule .sc-notes { color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .schedule .sc-in.changed, .schedule .sc-in.imp { color:#c81e1e !important; }
+  /* ページ分割を防ぐ */
+  .schedule.popup-view table, .schedule.popup-view tr, .schedule.popup-view td { page-break-inside:avoid; }
+}
+
+/* 生コン出荷予定表（A4横・手書き様式の帳票） */
+.seikon-sheet { max-width:1000px; margin:0 auto; }
+/* 日付は打設場所の右(=社名30%幅の右)から始める。AM・PMは右端 */
+.seikon-title { display:flex; align-items:flex-end; gap:12px; padding:4px 2px 8px; }
+.seikon-title .st-name { flex:0 0 30%; font-size:22px; font-weight:800; letter-spacing:0.12em; color:#111; }
+.seikon-title .st-date { font-size:15px; font-weight:700; color:#111; }
+.seikon-title .st-ampm { font-size:14px; font-weight:700; color:#111; border:1px solid #111; border-radius:4px; padding:1px 10px; margin-left:auto; }
+.seikon-table { width:100%; border-collapse:collapse; table-layout:fixed; font-family:'Noto Sans JP',sans-serif; border:1px solid #111; box-sizing:border-box; }
+.seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:14px; line-height:1.25; word-break:break-all; vertical-align:middle; color:#111; }
+.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:17px; }
+.seikon-table td { height:30px; }
+/* 車両は文字を5pt大きく */
+.seikon-table td.seikon-veh { font-size:19px; font-weight:700; text-align:center; }
+/* 配合は本文より8pt大きく・中央揃え */
+.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; }
+/* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
+.seikon-table td.seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; }
+/* 摘要：上=備考／下=荷下ろし・特記の2行 */
+.seikon-tekiyo > div { min-height:1.2em; }
+.seikon-tekiyo > div:first-child { border-bottom:1px dotted #bbb; padding-bottom:1px; margin-bottom:1px; }
+
+@media print {
+  /* 名前付き@pageは使わず、グローバルの @page(A4 landscape) に任せる（名前付きにすると
+     ページコンテキスト切替で強制改ページが入り、常に2ページ目が出てしまうため） */
+  html, body { margin:0 !important; height:auto !important; }
+  .popup-print-root { height:auto !important; overflow:visible !important; }
+  .seikon-wrap { padding:0 !important; height:auto !important; overflow:visible !important; }
+  /* 右端罫線が用紙端で切れないよう左右に微小インセット */
+  .seikon-sheet { max-width:none !important; padding:0 1px !important; }
+  .seikon-title { padding:0 0 2px; }
+  .seikon-title .st-name { font-size:15px; }
+  .seikon-title .st-date { font-size:12px; }
+  .seikon-title .st-ampm { font-size:12px; }
+  /* テーブル高さを用紙いっぱいに指定し、各行を均等に引き伸ばして最下部まで余白なく埋める */
+  .seikon-table { height:193mm; }
+  /* 本文はセルいっぱいに大きく、列名(th)はさらに5pt大きく */
+  .seikon-table th, .seikon-table td { font-size:14px; padding:1px 3px; line-height:1.15; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .seikon-table th { font-size:16px; }
+  .seikon-table td.seikon-veh { font-size:20px; }
+  .seikon-table td.seikon-mix { font-size:22px; }
+  .seikon-table td.seikon-phone { font-size:10px; white-space:nowrap; }
+  .seikon-table td { height:auto; }
+  .seikon-tekiyo > div { min-height:0; }
+  .seikon-table, .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
+}
