@@ -3593,13 +3593,132 @@ function DriverReportPage() {
   )
 }
 
+// 出荷の担当者だけを更新（他項目は元のまま保持してPUT）
+async function saveShipmentDrivers(shipment, newDrivers) {
+  const nd = newDrivers.map(d => ({ id: d.id, name: d.name }))
+  const key = (arr) => JSON.stringify((arr || []).map(d => ({ id: d.id || '', name: d.name })))
+  const same = key(shipment.drivers) === key(nd)
+  const prevCf = Array.isArray(shipment.changedFields) ? shipment.changedFields : []
+  const changedFields = same ? prevCf : Array.from(new Set([...prevCf, 'drivers']))
+  return api.put(`/api/shipments/${shipment.id}`, { ...shipment, drivers: nd, changedFields })
+}
+
+// 担当者を選ぶUI（チップ・最大4人）
+function DriverPicker({ value, options, onChange }) {
+  const has = (id) => value.some(d => d.id === id)
+  const toggle = (emp) => {
+    if (has(emp.id)) onChange(value.filter(d => d.id !== emp.id))
+    else if (value.length < 4) onChange([...value, { id: emp.id, name: emp.name }])
+    else alert('担当者は最大4人までです')
+  }
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {options.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
+        : options.map(emp => {
+          const on = has(emp.id)
+          return <button key={emp.id} type="button" onClick={() => toggle(emp)}
+            style={{ border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{emp.name}</button>
+        })}
+    </div>
+  )
+}
+
+// 担当者振替の本体（モーダル／別ウィンドウ共用）
+function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
+  const [sel, setSel] = useState(Array.isArray(shipment.drivers) ? shipment.drivers.map(d => ({ id: d.id || '', name: d.name })) : [])
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
+    try { const u = await saveShipmentDrivers(shipment, sel); notifyShipmentsChanged(); onSaved && onSaved(u) }
+    catch (e) { alert('エラー: ' + e.message); setSaving(false) }
+  }
+  return (
+    <>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>🔁 担当者振替</div>
+      <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（最大4人・タップで選択／解除）</div>
+      <DriverPicker value={sel} options={drivers} onChange={setSel} />
+      <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <button type="button" onClick={onClose} disabled={saving} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+        <button type="button" onClick={save} disabled={saving} style={{ flex: 1, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? '保存中…' : '保存'}</button>
+      </div>
+    </>
+  )
+}
+
+// PC用：担当者振替の別ウィンドウページ
+function DriverAssignPopupPage({ id }) {
+  const [shipment, setShipment] = useState(null)
+  const [drivers, setDrivers] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    Promise.all([api.get('/api/shipments'), api.get('/api/employees')])
+      .then(([ss, es]) => { setShipment(ss.find(x => x.id === id) || null); setDrivers(es.filter(e => e.type === 'driver')) })
+      .catch(e => console.error(e)).finally(() => setLoading(false))
+  }, [id])
+  if (loading) return <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
+  if (!shipment) return <div style={{ padding: 20, color: '#6b7a8d' }}>対象の出荷が見つかりません。</div>
+  return <div style={{ padding: 18, maxWidth: 480, margin: '0 auto' }}><DriverAssignBody shipment={shipment} drivers={drivers} onSaved={() => window.close()} onClose={() => window.close()} /></div>
+}
+
+// 配送臨時割り当て：当日の出荷を時間順に表示し、担当者を素早く振り替える
 function AssignPage() {
+  const stacked = useIsMobile(1101)   // スマホ/iPadはモーダル、PCは別ウィンドウ
+  const [date, setDate] = useState(() => localToday())   // 既定は当日
+  const [all, setAll] = useState([])
+  const [drivers, setDrivers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [assignTarget, setAssignTarget] = useState(null)
+  const load = useCallback(async () => {
+    try {
+      const [s, e] = await Promise.all([api.get('/api/shipments'), api.get('/api/employees')])
+      setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
+    } catch (err) { console.error(err) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+  useShipmentsChanged(load)   // 別ウィンドウで保存されたら再取得して反映
+
+  const rows = all.filter(s => s.date === date)
+    .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+
+  const openAssign = (s) => {
+    if (stacked) { setAssignTarget(s); return }
+    const url = `${window.location.pathname}?view=assigndriver&id=${encodeURIComponent(s.id)}&popup=1`
+    const w = window.open(url, '_blank', 'width=520,height=640,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+  const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null) }
+  const wd = (() => { const d = new Date(date); return isNaN(d.getTime()) ? '' : WD[d.getDay()] })()
+
   return (
     <div style={RPT.wrap}>
-      <h2 style={{ margin: '0 0 12px', color: '#1a2332' }}>🔁 配送臨時割り当て</h2>
-      <div style={{ color: '#6b7a8d', maxWidth: 580, lineHeight: 1.9, fontSize: 14 }}>
-        この画面の仕様を確認させてください。想定している操作・項目（例：当日の出荷一覧に対して担当ドライバーを素早く割り当て／変更する、急な代替ドライバーを割り当てる、車両の臨時手配など）を教えていただければ、それに合わせて実装します。
+      <div style={RPT.head}>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送臨時割り当て</h2>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）{stacked ? '' : '／担当者振替はPCでは別ウィンドウで開きます'}</span>
       </div>
+      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
+        : rows.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px' }}>
+                  <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
+                  <span style={{ flex: '1 1 220px', minWidth: 0 }}><b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}</span>
+                  <span style={{ flex: '1 1 160px', minWidth: 0, fontWeight: 600 }}>担当: {driversOf(s).length ? <span style={{ color: '#1a4d8f' }}>{driversOf(s).join('・')}</span> : <span style={{ color: '#c0392b' }}>未割当</span>}</span>
+                  <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔁 担当者振替</button>
+                </div>
+              ))}
+            </div>
+          )}
+      {assignTarget && (
+        <div onClick={() => setAssignTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
+            <DriverAssignBody shipment={assignTarget} drivers={drivers} onSaved={onModalSaved} onClose={() => setAssignTarget(null)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -3908,7 +4027,7 @@ function AppInner() {
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
   // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
-  const LOCKED_TABS = ['assign', 'shipreport', 'driverreport']
+  const LOCKED_TABS = ['shipreport', 'driverreport']
   const [unlocked, setUnlocked] = useState({})
 
   // 別ウィンドウの自動更新は SchedulePage 内で差分更新（再取得して変更分のみ反映）する。
@@ -3921,6 +4040,11 @@ function AppInner() {
   )
 
   if (!user && !isBoard) return <LoginPage />
+
+  // PC用：担当者振替の別ウィンドウ（?view=assigndriver&id=...&popup=1）
+  if (isPopup && view === 'assigndriver') {
+    return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}><DriverAssignPopupPage id={params.get('id') || ''} /></div>
+  }
 
   let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
