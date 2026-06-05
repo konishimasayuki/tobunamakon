@@ -410,6 +410,7 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const ships: any[] = []
   for (const s of allShips) {
     if (!s) continue
+    if (s.cancelled === true || s.cancelled === 'true' || s.cancelled === 1 || s.cancelled === '1') continue   // キャンセル済みは除外
     if (String(s.date) !== today) continue
     let hit = false
     if (employee) {

@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 一覧取得
+  // 一覧取得（既定はキャンセル済みを除外。?cancelled=1 でキャンセル済みのみ）
   if (req.method === 'GET' && !hasId) {
     try {
       const ids = await redis.smembers('shipments')
@@ -57,10 +57,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const p = redis.pipeline()
       ids.forEach(sid => p.hgetall(`shipment:${sid}`))
       const rows = await p.exec<Record<string, any>[]>()
-      const shipments = rows.filter(s => s && Object.keys(s).length > 0)
+      let shipments = rows.filter(s => s && Object.keys(s).length > 0)
+      const showCancelled = req.query.cancelled === '1' || req.query.cancelled === 'true'
+      shipments = shipments.filter(s => showCancelled ? isCancelled(s) : !isCancelled(s))
       const ft = (s: any) => Array.isArray(s.times) ? (s.times[0] || '') : (s.time || '')
       shipments.sort((a, b) => (String(a.date) + ft(a)).localeCompare(String(b.date) + ft(b)))
       return res.status(200).json(shipments)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
+
+  // 伝票キャンセル/復元（ログイン必須）。?cancel=1 / body {cancelled:bool}。キャンセル以外の項目は保持
+  if (req.method === 'PUT' && hasId && (req.query.cancel === '1' || req.query.cancel === 'true')) {
+    try {
+      const existing = await redis.hgetall(`shipment:${id}`)
+      if (!existing || Object.keys(existing).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
+      const now = new Date().toISOString()
+      const cancelled = !!((req.body as any)?.cancelled)
+      const updated = { ...existing, cancelled, cancelledAt: cancelled ? now : '', updatedAt: now }
+      await redis.hset(`shipment:${id}`, updated)
+      return res.status(200).json(updated)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(500).json({ error: msg })
@@ -109,6 +127,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         mapArrows: Array.isArray(mapArrows) ? mapArrows : [],
         hasPdf: pdf.hasPdf,
         pdfName: pdf.pdfName,
+        cancelled: false,
+        cancelledAt: '',
         changedFields: [],
         createdAt: now, updatedAt: now,
       }
@@ -209,6 +229,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// キャンセル済み判定（Redisの真偽値表現ゆれに対応）
+function isCancelled(s: any): boolean {
+  return !!s && (s.cancelled === true || s.cancelled === 'true' || s.cancelled === 1 || s.cancelled === '1')
 }
 
 // PDF（dataURL もしくは素のbase64）を別キーに保存する。空文字なら削除。undefined は呼ばない想定。

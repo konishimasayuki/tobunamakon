@@ -3658,6 +3658,69 @@ function DriverAssignPopupPage({ id }) {
   return <div style={{ padding: 18, maxWidth: 480, margin: '0 auto' }}><DriverAssignBody shipment={shipment} drivers={drivers} onSaved={() => window.close()} onClose={() => window.close()} /></div>
 }
 
+// 伝票キャンセル：伝票を選んでキャンセルすると全リストから非表示になり、ここに保管される
+function CancelPage() {
+  const [active, setActive] = useState([])
+  const [cancelled, setCancelled] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [busy, setBusy] = useState(null)
+  const load = useCallback(async () => {
+    try {
+      const [a, c] = await Promise.all([api.get('/api/shipments'), api.get('/api/shipments?cancelled=1')])
+      setActive(Array.isArray(a) ? a : []); setCancelled(Array.isArray(c) ? c : [])
+    } catch (e) { console.error(e) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+  useShipmentsChanged(load)
+
+  const setCancel = async (s, val) => {
+    if (val && !window.confirm(`この伝票をキャンセルしますか？\n\n${s.date}　${firstTimeOf(s) || ''}　${s.companyName}\n${s.siteName || ''}\n\nキャンセルすると全リストから非表示になります（このページに保管されます）。`)) return
+    setBusy(s.id)
+    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: val }); notifyShipmentsChanged(); await load() }
+    catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
+  }
+
+  const q = search.trim().toLowerCase()
+  const matchS = (s) => !q || [s.date, s.companyName, s.tradingCompany, s.siteName, firstTimeOf(s)].some(v => String(v || '').toLowerCase().includes(q))
+  const byDateDesc = (arr) => [...arr].sort((a, b) => String(b.date + (firstTimeOf(b) || '')).localeCompare(String(a.date + (firstTimeOf(a) || ''))))
+  const activeRows = byDateDesc(active.filter(matchS))
+  const cancelledRows = byDateDesc(cancelled.filter(matchS))
+
+  const rowStyle = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '9px 14px' }
+  const cancelBtn = { flex: '0 0 auto', border: '1.5px solid #c0392b', background: '#c0392b', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
+  const restoreBtn = { flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#fff', color: '#1a8f5a', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
+  const renderRow = (s, isCancel) => (
+    <div key={s.id} style={{ ...rowStyle, opacity: isCancel ? 0.85 : 1 }}>
+      <span style={{ flex: '0 0 auto', fontSize: 13, color: '#3a4a5c', minWidth: 110 }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b></span>
+      <span style={{ flex: '1 1 220px', minWidth: 0 }}><b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}</span>
+      {isCancel
+        ? <button type="button" disabled={busy === s.id} onClick={() => setCancel(s, false)} style={restoreBtn}>↩ 元に戻す</button>
+        : <button type="button" disabled={busy === s.id} onClick={() => setCancel(s, true)} style={cancelBtn}>✕ キャンセル</button>}
+    </div>
+  )
+
+  return (
+    <div style={RPT.wrap}>
+      <h2 style={{ margin: '0 0 12px', color: '#1a2332' }}>🗑️ 伝票キャンセル</h2>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 日付・業者名・現場名で絞り込み"
+        style={{ width: '100%', maxWidth: 420, padding: '9px 12px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 14 }} />
+      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div> : (
+        <>
+          <h3 style={{ fontSize: 14, color: '#3a4a5c', margin: '0 0 8px' }}>出荷一覧（キャンセルする伝票を選択）<span style={{ fontWeight: 400, color: '#9aa7b5' }}> {activeRows.length}件</span></h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {activeRows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>該当する伝票はありません</div> : activeRows.map(s => renderRow(s, false))}
+          </div>
+          <h3 style={{ fontSize: 14, color: '#3a4a5c', margin: '24px 0 8px' }}>キャンセル済み伝票（保管）<span style={{ fontWeight: 400, color: '#9aa7b5' }}> {cancelledRows.length}件</span></h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {cancelledRows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>キャンセル済みの伝票はありません</div> : cancelledRows.map(s => renderRow(s, true))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // 配送臨時割り当て：当日(既定)の出荷を時間順に表示し、担当者を素早く振り替える
 // isPopup: 別ウィンドウ（ログイン不要で誰でも振替可能）
 function AssignPage({ isPopup }) {
@@ -3887,8 +3950,7 @@ const TABS = [
   { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
   { id: 'seikon', label: '生コン出荷予定表出力', icon: '📝' },
   { id: 'assign', label: '配送臨時割り当て', icon: '🔁' },
-  { id: 'shipreport', label: '出荷日報', icon: '📑' },
-  { id: 'driverreport', label: '運行日報', icon: '🚚' },
+  { id: 'cancel', label: '伝票キャンセル', icon: '🗑️' },
   { id: 'settings', label: '設定', icon: '⚙️' },
   { id: 'customers', label: '顧客管理', icon: '👥' },
   { id: 'employees', label: '従業員管理', icon: '👷' },
@@ -4068,6 +4130,7 @@ function AppInner() {
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />
+    : activeTab === 'cancel' ? <CancelPage />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
