@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 
 // ============================================================
 // 定数
@@ -991,45 +992,64 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
 }
 
 // カナ（ひらがな/カタカナ）でも絞り込めるオートコンプリート入力（業者名・商社名用）
+// 候補リストは画面端の overflow:hidden で隠れないよう、ポータルで最前面(fixed)に描画する
 function KanaCombo({ value, onChange, onPick, options, placeholder, className = 'f', style, required }) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(-1)
-  const wrapRef = useRef(null)
-  // ▼ボタンで開いたときは全件表示。入力中は絞り込み
-  const [showAll, setShowAll] = useState(false)
+  const [showAll, setShowAll] = useState(false)   // ▼で開いたら全件、入力中は絞り込み
+  const [rect, setRect] = useState(null)          // 入力欄の画面座標（ポータル位置）
+  const inputRef = useRef(null)
+  const dropRef = useRef(null)
   const q = kanaToHira(value)
   const filtered = ((value && !showAll) ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 200)
+
+  const updateRect = () => { const el = inputRef.current; if (el) { const r = el.getBoundingClientRect(); setRect({ left: r.left, top: r.bottom, width: r.width }) } }
+  const openMenu = (all) => { setShowAll(!!all); updateRect(); setOpen(true) }
+  const close = () => { setOpen(false); setShowAll(false); setHi(-1) }
+  const pick = (o) => { onPick(o); close() }
+
   useEffect(() => {
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setShowAll(false) } }
+    if (!open) return
+    updateRect()
+    const on = () => updateRect()
+    const onDoc = (e) => {
+      const t = e.target
+      if (inputRef.current && inputRef.current.contains(t)) return
+      if (dropRef.current && dropRef.current.contains(t)) return
+      close()
+    }
+    window.addEventListener('scroll', on, true)
+    window.addEventListener('resize', on)
     document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-  const pick = (o) => { onPick(o); setOpen(false); setShowAll(false); setHi(-1) }
+    return () => { window.removeEventListener('scroll', on, true); window.removeEventListener('resize', on); document.removeEventListener('mousedown', onDoc) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   return (
-    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
-      <input className={className} style={style} value={value} placeholder={placeholder} required={required}
-        onChange={e => { onChange(e); setOpen(true); setShowAll(false); setHi(-1) }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => { setOpen(false); setShowAll(false) }, 150)}
+    <div style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
+      <input ref={inputRef} className={className} style={style} value={value} placeholder={placeholder} required={required}
+        onChange={e => { onChange(e); openMenu(false) }}
+        onFocus={() => openMenu(false)}
+        onBlur={() => setTimeout(close, 150)}
         onKeyDown={e => {
-          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(h => Math.min(filtered.length - 1, h + 1)) }
+          if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) openMenu(false); setHi(h => Math.min(filtered.length - 1, h + 1)) }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(0, h - 1)) }
           else if (e.key === 'Enter' && open && hi >= 0 && filtered[hi]) { e.preventDefault(); e.stopPropagation(); pick(filtered[hi]) }
-          else if (e.key === 'Escape') { setOpen(false); setShowAll(false) }
+          else if (e.key === 'Escape') { close() }
         }} />
-      {/* プルダウンを開く▼ボタン（全件表示） */}
       <button type="button" tabIndex={-1} title="一覧から選択"
-        onMouseDown={(e) => { e.preventDefault(); setOpen(o => !o); setShowAll(true); setHi(-1) }}
+        onMouseDown={(e) => { e.preventDefault(); open ? close() : openMenu(true) }}
         style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 12, padding: '0 4px', alignSelf: 'center' }}>▼</button>
-      {open && filtered.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.15)', maxHeight: 260, overflowY: 'auto' }}>
+      {open && filtered.length > 0 && rect && createPortal(
+        <div ref={dropRef} style={{ position: 'fixed', left: rect.left, top: rect.top, width: Math.max(rect.width, 180), zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 280, overflowY: 'auto' }}>
           {filtered.map((o, i) => (
             <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => { e.preventDefault(); pick(o) }} onMouseEnter={() => setHi(i)}
-              style={{ padding: '7px 10px', fontSize: 14, cursor: 'pointer', background: i === hi ? '#eef5ff' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111' }}>
+              style={{ padding: '8px 10px', fontSize: 14, cursor: 'pointer', background: i === hi ? '#eef5ff' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111' }}>
               {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
