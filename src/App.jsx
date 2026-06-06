@@ -3549,6 +3549,8 @@ function SeikonOutputPage({ isPopup }) {
 
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
+  // 帳票タイトル用の日付（曜日なし・スペース区切り）。例: 令和　8年　6月　6日
+  const titleDate = isNaN(d.getTime()) ? '' : `令和　${d.getFullYear() - 2018}年　${d.getMonth() + 1}月　${d.getDate()}日`
 
   // 印刷：別ウィンドウ（サイドバー無し）で開き、読み込み後に自動で印刷ダイアログ（A4縦）
   const openPrint = () => {
@@ -3642,7 +3644,7 @@ function SeikonOutputPage({ isPopup }) {
 
   const ROWS = 23
   const blanks = Math.max(0, ROWS - lineRows.length)
-  const cols = ['業者名', '現場名', '打設', '車両', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
+  const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
   return (
@@ -3660,11 +3662,11 @@ function SeikonOutputPage({ isPopup }) {
       <div className="seikon-sheet">
         <div className="seikon-title">
           <span className="st-name">生コン出荷予定表</span>
-          <span className="st-date">{reiwa}</span>
+          <span className="st-date">{titleDate}</span>
           <span className="st-ampm">
             <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
           </span>
-          <span className="st-test">試験　現場:{testGen}件　工場:{testKo}件</span>
+          <span className="st-test"><span className="st-test-label">試験</span>　現場：{testGen}件　工場：{testKo}件</span>
         </div>
         <table className="seikon-table">
           <colgroup>

@@ -273,8 +273,9 @@ input, textarea, select { font-family: inherit; }
 .seikon-title { display:flex; align-items:flex-end; gap:12px; padding:4px 2px 8px; }
 .seikon-title .st-name { flex:0 0 30%; font-size:22px; font-weight:800; letter-spacing:0.12em; color:#111; }
 .seikon-title .st-date { font-size:15px; font-weight:700; color:#111; }
-.seikon-title .st-ampm { font-size:14px; font-weight:700; color:#111; border:1px solid #111; border-radius:4px; padding:1px 10px; margin-left:auto; }
-.seikon-title .st-test { font-size:13px; font-weight:700; color:#111; border:1px solid #111; border-radius:4px; padding:1px 10px; margin-left:8px; white-space:nowrap; }
+.seikon-title .st-ampm { font-size:14px; font-weight:700; color:#111; margin-left:auto; white-space:nowrap; }
+.seikon-title .st-test { font-size:13px; font-weight:700; color:#111; margin-left:14px; white-space:nowrap; }
+.seikon-title .st-test-label { border:1px solid #111; border-radius:4px; padding:1px 8px; }
 .seikon-table { width:100%; border-collapse:collapse; table-layout:fixed; font-family:'Noto Sans JP',sans-serif; border:1px solid #111; box-sizing:border-box; }
 .seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:14px; line-height:1.25; word-break:break-all; vertical-align:middle; color:#111; }
 .seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:16px; overflow:hidden; }
@@ -304,7 +305,8 @@ input, textarea, select { font-family: inherit; }
   .seikon-title .st-name { font-size:15px; }
   .seikon-title .st-date { font-size:12px; }
   .seikon-title .st-ampm { font-size:12px; }
-  .seikon-title .st-test { font-size:11px; padding:1px 6px; }
+  .seikon-title .st-test { font-size:11px; }
+  .seikon-title .st-test-label { padding:1px 6px; }
   /* テーブル高さを用紙の印字領域いっぱい（210mm - 上下4mm余白 - 見出し行ぶん）に指定し、
      各行を均等に引き伸ばして最下部まで余白なく埋める。4mm余白ぶん減らして1ページに収める */
   .seikon-table { height:190mm; }
