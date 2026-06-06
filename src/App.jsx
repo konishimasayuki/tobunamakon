@@ -1852,8 +1852,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <div className="band">
               <div className="cell" style={{ flex: '0 0 17%' }}>
                 <div className="lbl">受 注 日</div>
-                <div className="readonly-date">{String(form.orderDate || '').replace(/-/g, '/')}</div>
-                <div className="ro-note">作成日（変更不可）</div>
+                <input className="f" type="date" value={form.orderDate} onChange={set('orderDate')} />
               </div>
               <div className="cell" style={{ flex: '0 0 19%' }}>
                 <div className="lbl">日 付</div>

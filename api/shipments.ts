@@ -164,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...existing,
         id,
         date,
-        orderDate: (existing as any).orderDate || orderDate || date,   // 受注日は作成時のまま保持（変更不可）
+        orderDate: orderDate || (existing as any).orderDate || date,   // 受注日（編集可。送られた値を優先）
         companyId: companyId || '', companyName,
         tradingCompany: tradingCompany || '',
         times: Array.isArray(times) ? times : [],
