@@ -2126,25 +2126,6 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 })()}
               </div>
             </div>
-
-            {/* 7段: 担当ドライバー（上限なし・横幅いっぱい） */}
-            <div className="band">
-              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 3 }}>
-                  {form.drivers.map((d, i) => (
-                    <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
-                      {d.name}
-                      <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-                    </span>
-                  ))}
-                  <select className="f" value="" onChange={addDriver} style={{ width: 'auto', minWidth: 150, border: '1px solid #cdd5e0', borderRadius: 5, padding: '3px 6px' }}>
-                    <option value="">＋ ドライバーを追加</option>
-                    {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-              </div>
-            </div>
           </div>
           </FitToWidth>
           <div style={{ flex: stacked ? '0 0 auto' : '1 1 480px', width: stacked ? '100%' : undefined, minWidth: 0, maxWidth: stacked ? undefined : 640 }}>
