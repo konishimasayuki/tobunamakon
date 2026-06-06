@@ -3599,21 +3599,13 @@ function SeikonOutputPage({ isPopup }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  // 1行を描画。分割行（!primary）は配合・数量のみ（その他はコピーしない）
-  const renderRow = (r, key) => {
-    const s = r.s
-    if (!r.primary) {
-      return (
-        <tr key={key}>
-          <td></td><td></td><td></td><td></td>
-          <td className="seikon-mix">{r.mix}</td>
-          <td></td>
-          <td style={{ textAlign: 'center' }}>{r.vol}</td>
-          <td></td><td></td><td></td>
-        </tr>
-      )
-    }
+  // 1行=1出荷。配合・数量が2種ある場合は行を分けず、同じセル内で改行して表示する
+  const renderRow = (s, key) => {
     const ts = timesArr(s)
+    const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
+    const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
+    const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
+    const vols = [v1, v2].filter(Boolean)
     const tekiyo2 = [placementsOf(s), tagsOf(s), testOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記 / 試験(現TP・工TP)
     return (
       <tr key={key}>
@@ -3621,9 +3613,9 @@ function SeikonOutputPage({ isPopup }) {
         <td>{s.siteName || ''}</td>
         <td className="seikon-datsu">{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
-        <td className="seikon-mix">{r.mix}</td>
+        <td className="seikon-mix">{mixes.length ? mixes.map((m, i) => <div key={i}>{m}</div>) : ''}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
-        <td style={{ textAlign: 'center' }}>{r.vol}</td>
+        <td style={{ textAlign: 'center' }}>{vols.length ? vols.map((v, i) => <div key={i}>{v}</div>) : ''}</td>
         <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
         <td className="seikon-phone">{s.siteContact || ''}</td>
         <td className="seikon-tekiyo">
@@ -3635,7 +3627,7 @@ function SeikonOutputPage({ isPopup }) {
   }
 
   const ROWS = 23
-  const blanks = Math.max(0, ROWS - lineRows.length)
+  const blanks = Math.max(0, ROWS - rows.length)
   const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
@@ -3668,7 +3660,7 @@ function SeikonOutputPage({ isPopup }) {
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
-            {lineRows.map((r, ri) => renderRow(r, r.s.id + '_' + ri + (r.primary ? '' : '_s')))}
+            {rows.map(s => renderRow(s, s.id))}
             {Array.from({ length: blanks }).map((_, i) => (
               <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
             ))}
