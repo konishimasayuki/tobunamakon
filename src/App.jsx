@@ -1487,7 +1487,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     if (i >= 0 && i + 1 < hgs.length) hgs[i + 1].focus()
   }
   // 配合セル：値を反映しつつ2桁入力で次のセルへ自動送り
-  const onHg = (ri, i) => (e) => { const c = e.nativeEvent?.isComposing; setMixCell(ri, i, e.target.value, c); if (!c && z2h(e.target.value).replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
+  const onHg = (ri, i) => (e) => { setMixCell(ri, i, e.target.value); if (z2h(e.target.value).replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
   const onFormKeyDown = (e) => {
     if (e.key !== 'Enter') return
     // IME変換中・変換確定のEnterでは次項目に移動しない
@@ -1517,10 +1517,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const r0 = rows[0] || { parts: ['', '', ''], note: '' }
     return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] }
   }
-  const setMixCell = (row, i, v, composing) => setForm(f => {
+  // 配合の数字は全角入力でも強制的に半角に（特記=hgnoteは別ハンドラなのでカタカナ可）
+  const setMixCell = (row, i, v) => setForm(f => {
     const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
     while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' })
-    rows[row].parts[i] = composing ? String(v).slice(0, 2) : z2h(v).replace(/\D/g, '').slice(0, 2)
+    rows[row].parts[i] = z2h(v).replace(/\D/g, '').slice(0, 2)
     return { ...f, ...syncMix(rows) }
   })
   const setMixRowNote = (row, v) => setForm(f => {
@@ -2057,7 +2058,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                                 onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
                             ) : null}
                           </span>
-                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]} onChange={e => { const v = e.target.value; setVal(vKey, e.nativeEvent?.isComposing ? v : z2h(v).replace(/．/g, '.').replace(/[^0-9.]/g, '')) }} />
+                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]} onChange={e => setVal(vKey, z2h(e.target.value).replace(/．/g, '.').replace(/[^0-9.]/g, ''))} />
                           <span className="unit" style={redIf('volume')}>m<sup>3</sup>
                             {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
                             <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
