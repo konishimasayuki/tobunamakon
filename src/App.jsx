@@ -1490,6 +1490,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const onHg = (ri, i) => (e) => { setMixCell(ri, i, e.target.value); if (z2h(e.target.value).replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
   const onFormKeyDown = (e) => {
     if (e.key !== 'Enter') return
+    // IME変換中・変換確定のEnterでは次項目に移動しない
+    if (e.isComposing || e.keyCode === 229 || e.nativeEvent?.isComposing) return
     const t = e.target
     if (!t || t.tagName === 'TEXTAREA') return
     if (t.tagName === 'INPUT' && t.type !== 'button' && t.type !== 'submit') {
