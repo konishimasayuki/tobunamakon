@@ -880,13 +880,20 @@ function CustomersPage() {
 // ============================================================
 // 出荷登録ページ
 // ============================================================
-const VEHICLE_TYPES = ['4t', '7t', '大型']
+const VEHICLE_TYPES = ['4t', '7t', '大型', '空']
 const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
 const NOTE_TAGS = ['領', '追']
 const TEST_TAGS = ['現TP', '工TP']            // 試験（現TP=現場 / 工TP=工場）。生コン出荷予定表でのみ集計表示
-const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL']   // 備考に追加できる定型メッセージ
+const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX待ち']   // 備考に追加できる定型メッセージ
+// 備考(notes)の並び順：手入力(manual)→荷下ろし(unload)→メッセージ追加(msg)。出力もこの順になる
+const NOTE_KIND_RANK = { unload: 1, msg: 2 }
+const noteRank = (n) => NOTE_KIND_RANK[n && n.kind] ?? 0
+const sortNotes = (arr) => (Array.isArray(arr) ? arr : [])
+  .map((n, i) => [n, i])
+  .sort((a, b) => (noteRank(a[0]) - noteRank(b[0])) || (a[1] - b[1]))
+  .map(x => x[0])
 // カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる）
 const kanaToHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
@@ -919,6 +926,7 @@ function mixRowsOfShip(s) {
 
 const emptyShipForm = {
   date: localToday(),
+  orderDate: localToday(),   // 受注日（作成日。読み取り専用で変更不可）
   companyId: '', companyName: '',
   tradingCompany: '',
   times: [{ text: '', important: false }],
@@ -1552,20 +1560,25 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const cur = Array.isArray(f.testTags) ? f.testTags : []
     return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
   })
-  // 備考に定型メッセージを段落として追加（空段落があればそこへ、無ければ末尾に追加。最大4段落）
+  // 備考にメッセージを追加（kind:'msg'）。並びは 手入力→荷下ろし→メッセージ の順に保つ
   const addNoteMessage = (msg) => setForm(f => {
     const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []
-    const empty = notes.findIndex(n => !String(n.text || '').trim())
-    if (empty >= 0) notes[empty] = { ...notes[empty], text: msg }
-    else if (notes.length < 4) notes.push({ text: msg, important: false })
-    else { alert('備考は最大4段落です'); return f }
-    return { ...f, notes }
+    if (notes.filter(n => String(n.text || '').trim()).length >= 6) { alert('備考は最大6段落です'); return f }
+    notes.push({ text: msg, important: false, kind: 'msg' })
+    return { ...f, notes: sortNotes(notes) }
+  })
+  // 荷下ろしの自由入力（kind:'unload' の段落1つで保持。空なら段落を消す）。内容は備考に出力される
+  const unloadText = () => { const n = (form.notes || []).find(n => n && n.kind === 'unload'); return n ? n.text : '' }
+  const setUnload = (val) => setForm(f => {
+    const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload'))
+    if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' })
+    return { ...f, notes: sortNotes(notes) }
   })
 
   const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
     if (!emp) return
-    setForm(f => (f.drivers.length >= 4 || f.drivers.some(d => d.id === emp.id))
+    setForm(f => f.drivers.some(d => d.id === emp.id)
       ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] }))
   }
   const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
@@ -1603,6 +1616,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
   const toForm = (s) => ({
     date: s.date || localToday(),
+    orderDate: s.orderDate || (s.createdAt ? String(s.createdAt).slice(0, 10) : (s.date || localToday())),
     companyId: s.companyId || '',
     companyName: s.companyName || '',
     tradingCompany: s.tradingCompany || '',
@@ -1641,7 +1655,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
-    notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
+    notes: sortNotes((Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important, kind: n.kind || '' }))),
     driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
     mapView: s.mapView || null,
     mapArrows: Array.isArray(s.mapArrows) ? s.mapArrows : [],
@@ -1746,8 +1760,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const handleDuplicate = () => {
     setEditing(null)
     setEditChanged([])
-    // 複製と分かるよう現場名に「 コピー」を付ける。PDF添付は引き継がない
-    setForm(f => ({ ...f, siteName: ((f.siteName || '') + ' コピー').trim(), pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
+    // 複製と分かるよう現場名に「 コピー」を付ける。PDF添付は引き継がない。受注日は本日（新規作成日）に
+    setForm(f => ({ ...f, orderDate: localToday(), siteName: ((f.siteName || '') + ' コピー').trim(), pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
     setMapKey(k => k + 1)
     topRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
     alert('コピーされました')
@@ -1819,13 +1833,18 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
           <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 20, alignItems: 'stretch', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
           <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 1 700px', minWidth: 0 }}>
           <div className="sheet" style={{ margin: 0 }}>
-            {/* 1段: 日付 / 業者名 / 商社名 */}
+            {/* 1段: 受注日(作成日・変更不可) / 日付 / 業者名 / 商社名 */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 24%' }}>
+              <div className="cell" style={{ flex: '0 0 17%' }}>
+                <div className="lbl">受 注 日</div>
+                <div className="readonly-date">{String(form.orderDate || '').replace(/-/g, '/')}</div>
+                <div className="ro-note">作成日（変更不可）</div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 19%' }}>
                 <div className="lbl">日 付</div>
                 <input className="f" type="date" value={form.date} onChange={set('date')} required />
               </div>
-              <div className="cell" style={{ flex: '0 0 45%' }}>
+              <div className="cell" style={{ flex: '0 0 36%' }}>
                 <div className="lbl" style={redIf('companyName')}>業 者 名</div>
                 <KanaCombo value={form.companyName} onChange={handleCompanyInput}
                   onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
@@ -1861,109 +1880,147 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
             </div>
 
-            {/* 4段: 車種 / 配合・m³ / セメント種・配置 */}
+            {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / PDFインポート（小項目をまとめてコンパクトに） */}
             <div className="band">
-              <div className="cell stack" style={{ flex: '0 0 24%', minHeight: 140, padding: 0 }}>
-                <div className="subrow" style={{ flex: '0 0 auto' }}>
-                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                    {/* 車種：選択ボタン（台数なし） */}
-                    <div className="chips big">
-                      {VEHICLE_TYPES.map(o => {
-                        const it = vehItems().find(v => v.type === o)
-                        return (
-                          <span key={o} className={'chip' + (it ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                        )
-                      })}
+              {/* 車種：縦並び・各チップを大型幅に揃え、台数入力欄の開始位置を統一。空以外は台数入力 */}
+              <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
+                <div className="lbl" style={redIf('vehicleType')}>車 種</div>
+                <div className="btn-mid"><div className="veh-chips">
+                  {VEHICLE_TYPES.map(o => {
+                    const it = vehItems().find(v => v.type === o)
+                    const on = !!it
+                    return (
+                      <span key={o} className="vehpill">
+                        <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
+                        {on && o !== '空' && (
+                          <><input className="vehqty" inputMode="numeric" placeholder="台" value={it.qty || ''} onChange={e => setVehQty(o, e.target.value)} /><span className="vehu">台</span></>
+                        )}
+                      </span>
+                    )
+                  })}
+                </div></div>
+              </div>
+              {/* 打設箇所：プルダウン or 自由入力 */}
+              <div className="cell" style={{ flex: '0 0 19%', minWidth: 0 }}>
+                <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
+                <div className="btn-mid">
+                  {!form.pourFree ? (
+                    <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
+                      onChange={e => {
+                        if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
+                        else setVal('pourLocation', e.target.value)
+                      }}>
+                      <option value=""></option>
+                      {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ position: 'relative' }}>
+                      <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={13} placeholder="打設箇所を入力"
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 28px 5px 6px', boxSizing: 'border-box' }} />
+                      <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
+                        style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                     </div>
-                  </div>
+                  )}
                 </div>
-                <div className="subrow" style={{ flex: 1 }}>
-                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
-                    {/* 打設箇所：プルダウン or 自由入力。文字大きく中央揃え（位置はプルダウン基準で統一） */}
-                    {!form.pourFree ? (
-                      <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
-                        onChange={e => {
-                          if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
-                          else setVal('pourLocation', e.target.value)
-                        }}>
-                        <option value=""></option>
-                        {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <div style={{ position: 'relative' }}>
-                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={15} placeholder="打設箇所を入力"
-                          style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 30px 5px 6px', boxSizing: 'border-box' }} />
-                        <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
-                          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
-                      </div>
-                    )}
-                  </div>
+              </div>
+              {/* セメント種（中央揃え） */}
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
+                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                  {CEMENT_TYPES.map(o => (
+                    <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
+                  ))}
+                </div></div>
+              </div>
+              {/* 試験（中央揃え） */}
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>試験</div>
+                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                  {TEST_TAGS.map(t => (
+                    <span key={t} className={'chip' + ((form.testTags || []).includes(t) ? ' on' : '')} onClick={() => toggleTestTag(t)}>{t}</span>
+                  ))}
+                </div></div>
+              </div>
+              {/* 特記（中央揃え） */}
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>特記</div>
+                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                  {NOTE_TAGS.map(t => (
+                    <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
+                  ))}
+                </div></div>
+              </div>
+              {/* PDFインポート（アイコンのみ・中央寄せ。保存時に開いている伝票へ添付） */}
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>PDFインポート</div>
+                <div className="btn-mid" style={{ alignItems: 'center', gap: 4 }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #999', background: '#fafafa', borderRadius: 6, padding: '7px 16px', fontSize: 20, cursor: 'pointer', color: '#333' }}>📄
+                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
+                  </label>
+                  {(form.pdfData || form.hasPdf) && (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {(form.pdfData || (form.hasPdf && editing)) && (
+                        <button type="button" onClick={previewPdf} title="プレビュー"
+                          style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 5, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>👁</button>
+                      )}
+                      <button type="button" onClick={removePdf} title="削除"
+                        style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>🗑</button>
+                    </div>
+                  )}
+                  {(form.pdfName || form.hasPdf) && (
+                    <div style={{ fontSize: 10, color: '#1a8f5a', textAlign: 'center', wordBreak: 'break-all', lineHeight: 1.2 }}>
+                      {form.pdfData ? '選択中' : '添付済'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 4段: 配合 / 量・荷下ろし */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 42%', minWidth: 0 }}>
+                <div className="lbl" style={redIf('mixCode')}>配 合</div>
+                <div className="btn-mid">
+                {(() => {
+                  const rows = mixRowsOf()
+                  const two = rows.length > 1
+                  return (
+                    <div className={'mixwrap' + (two ? ' two' : ' one')}>
+                      {rows.map((r, ri) => (
+                        <div key={ri} className="mixrow">
+                          <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
+                            <div className="hgcol">
+                              <div className="hgnote-spacer" />
+                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} />
+                            </div>
+                            <span className="hgsep">-</span>
+                            <div className="hgcol">
+                              <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
+                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} />
+                            </div>
+                            <span className="hgsep">-</span>
+                            <div className="hgcol">
+                              <div className="hgnote-spacer" />
+                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} />
+                            </div>
+                          </div>
+                          {ri > 0 && (
+                            <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
+                              style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                      {rows.length < 2 && (
+                        <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px' }} onClick={addMixRow}>＋ 配合を追加</button>
+                      )}
+                    </div>
+                  )
+                })()}
                 </div>
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
-                <div className="subrow">
-                  <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
-                    <div className="lbl" style={redIf('mixCode')}>配 合</div>
-                    {/* 配合：上半分・下半分の2行まで（各行に特記）。1行/2行で高さを完全に揃える（常にcompact＋固定高） */}
-                    {(() => {
-                      const rows = mixRowsOf()
-                      const two = rows.length > 1
-                      return (
-                        <div className={'mixwrap' + (two ? ' two' : ' one')}>
-                          {rows.map((r, ri) => (
-                            <div key={ri} className="mixrow">
-                              <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
-                                <div className="hgcol">
-                                  <div className="hgnote-spacer" />
-                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} />
-                                </div>
-                                <span className="hgsep">-</span>
-                                <div className="hgcol">
-                                  <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
-                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} />
-                                </div>
-                                <span className="hgsep">-</span>
-                                <div className="hgcol">
-                                  <div className="hgnote-spacer" />
-                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} />
-                                </div>
-                              </div>
-                              {ri > 0 && (
-                                <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
-                                  style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
-                              )}
-                            </div>
-                          ))}
-                          {rows.length < 2 && (
-                            <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px' }} onClick={addMixRow}>＋ 配合を追加</button>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </div>
-                  <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
-                    <div className="lbl">セメント種</div>
-                    {/* N / B を縦に並べる */}
-                    <div className="chips big" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                      {CEMENT_TYPES.map(o => (
-                        <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
-                    <div className="lbl">試験</div>
-                    {/* 現TP / 工TP を2段（縦）に配置。生コン出荷予定表でのみ集計表示 */}
-                    <div className="chips big" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                      {TEST_TAGS.map(t => (
-                        <span key={t} className={'chip' + ((form.testTags || []).includes(t) ? ' on' : '')} onClick={() => toggleTestTag(t)}>{t}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="subrow">
-                  <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, flexDirection: 'column', justifyContent: 'center' }}>
+                <div className="subrow" style={{ flex: '0 0 auto' }}>
+                  <div className="cell m3" style={{ flex: 1, minWidth: 0, flexDirection: 'column', justifyContent: 'center', padding: '8px 6px' }}>
                     {/* 量（1段目／2段目）。各段に「?」「+a」ボタン */}
                     {[0, 1].map(idx => {
                       if (idx === 1 && !form.hasVolume2) return null
@@ -1972,7 +2029,6 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                       const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
                       return (
                         <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
-                          {/* 先頭の×スロット（1段目は空スペーサーで数字の開始位置を揃える） */}
                           <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
                             {idx === 1 ? (
                               <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
@@ -1994,8 +2050,15 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                         onClick={() => setForm(f => ({ ...f, hasVolume2: true }))}>＋ 量を追加</button>
                     )}
                   </div>
-                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
-                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
+                </div>
+                <div className="subrow" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="lbl">荷下ろし</div>
+                    <div className="btn-mid">
+                      <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
+                      {/* 荷下ろし自由入力は1つだけ。内容は備考に出力される */}
+                      <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2017,7 +2080,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <div className="band">
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={redIf('notes')}>備 考</div>
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={1} max={4} height={90} addLabel="＋ 段落を追加" />
+                {/* 備考の並び順：手入力→荷下ろし→メッセージ追加（sortNotesで常に整列） */}
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={6} height={140} addLabel="＋ 段落を追加" />
               </div>
               <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
@@ -2030,61 +2094,22 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
             </div>
 
-            {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
+            {/* 7段: 担当ドライバー（上限なし・横幅いっぱい） */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 30%' }}>
-                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー（最大4）</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 3 }}>
                   {form.drivers.map((d, i) => (
                     <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
                       {d.name}
                       <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
                     </span>
                   ))}
-                </div>
-                {form.drivers.length < 4 && (
-                  <select className="f" value="" onChange={addDriver} style={{ marginTop: 5 }}>
+                  <select className="f" value="" onChange={addDriver} style={{ width: 'auto', minWidth: 150, border: '1px solid #cdd5e0', borderRadius: 5, padding: '3px 6px' }}>
                     <option value="">＋ ドライバーを追加</option>
                     {employees.filter(e => !form.drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                )}
-              </div>
-              <div className="cell" style={{ flex: '0 0 34%', minWidth: 0 }}>
-                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>ドライバーへの連絡</div>
-                {/* 縦に段落追加（段落を追加で上の段落の下に追加） */}
-                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={1} max={4} height={80} addLabel="＋ 段落を追加" />
-              </div>
-              {/* 特記（領 / 追） */}
-              <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
-                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>特記</div>
-                <div className="chips">
-                  {NOTE_TAGS.map(t => (
-                    <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
-                  ))}
                 </div>
-              </div>
-              {/* PDFインポート（保存時に開いている伝票へ添付。プレビュー可） */}
-              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>PDFインポート</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px dashed #999', background: '#fafafa', borderRadius: 5, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: '#333' }}>
-                    📄 PDFを選択
-                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
-                  </label>
-                  {(form.pdfData || (form.hasPdf && editing)) && (
-                    <button type="button" onClick={previewPdf}
-                      style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>👁 プレビュー</button>
-                  )}
-                  {(form.pdfData || form.hasPdf) && (
-                    <button type="button" onClick={removePdf}
-                      style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🗑 削除</button>
-                  )}
-                </div>
-                {(form.pdfName || form.hasPdf) && (
-                  <div style={{ fontSize: 11, color: '#1a8f5a', marginTop: 4, wordBreak: 'break-all' }}>
-                    {form.pdfData ? '選択中: ' : '添付済: '}{form.pdfName || 'shipment.pdf'}
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -3798,7 +3823,7 @@ function DriverAssignPopupPage({ id }) {
 function DenpyoView({ s }) {
   const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notes = (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
-  const dmsg = (Array.isArray(s.driverMessages) ? s.driverMessages.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const orderDate = String(s.orderDate || (s.createdAt ? String(s.createdAt).slice(0, 10) : '') || '').replace(/-/g, '/')
   const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)
   const cell = (label, flex, content) => (
     <div className="cell" style={{ flex }}>
@@ -3810,7 +3835,8 @@ function DenpyoView({ s }) {
     <div className="denpyo">
       <div className="sheet" style={{ margin: 0 }}>
         <div className="band">
-          {cell('日 付', '0 0 24%', s.date)}
+          {cell('受 注 日', '0 0 18%', orderDate || '—')}
+          {cell('日 付', '0 0 18%', s.date)}
           {cell('業 者 名', '1 1 0', s.companyName || '—')}
           {cell('商 社 名', '1 1 0', s.tradingCompany || '—')}
         </div>
@@ -3841,9 +3867,8 @@ function DenpyoView({ s }) {
           {cell('備 考', '1 1 0', notes.length ? notes.map((n, i) => <div key={i}>・{n}</div>) : '—')}
         </div>
         <div className="band">
-          {cell('担当ドライバー', '0 0 34%', driversOf(s).join('・') || '—')}
-          {cell('ドライバーへの連絡', '1 1 0', dmsg.length ? dmsg.map((n, i) => <div key={i}>・{n}</div>) : '—')}
-          {cell('PDF', '0 0 18%', s.hasPdf
+          {cell('担当ドライバー', '1 1 0', driversOf(s).join('・') || '—')}
+          {cell('PDF', '0 0 22%', s.hasPdf
             ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000') }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
             : '—')}
         </div>
