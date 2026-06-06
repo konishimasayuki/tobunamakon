@@ -1544,7 +1544,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []
     const at = items.findIndex(v => v.type === type)
     if (at >= 0) items.splice(at, 1)
-    else items.push({ type, qty: '' })
+    else items.push({ type, qty: type === '空' ? '' : '1' })   // 選択時は既定で1台（空は台数なし）
     // VEHICLE_TYPES 並び順を保持
     items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type))
     return { ...f, ...syncVeh(items) }
