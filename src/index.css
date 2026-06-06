@@ -279,8 +279,8 @@ input, textarea, select { font-family: inherit; }
 .seikon-table { width:100%; border-collapse:collapse; table-layout:fixed; font-family:'Noto Sans JP',sans-serif; border:1px solid #111; box-sizing:border-box; }
 .seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:14px; line-height:1.25; word-break:break-all; vertical-align:middle; color:#111; }
 .seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:16px; overflow:hidden; }
-/* 打設列：単一の値は改行しない（複数要素は摘要のように別行で扱う） */
-.seikon-table td.seikon-datsu { white-space:nowrap; }
+/* 打設列：長い文字はセル内で折り返して収める（実データは改行しない＝表示上のみ折り返し） */
+.seikon-table td.seikon-datsu { white-space:normal; word-break:break-word; overflow-wrap:anywhere; text-align:center; }
 .seikon-table td { height:30px; }
 /* 車両は文字を5pt大きく */
 .seikon-table td.seikon-veh { font-size:19px; font-weight:700; text-align:center; }
@@ -299,7 +299,7 @@ input, textarea, select { font-family: inherit; }
   .popup-print-root { height:auto !important; overflow:visible !important; margin:0 !important; padding:0 !important; }
   /* 印刷用ラッパーを用紙サイズ(A4横 297x210mm)＋4mm paddingにして、表が
      プリンタの印字不可領域に掛からないよう上下左右に必ず4mmの余白を確保する。 */
-  .seikon-wrap { box-sizing:border-box !important; width:297mm !important; min-height:210mm !important; padding:4mm !important; margin:0 auto !important; height:auto !important; overflow:visible !important; }
+  .seikon-wrap { box-sizing:border-box !important; width:297mm !important; padding:4mm !important; margin:0 auto !important; height:auto !important; overflow:visible !important; }
   .seikon-sheet { max-width:none !important; padding:0 !important; margin:0 !important; }
   .seikon-title { padding:0 0 2px; }
   .seikon-title .st-name { font-size:15px; }
@@ -307,16 +307,13 @@ input, textarea, select { font-family: inherit; }
   .seikon-title .st-ampm { font-size:12px; }
   .seikon-title .st-test { font-size:11px; }
   .seikon-title .st-test-label { padding:1px 6px; }
-  /* テーブル高さを用紙の印字領域いっぱい（210mm - 上下4mm余白 - 見出し行ぶん）に指定し、
-     各行を均等に引き伸ばして最下部まで余白なく埋める。4mm余白ぶん減らして1ページに収める */
-  .seikon-table { height:190mm; }
-  /* 本文はセルいっぱいに大きく、列名(th)はさらに5pt大きく */
+  /* 表は用紙上部から開始（固定高で全体を引き伸ばさない＝上部の余白が出ない）。各行は約7.4mm */
   .seikon-table th, .seikon-table td { font-size:14px; padding:1px 3px; line-height:1.15; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .seikon-table th { font-size:16px; }
   .seikon-table td.seikon-veh { font-size:20px; }
   .seikon-table td.seikon-mix { font-size:22px; }
   .seikon-table td.seikon-phone { font-size:10px; white-space:nowrap; }
-  .seikon-table td { height:auto; }
+  .seikon-table td { height:7.4mm; }
   .seikon-tekiyo > div { min-height:0; }
-  .seikon-table, .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
+  .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
 }
