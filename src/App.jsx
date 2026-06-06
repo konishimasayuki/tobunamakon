@@ -1436,13 +1436,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const topRef = useRef(null)
   const formRef = useRef(null)   // Enter/桁送りでの次項目フォーカス移動に使う
   const PAGE_SIZE = 10
-  // 直近7日（本日起点）の日付配列
+  // 本日〜2週間先まで（日曜を除く）の日付配列。一覧の日付ボタン用
   const weekDates = (() => {
     const base = new Date()
-    return Array.from({ length: 7 }, (_, i) => {
+    const out = []
+    for (let i = 0; i <= 14; i++) {
       const d = new Date(base); d.setDate(base.getDate() + i)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    })
+      if (d.getDay() === 0) continue   // 日曜は除外
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+    }
+    return out
   })()
 
   const load = useCallback(async () => {
@@ -1808,12 +1811,18 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const [, y, mo, d] = m, moN = String(+mo), dN = String(+d)
     return [dateStr, `${y}/${mo}/${d}`, `${y}/${moN}/${dN}`, `${mo}/${d}`, `${moN}/${dN}`, `${moN}月${dN}日`, `${mo}-${d}`, `${moN}-${dN}`]
   }
+  // 電話番号検索用：ハイフン・空白を除去して数字だけで比較できるようにする
+  const noHyphen = (str) => String(str || '').replace(/[-－ー―‐\s]/g, '')
   const filtered = shipments.filter(s => {
     if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
     const q = toHira(search)
-    return [s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s), ...dateVariants(s.date)]
-      .some(v => toHira(v).includes(q))
+    const fields = [s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, s.orderContact, s.siteContact, kanaOfCompany(s), kanaOfTrading(s), ...dateVariants(s.date)]
+    if (fields.some(v => toHira(v).includes(q))) return true
+    // 連絡先・現場連絡先はハイフン無しでも検索可（例:「9131999」で「913-1999-…」にヒット）
+    const qNo = noHyphen(q)
+    if (qNo && [s.orderContact, s.siteContact].some(v => noHyphen(toHira(v)).includes(qNo))) return true
+    return false
   })
   // 日付ボタンで絞り込み中（その日表示）は時間順（週間予定表と同条件）、それ以外は登録日時の新しい順
   const noPaging = !!dateFilter
@@ -2167,11 +2176,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 24, height: 24, fontSize: 14, cursor: 'pointer', lineHeight: 1, zIndex: 2 }}>×</button>
             )}
           </div>
-          {/* 直近7日の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
+          {/* 本日〜2週間先（日曜除く）の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
-            {weekDates.map((d, i) => {
+            {weekDates.map((d) => {
               const active = dateFilter === d
-              const label = i === 0 ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
+              const label = d === localToday() ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
               return (
                 <button key={d} type="button"
                   onClick={() => { if (active) setDateFilter(''); else { setDateFilter(d); setSearch('') } }}
@@ -3297,6 +3306,24 @@ function DashboardPage() {
   const weeks = all.filter(s => weekDates.includes(s.date))
   const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
   const fmtVol = n => (Math.round(n * 100) / 100).toLocaleString('ja-JP')
+  // 月別合計（先月・今月・来月）。数量は1段目+2段目の合計m³
+  const baseNow = new Date(today)
+  const monKey = (off) => { const d = new Date(baseNow.getFullYear(), baseNow.getMonth() + off, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+  const monLabel = (off) => monKey(off).replace('-', '/')
+  const inMonth = (s, off) => String(s.date || '').startsWith(monKey(off))
+  const lastMonthShips = all.filter(s => inMonth(s, -1))
+  const thisMonthShips = all.filter(s => inMonth(s, 0))
+  const nextMonthShips = all.filter(s => inMonth(s, 1))
+  const volBoth = arr => arr.reduce((acc, s) => acc + (parseFloat(s.volume) || 0) + (parseFloat(s.volume2) || 0), 0)
+  // 今月分の「?」「+a」の数（1段目・2段目それぞれ数える）
+  const marks = (() => {
+    let q = 0, a = 0
+    thisMonthShips.forEach(s => {
+      if (s.volumeUncertain) q++; if (s.volumeUncertain2) q++
+      if (s.volumePlusA) a++; if (s.volumePlusA2) a++
+    })
+    return { q, a }
+  })()
   // 本日分を時間順に並べる（午前=11:59 / 午後=23:59 換算・空欄は最後）
   const timeMin = (s) => {
     const t = String(firstTimeOf(s) || '').trim()
@@ -3362,6 +3389,15 @@ function DashboardPage() {
             {card('今週の出荷', weeks.length, '件', `${weekDates[0].slice(5)}〜${weekDates[6].slice(5)}`)}
             {card('今週の合計', fmtVol(vol(weeks)), 'm³')}
             {card('登録総数', all.length, '件')}
+          </div>
+
+          {/* 月別の合計m³（先月・今月・来月）と ?・+a の数 */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+            {card('先月の合計', fmtVol(volBoth(lastMonthShips)), 'm³', monLabel(-1))}
+            {card('今月の合計', fmtVol(volBoth(thisMonthShips)), 'm³', monLabel(0), '#1a6a9f')}
+            {card('来月の合計', fmtVol(volBoth(nextMonthShips)), 'm³', monLabel(1))}
+            {card('今月の「?」', marks.q, '件', '数量未確定の数')}
+            {card('今月の「+a」', marks.a, '件', '+aの数')}
           </div>
 
           {/* 内訳（車種別＝便別・担当別） */}
@@ -3451,7 +3487,8 @@ function WeeklySchedulePage() {
                   const lb = BIN_LABELS[bi]
                   return (
                     <div key={bi} style={{ padding: '6px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 13, color: '#3a4a5c', lineHeight: 1.45 }}>
-                      <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>{lb.main}{lb.sub && <br />}{lb.sub} <span style={{ fontSize: 14 }}>計{st.total}台</span></div>
+                      <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>{lb.main}{lb.sub}</div>
+                      <div style={{ fontWeight: 700, color: '#0f3060', fontSize: 14 }}>計{st.total}台</div>
                       <div style={{ fontSize: 13, marginTop: 1 }}>{st.summary || '—'}</div>
                     </div>
                   )
