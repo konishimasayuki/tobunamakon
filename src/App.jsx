@@ -1077,7 +1077,9 @@ function Chips({ options, value, multi, multiStr, onChange, big }) {
 // 固定枠＋分割＋文字自動リサイズの動的マス群（時間 / 備考 / ドライバー連絡 共通）
 function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel }) {
   const refs = useRef([])
+  const composingRef = useRef(false)   // IME変換中フラグ
   const refit = () => requestAnimationFrame(() => {
+    if (composingRef.current) return   // 変換中はフォント自動調整を行わない（変換が壊れるため）
     for (let i = 0; i < items.length; i++) fitText(refs.current[i])
   })
   useLayoutEffect(() => { refit() })
@@ -1101,6 +1103,8 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
               ref={el => { refs.current[i] = el }}
               className={it.important ? 'is-imp' : ''}
               value={it.text}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i])) }}
               onChange={e => update(i, { text: e.target.value })}
             />
             <div className="ctl">
