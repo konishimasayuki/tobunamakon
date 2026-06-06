@@ -1569,6 +1569,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const i = notes.findIndex(n => n && n.kind === 'msg')
     if (i >= 0) {
       const cur = String(notes[i].text || '')
+      if (cur.split(/\s+/).filter(Boolean).includes(msg)) return f   // 追加済みは重複させない
       notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg }
     } else {
       notes.push({ text: msg, important: false, kind: 'msg' })
@@ -1919,7 +1920,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
                 <div className="btn-mid">
                   {!form.pourFree ? (
-                    <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
+                    <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 18, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
                       onChange={e => {
                         if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
                         else setVal('pourLocation', e.target.value)
@@ -1999,6 +2000,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   const rows = mixRowsOf()
                   const two = rows.length > 1
                   return (
+                    <>
                     <div className={'mixwrap' + (two ? ' two' : ' one')}>
                       {rows.map((r, ri) => (
                         <div key={ri} className="mixrow">
@@ -2024,10 +2026,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                           )}
                         </div>
                       ))}
-                      {rows.length < 2 && (
-                        <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px' }} onClick={addMixRow}>＋ 配合を追加</button>
-                      )}
                     </div>
+                    {/* 「配合を追加」はmixwrapの外に出して固定高で見切れないように */}
+                    {rows.length < 2 && (
+                      <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }} onClick={addMixRow}>＋ 配合を追加</button>
+                    )}
+                    </>
                   )
                 })()}
                 </div>
@@ -2099,12 +2103,28 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               </div>
               <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
-                  {NOTE_MESSAGES.map(m => (
-                    <button key={m} type="button" onClick={() => addNoteMessage(m)}
-                      style={{ border: '1.5px solid #1b4ea8', background: '#eef4ff', color: '#1b4ea8', borderRadius: 6, padding: '7px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>＋ {m}</button>
-                  ))}
-                </div>
+                {(() => {
+                  // 既に備考に追加済みのメッセージは判定（msg段落のスペース区切り）。使用済みはグレーで押せない
+                  const msgNote = (form.notes || []).find(n => n && n.kind === 'msg')
+                  const used = msgNote ? String(msgNote.text || '').split(/\s+/).filter(Boolean) : []
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+                      {NOTE_MESSAGES.map(m => {
+                        const isUsed = used.includes(m)
+                        return (
+                          <button key={m} type="button" disabled={isUsed} onClick={() => addNoteMessage(m)}
+                            style={{
+                              border: isUsed ? '1.5px solid #cdd5e0' : '1.5px solid #1b4ea8',
+                              background: isUsed ? '#eef0f4' : '#eef4ff',
+                              color: isUsed ? '#9aa7b5' : '#1b4ea8',
+                              borderRadius: 6, padding: '7px 10px', fontSize: 13, fontWeight: 700,
+                              cursor: isUsed ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                            }}>＋ {m}</button>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 
@@ -2121,7 +2141,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                   ))}
                   <select className="f" value="" onChange={addDriver} style={{ width: 'auto', minWidth: 150, border: '1px solid #cdd5e0', borderRadius: 5, padding: '3px 6px' }}>
                     <option value="">＋ ドライバーを追加</option>
-                    {employees.filter(e => !form.drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
               </div>
