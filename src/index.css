@@ -127,6 +127,8 @@ input, textarea, select { font-family: inherit; }
 /* 荷下ろし自由入力（1つ。内容は備考に出力） */
 .denpyo .unload-input { width:100%; box-sizing:border-box; margin-top:5px; border:none; border-bottom:1px solid #1b4ea8; background:#f2f7ff; font-family:inherit; font-size:13px; padding:3px 6px; outline:none; color:#111; }
 .denpyo .unload-input::placeholder { color:#9bb4d6; }
+/* 打設箇所の自由入力：透かしを小さくして「一覧」ボタンに隠れないように */
+.denpyo .pour-input::placeholder { font-size:11px; }
 
 /* ===== 出荷予定表 ===== */
 /* フォントはテーブル領域の幅に追従（clamp+cqi）。サイドバーで狭くなる通常画面でも

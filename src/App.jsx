@@ -1560,11 +1560,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const cur = Array.isArray(f.testTags) ? f.testTags : []
     return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
   })
-  // 備考にメッセージを追加（kind:'msg'）。並びは 手入力→荷下ろし→メッセージ の順に保つ
+  // メッセージ追加：1回目は備考にmsg段落を新規追加。2回目以降は同じmsg段落の後ろに半角スペース＋メッセージを追記
   const addNoteMessage = (msg) => setForm(f => {
     const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []
-    if (notes.filter(n => String(n.text || '').trim()).length >= 6) { alert('備考は最大6段落です'); return f }
-    notes.push({ text: msg, important: false, kind: 'msg' })
+    const i = notes.findIndex(n => n && n.kind === 'msg')
+    if (i >= 0) {
+      const cur = String(notes[i].text || '')
+      notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg }
+    } else {
+      notes.push({ text: msg, important: false, kind: 'msg' })
+    }
     return { ...f, notes: sortNotes(notes) }
   })
   // 荷下ろしの自由入力（kind:'unload' の段落1つで保持。空なら段落を消す）。内容は備考に出力される
@@ -1915,8 +1920,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     </select>
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={13} placeholder="打設箇所を入力"
-                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 28px 5px 6px', boxSizing: 'border-box' }} />
+                      <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={13} placeholder="入力" className="f pour-input"
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 42px 5px 6px', boxSizing: 'border-box' }} />
                       <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
                         style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                     </div>
@@ -2081,7 +2086,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={redIf('notes')}>備 考</div>
                 {/* 備考の並び順：手入力→荷下ろし→メッセージ追加（sortNotesで常に整列） */}
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={6} height={140} addLabel="＋ 段落を追加" />
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={6} height={90} addLabel="＋ 段落を追加" />
               </div>
               <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
