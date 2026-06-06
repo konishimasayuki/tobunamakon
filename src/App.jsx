@@ -886,7 +886,7 @@ const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
 const NOTE_TAGS = ['領', '追']
 const TEST_TAGS = ['現TP', '工TP']            // 試験（現TP=現場 / 工TP=工場）。生コン出荷予定表でのみ集計表示
-const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX待ち']   // 備考に追加できる定型メッセージ
+const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX', '住所TEL有']   // 備考に追加できる定型メッセージ
 // 備考(notes)の並び順：手入力(manual)→荷下ろし(unload)→メッセージ追加(msg)。出力もこの順になる
 const NOTE_KIND_RANK = { unload: 1, msg: 2 }
 const noteRank = (n) => NOTE_KIND_RANK[n && n.kind] ?? 0
