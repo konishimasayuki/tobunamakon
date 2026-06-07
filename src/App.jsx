@@ -2821,18 +2821,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
-        /* 別ウィンドウ: 日付/AM・PM(左)・タイトル(中央)・閉じる(右)。狭い画面では折り返して重ならないようにする */
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, flex: '0 1 auto' }}>
+        /* 別ウィンドウ: タイトル中央＋右に閉じる、その下に日付・AM/PM（中央） */
+        <div style={{ borderBottom: '1px solid #e5e9f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px 4px' }}>
+            <div style={{ flex: 1 }} />
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap' }}>出荷予定表</div>
+            <div className="no-print" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => window.close()}
+                style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+            </div>
+          </div>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, padding: '0 12px 10px' }}>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
             <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
             {ampmButtons}
-          </div>
-          <div style={{ flex: '1 1 120px', textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap' }}>出荷予定表</div>
-          <div className="no-print" style={{ flex: '0 0 auto', display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => window.close()}
-              style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
           </div>
         </div>
       ) : (
@@ -4134,6 +4137,8 @@ function AssignPage({ isPopup }) {
               {rows.map(s => {
                 const addr = cleanAddr(s.siteAddress)
                 const addrCell = addr ? <span style={{ color: '#3a4a5c' }}>{addr}</span> : <span style={{ color: '#c0392b' }}>未入力</span>
+                const mixStr = mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')   // 登録した配合
+                const volStr = shipVolStr(s)                                                   // 登録した量
                 if (stacked) {
                   // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.LINE送信 3.住所+住所設定）。ボタンは同じ幅で右端を揃える
                   const cardBtnBase = { flex: '0 0 116px', borderRadius: 8, padding: '8px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' }
@@ -4148,6 +4153,7 @@ function AssignPage({ isPopup }) {
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ ...cardBtnBase, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f' }}>📍 住所設定</button>
                       </div>
+                      <div style={{ fontSize: 13, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flex: 1, minWidth: 0 }} />
                         <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #06c755', background: '#06c755', color: '#fff' }}>💬 LINE送信</button>
@@ -4161,6 +4167,7 @@ function AssignPage({ isPopup }) {
                     <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 600 }}>{s.companyName}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
                     <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
+                    <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>配合 {mixStr || '—'} ／ 量 {volStr || '—'}</span>
                     <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
                     <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 LINE送信</button>
                   </div>
@@ -4515,7 +4522,7 @@ function AppInner() {
 
   // PC用：担当者振替の別ウィンドウ（?view=assigndriver&id=...&popup=1）
   if (isPopup && view === 'assigndriver') {
-    return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}><DriverAssignPopupPage id={params.get('id') || ''} /></div>
+    return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff', boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top)' }}><DriverAssignPopupPage id={params.get('id') || ''} /></div>
   }
 
   let page = activeTab === 'dashboard' ? <DashboardPage />
@@ -4539,7 +4546,7 @@ function AppInner() {
   }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
+  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff', boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top)' }}>{page}</div>
 
   return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }
