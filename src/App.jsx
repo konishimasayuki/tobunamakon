@@ -3025,7 +3025,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <tbody>
             {rows.map(s => (
               <tr key={s.id}>
-                <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
+                <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 {!isPopup && (
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>
