@@ -3155,14 +3155,15 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
     <div style={{ maxWidth: '100%' }}>
       {/* 基本：受注日/日付・時間 */}
       <div style={card}>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+        {/* 受注日・日付は日付が収まる幅に固定し、間隔をあけて隣接させない */}
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 0 auto' }}>
             <label style={lbl}>受注日</label>
-            <input type="date" value={form.orderDate} onChange={set('orderDate')} style={inp} />
+            <input type="date" value={form.orderDate} onChange={set('orderDate')} style={{ ...inp, width: 150, padding: '13px 10px', textAlign: 'left' }} />
           </div>
-          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+          <div style={{ flex: '0 0 auto' }}>
             <label style={lbl}>日付</label>
-            <input type="date" value={form.date} onChange={set('date')} style={inp} />
+            <input type="date" value={form.date} onChange={set('date')} style={{ ...inp, width: 150, padding: '13px 10px', textAlign: 'left' }} />
           </div>
         </div>
         <div>
