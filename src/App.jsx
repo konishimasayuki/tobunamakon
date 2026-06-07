@@ -1491,6 +1491,33 @@ function buildShipmentPayload(form) {
   return payload
 }
 
+// 伝票フォームの各フィールド操作（出荷登録シートとスマホ予定編集フォームで共用）。
+// レイアウトに依存しないハンドラのみ。form/setForm を閉じ込めて返す。
+function makeDenpyoHandlers({ form, setForm, employees = [], companyComboOptions = [] }) {
+  const set = (key) => (e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, [key]: composing ? v : z2h(v) })) }
+  const setVal = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const handleCompanyInput = (e) => { const v = e.target.value; const o = companyComboOptions.find(o => o.label === v); setForm(f => ({ ...f, companyId: o?.id || '', companyName: v })) }
+  const syncMix = (rows) => { const r0 = rows[0] || { parts: ['', '', ''], note: '' }; return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] } }
+  const setMixCell = (row, i, v, raw) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2); return { ...f, ...syncMix(rows) } })
+  const setMixRowNote = (row, v) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].note = v; return { ...f, ...syncMix(rows) } })
+  const addMixRow = () => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); if (rows.length >= 2) return f; rows.push({ parts: ['', '', ''], note: '' }); return { ...f, ...syncMix(rows) } })
+  const delMixRow = (row) => setForm(f => { let rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); rows = rows.filter((_, idx) => idx !== row); if (!rows.length) rows = [{ parts: ['', '', ''], note: '' }]; return { ...f, ...syncMix(rows) } })
+  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [{ parts: ['', '', ''], note: '' }])
+  const syncVeh = (items) => ({ vehicleItems: items, vehicleType: items.map(v => v.type).join('・') })
+  const toggleVehItem = (type) => setForm(f => { const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []; const at = items.findIndex(v => v.type === type); if (at >= 0) items.splice(at, 1); else items.push({ type, qty: '1' }); items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type)); return { ...f, ...syncVeh(items) } })
+  const setVehQty = (type, qty, composing) => setForm(f => { const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: composing ? String(qty).slice(0, 2) : z2h(qty).replace(/[^0-9]/g, '').slice(0, 2) } : v); return { ...f, ...syncVeh(items) } })
+  const vehItems = () => (Array.isArray(form.vehicleItems) ? form.vehicleItems : [])
+  const toggleNoteTag = (tag) => setForm(f => { const cur = Array.isArray(f.noteTags) ? f.noteTags : []; return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
+  const toggleTestTag = (tag) => setForm(f => { const cur = Array.isArray(f.testTags) ? f.testTags : []; return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
+  const addNoteMessage = (msg) => setForm(f => { const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []; const i = notes.findIndex(n => n && n.kind === 'msg'); if (i >= 0) { const cur = String(notes[i].text || ''); if (cur.split(/\s+/).filter(Boolean).includes(msg)) return f; notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg } } else { notes.push({ text: msg, important: false, kind: 'msg' }) } return { ...f, notes: sortNotes(notes) } })
+  const removeNoteMessage = (msg) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []); const i = notes.findIndex(n => n && n.kind === 'msg'); if (i < 0) return f; const rest = String(notes[i].text || '').split(/\s+/).filter(Boolean).filter(x => x !== msg); if (rest.length) notes[i].text = rest.join(' '); else notes.splice(i, 1); return { ...f, notes: sortNotes(notes) } })
+  const unloadText = () => { const n = (form.notes || []).find(n => n && n.kind === 'unload'); return n ? n.text : '' }
+  const setUnload = (val) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload')); if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' }); return { ...f, notes: sortNotes(notes) } })
+  const addDriver = (e) => { const emp = employees.find(emp => emp.id === e.target.value); if (!emp) return; setForm(f => f.drivers.some(d => d.id === emp.id) ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] })) }
+  const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
+  return { set, setVal, handleCompanyInput, syncMix, setMixCell, setMixRowNote, addMixRow, delMixRow, mixRowsOf, syncVeh, toggleVehItem, setVehQty, vehItems, toggleNoteTag, toggleTestTag, addNoteMessage, removeNoteMessage, unloadText, setUnload, addDriver, removeDriver }
+}
+
 // 出荷登録フォームの「伝票シート」本体（出荷登録ページとスマホ予定表の編集モーダルで共用）。
 // form/setForm を受け取り、各フィールドのハンドラとレイアウトを内包する。地図・登録ボタンは親側で描画。
 function DenpyoFields({ form, setForm, editChanged = [], editing = null, employees = [], companyComboOptions = [], tradingComboOptions = [], onPdfImport, removePdf, previewPdf }) {
