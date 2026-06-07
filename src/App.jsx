@@ -4083,6 +4083,7 @@ function CancelPage() {
 // isPopup: 別ウィンドウ（ログイン不要で誰でも振替可能）
 function AssignPage({ isPopup }) {
   const stacked = useIsMobile(1101)   // スマホ/iPad
+  const narrow = useIsMobile(760)     // スマホ（狭い縦画面）。iPad以上は横並びカード
   const useModal = isPopup || stacked   // 別ウィンドウ内 or スマホ/iPad は振替モーダル、PC(アプリ内)は別ウィンドウ
   const urlDate = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search).get('date') : null
   const [date, setDate] = useState(() => (isPopup && urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : localToday())
@@ -4144,41 +4145,46 @@ function AssignPage({ isPopup }) {
                 const drv = driversOf(s)                                                       // 割り当て済みの担当者
                 const assigned = drv.length > 0
                 const cardBg = assigned ? '#e6f1fb' : '#fff'   // 割り当て済みは薄い水色
-                const driverLine = (
-                  <div style={{ fontSize: 14 }}>
-                    <span style={{ color: '#6b7a8d', marginRight: 6 }}>担当</span>
-                    {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b' }}>未割り当て</span>}
-                  </div>
-                )
-                if (stacked) {
-                  // スマホ/iPad：縦カード。情報を上から並べ、操作ボタンは下に横並び（均等）で配置
+                if (narrow) {
+                  // スマホ（狭い縦画面）：縦カード。操作ボタンは下に横並び
                   return (
                     <div key={s.id} style={{ background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 16 }}>{firstTimeOf(s) || '—'}</span>
-                        <span style={{ fontWeight: 700, fontSize: 16 }}>{s.companyName}</span>
-                        <span style={{ color: '#6b7a8d' }}>{s.siteName || ''}</span>
+                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 18 }}>{firstTimeOf(s) || '—'}</span>
+                        <span style={{ fontWeight: 700, fontSize: 18 }}>{s.companyName}</span>
+                        <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
                       </div>
-                      {driverLine}
-                      <div style={{ fontSize: 14, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
-                      <div style={{ fontSize: 14, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
+                      <div style={{ fontSize: 16 }}><span style={{ color: '#6b7a8d', marginRight: 6 }}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
+                      <div style={{ fontSize: 16, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
+                      <div style={{ fontSize: 16, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
-                        <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '11px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
-                        <button type="button" onClick={() => openAssign(s)} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '11px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                        <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                        <button type="button" onClick={() => openAssign(s)} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                       </div>
                     </div>
                   )
                 }
+                // iPad/PC：左に情報（縦に積む）＋右に操作ボタン縦並び（住所設定の下にLINE送信）
+                const lbl = { color: '#6b7a8d', marginRight: 8, fontSize: 19 }
                 return (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 10, padding: '10px 14px' }}>
-                    <span style={{ flex: '0 0 auto', fontWeight: 800, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
-                    <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 700 }}>{s.companyName}</span>
-                    <span style={{ flex: '1 1 120px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
-                    <span style={{ flex: '1 1 110px', minWidth: 0 }}>担当 {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b' }}>未</span>}</span>
-                    <span style={{ flex: '1 1 130px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
-                    <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>配合 {mixStr || '—'} ／ 量 {volStr || '—'}</span>
-                    <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
-                    <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 LINE送信</button>
+                  <div key={s.id} style={{ display: 'flex', gap: 16, alignItems: 'stretch', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 27 }}>{firstTimeOf(s) || '—'}</span>
+                        <span style={{ fontWeight: 700, fontSize: 27 }}>{s.companyName}</span>
+                        <span style={{ color: '#6b7a8d', fontSize: 21 }}>{s.siteName || ''}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '8px 18px', fontSize: 23 }}>
+                        <div style={{ minWidth: 0 }}><span style={lbl}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
+                        <div style={{ minWidth: 0 }}><span style={lbl}>配合</span><b style={{ color: '#111' }}>{mixStr || '—'}</b></div>
+                        <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={lbl}>住所</span><span style={{ color: '#3a4a5c' }}>{addrCell}</span></div>
+                        <div style={{ minWidth: 0 }}><span style={lbl}>量</span><b style={{ color: '#111' }}>{volStr || '—'}</b></div>
+                      </div>
+                    </div>
+                    <div style={{ flex: '0 0 230px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '17px 0', fontSize: 21, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                      <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '17px 0', fontSize: 21, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                    </div>
                   </div>
                 )
               })}
