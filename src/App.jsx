@@ -2597,9 +2597,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     el.style.fontSize = ''                 // いったんCSSの基準サイズ（clamp）に戻す
     const base = parseFloat(getComputedStyle(el).fontSize) || 16
     let size = base, guard = 0
-    // 横（および textarea の縦）がはみ出す間、収まるまで縮める
+    // 横（および textarea の縦）がはみ出す間、収まるまで縮める。
+    // 現場名(sc-wrap2)は3行まで使うので下限を高め(12px)にして、長い名前でも読める大きさを保つ
+    const minSize = (el.classList && el.classList.contains('sc-wrap2')) ? 12 : 8
     const over = () => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
-    while (over() && size > 8 && guard < 80) { size -= 0.5; el.style.fontSize = size + 'px'; guard++ }
+    while (over() && size > minSize && guard < 80) { size -= 0.5; el.style.fontSize = size + 'px'; guard++ }
   }
   const fitAll = () => fitEls.current.forEach(el => { if (el && el.isConnected) fitOne(el); else fitEls.current.delete(el) })
   const fitRef = (el) => { if (el) { fitEls.current.add(el); requestAnimationFrame(() => fitOne(el)) } }
