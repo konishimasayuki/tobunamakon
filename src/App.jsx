@@ -253,6 +253,10 @@ const S = {
 // レスポンシブ用フック（モバイル/タブレット判定）
 // ============================================================
 const MOBILE_BP = 768   // これ未満をモバイル扱い（iPhone / 縦持ちスマホ）
+// タッチ端末か（iPhone/iPad＝true、デスクトップPC＝false）。横向きiPadは幅だけでは
+// ノートPCと区別できないため、生コン出力の「PCのみ」判定に使う。
+const IS_TOUCH_DEVICE = typeof navigator !== 'undefined' &&
+  ((navigator.maxTouchPoints || 0) > 0 || (typeof window !== 'undefined' && 'ontouchstart' in window))
 
 function useIsMobile(bp = MOBILE_BP) {
   const [mobile, setMobile] = useState(
@@ -4240,16 +4244,14 @@ function AssignPage({ isPopup }) {
     <div style={RPT.wrap}>
       <div style={RPT.head}>
         <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送割り当て{isPopup ? '（共有）' : ''}</h2>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
-        {/* スマホでは「共有（別ウィンドウ）」ボタンを短くして曜日の左に置く（曜日はその右隣） */}
-        {!isPopup && narrow && (
+        {/* 日付と曜日は必ず隣接（日付が左・曜日が右）。スマホでもこの2つは離れない */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+          <span style={{ fontSize: 13, color: '#6b7a8d', whiteSpace: 'nowrap' }}>（{wd}）</span>
+        </span>
+        {!isPopup && (
           <button type="button" onClick={openBoard}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 共有（別ウィンドウ）</button>
-        )}
-        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）</span>
-        {!isPopup && !narrow && (
-          <button type="button" onClick={openBoard}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く（ログイン不要・共有可）</button>
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{narrow ? '⛶ 共有（別ウィンドウ）' : '⛶ 別ウィンドウで開く（ログイン不要・共有可）'}</button>
         )}
         {isPopup && (
           <button type="button" onClick={() => window.close()}
@@ -4529,8 +4531,8 @@ function Layout({ children, activeTab, onTabChange }) {
   const [open, setOpen]   = useState(false)
   const isMobile = useIsMobile()
   const isPC = !isMobile
-  const notPC = useIsMobile(1025)   // PC(>=1025)未満。生コン出荷予定表出力はPCのみ
-  // 生コン出荷予定表出力タブはPCのみ表示（スマホ・iPadでは出さない）
+  // 生コン出荷予定表出力はPCのみ。タッチ端末(iPhone/iPad)＝横向きで幅が広くても非表示
+  const notPC = IS_TOUCH_DEVICE || useIsMobile(1025)
   const navTabs = TABS.filter(t => !(notPC && t.id === 'seikon'))
 
   // モバイルでドロワーを開いている間は背面スクロールを止める
@@ -4660,7 +4662,7 @@ function LockedPage({ onUnlock }) {
 function AppInner() {
   const { user, loading } = useAuth()
   const isMobile = useIsMobile()
-  const notPC = useIsMobile(1025)   // 生コン出荷予定表出力はPCのみ（スマホ・iPadは案内表示）
+  const notPC = IS_TOUCH_DEVICE || useIsMobile(1025)   // 生コン出荷予定表出力はPCのみ（スマホ・iPadは案内表示）
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
