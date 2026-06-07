@@ -4241,8 +4241,13 @@ function AssignPage({ isPopup }) {
       <div style={RPT.head}>
         <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送割り当て{isPopup ? '（共有）' : ''}</h2>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+        {/* スマホでは「共有（別ウィンドウ）」ボタンを短くして曜日の左に置く（曜日はその右隣） */}
+        {!isPopup && narrow && (
+          <button type="button" onClick={openBoard}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 共有（別ウィンドウ）</button>
+        )}
         <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）</span>
-        {!isPopup && (
+        {!isPopup && !narrow && (
           <button type="button" onClick={openBoard}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く（ログイン不要・共有可）</button>
         )}
@@ -4524,8 +4529,9 @@ function Layout({ children, activeTab, onTabChange }) {
   const [open, setOpen]   = useState(false)
   const isMobile = useIsMobile()
   const isPC = !isMobile
-  // スマホでは生コン出荷予定表出力タブを表示しない
-  const navTabs = TABS.filter(t => !(isMobile && t.id === 'seikon'))
+  const notPC = useIsMobile(1025)   // PC(>=1025)未満。生コン出荷予定表出力はPCのみ
+  // 生コン出荷予定表出力タブはPCのみ表示（スマホ・iPadでは出さない）
+  const navTabs = TABS.filter(t => !(notPC && t.id === 'seikon'))
 
   // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
@@ -4654,6 +4660,7 @@ function LockedPage({ onUnlock }) {
 function AppInner() {
   const { user, loading } = useAuth()
   const isMobile = useIsMobile()
+  const notPC = useIsMobile(1025)   // 生コン出荷予定表出力はPCのみ（スマホ・iPadは案内表示）
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
@@ -4689,7 +4696,7 @@ function AppInner() {
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
-    : activeTab === 'seikon' ? (isMobile && !isPopup
+    : activeTab === 'seikon' ? (notPC && !isPopup
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />
