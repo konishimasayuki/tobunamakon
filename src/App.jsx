@@ -1005,9 +1005,9 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
   }, [])
   return (
     <input ref={ref} className={className} type={type} value={value}
-      onChange={e => { onChange(e); if (!composingRef.current) requestAnimationFrame(fit) }}
+      onChange={e => { if (composingRef.current) return; onChange(e); requestAnimationFrame(fit) }}
       onCompositionStart={() => { composingRef.current = true }}
-      onCompositionEnd={() => { composingRef.current = false; requestAnimationFrame(fit) }}
+      onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
   )
 }
@@ -1110,7 +1110,7 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
               value={it.text}
               onCompositionStart={() => { composingRef.current = true }}
               onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i])) }}
-              onChange={e => update(i, { text: e.target.value })}
+              onChange={e => { if (!composingRef.current) update(i, { text: e.target.value }) }}
             />
             <div className="ctl">
               <button type="button" className={'imp' + (it.important ? ' on' : '')} title="重要" onClick={() => update(i, { important: !it.important })}>!</button>
@@ -1912,7 +1912,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / PDFインポート（小項目をまとめてコンパクトに） */}
             <div className="band">
               {/* 車種：縦並び・各チップを大型幅に揃え、台数入力欄の開始位置を統一 */}
-              <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 20%', minWidth: 0 }}>
                 <div className="lbl" style={redIf('vehicleType')}>車 種</div>
                 <div className="btn-mid"><div className="veh-chips">
                   {VEHICLE_TYPES.map(o => {
@@ -4165,25 +4165,25 @@ function AssignPage({ isPopup }) {
                   )
                 }
                 // iPad/PC：左に情報（縦に積む）＋右に操作ボタン縦並び（住所設定の下にLINE送信）
-                const lbl = { color: '#6b7a8d', marginRight: 8, fontSize: 19 }
+                const lbl = { color: '#6b7a8d', marginRight: 8, fontSize: 13 }
                 return (
-                  <div key={s.id} style={{ display: 'flex', gap: 16, alignItems: 'stretch', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '14px 16px' }}>
-                    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 27 }}>{firstTimeOf(s) || '—'}</span>
-                        <span style={{ fontWeight: 700, fontSize: 27 }}>{s.companyName}</span>
-                        <span style={{ color: '#6b7a8d', fontSize: 21 }}>{s.siteName || ''}</span>
+                  <div key={s.id} style={{ display: 'flex', gap: 14, alignItems: 'stretch', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 19 }}>{firstTimeOf(s) || '—'}</span>
+                        <span style={{ fontWeight: 700, fontSize: 19 }}>{s.companyName}</span>
+                        <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '8px 18px', fontSize: 23 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '6px 18px', fontSize: 16 }}>
                         <div style={{ minWidth: 0 }}><span style={lbl}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
                         <div style={{ minWidth: 0 }}><span style={lbl}>配合</span><b style={{ color: '#111' }}>{mixStr || '—'}</b></div>
                         <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={lbl}>住所</span><span style={{ color: '#3a4a5c' }}>{addrCell}</span></div>
                         <div style={{ minWidth: 0 }}><span style={lbl}>量</span><b style={{ color: '#111' }}>{volStr || '—'}</b></div>
                       </div>
                     </div>
-                    <div style={{ flex: '0 0 230px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
-                      <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '17px 0', fontSize: 21, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
-                      <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '17px 0', fontSize: 21, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                    <div style={{ flex: '0 0 190px', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                      <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   </div>
                 )

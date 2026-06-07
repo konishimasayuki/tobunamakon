@@ -87,8 +87,8 @@ input, textarea, select { font-family: inherit; }
 .denpyo .mixwrap { display:flex; flex-direction:column; align-items:stretch; justify-content:center; height:118px; gap:6px; overflow:hidden; }
 .denpyo .mixwrap.two { gap:8px; }
 /* 1行のときは数字をできるだけ大きく（固定高96pxに収まる範囲で拡大）・中央揃え */
-.denpyo .mixwrap.one .haigou3 .hg { font-size:48px; }
-.denpyo .mixwrap.one .haigou3 .hgsep { font-size:40px; }
+.denpyo .mixwrap.one .haigou3 .hg { font-size:40px; }
+.denpyo .mixwrap.one .haigou3 .hgsep { font-size:34px; }
 .denpyo .mixwrap.one .addrow { align-self:center; }
 /* 地図キャンバス（モバイルは低め＝全画面化を避ける） */
 .sitemap-canvas { width:100%; height:560px; border-radius:8px; background:#e8eaed; }
@@ -121,10 +121,10 @@ input, textarea, select { font-family: inherit; }
 .denpyo .ro-note { font-size:9px; color:#9a9a9a; margin-top:1px; font-family:'Noto Sans JP',sans-serif; }
 /* 車種：縦並び・各チップを大型(最も広い)の幅に固定し、台数入力欄の開始位置を統一 */
 .denpyo .veh-chips { display:flex; flex-direction:column; gap:9px; margin-top:2px; align-items:flex-start; }
-.denpyo .vehpill { display:inline-flex; align-items:center; gap:5px; }
-.denpyo .veh-chips .chip { width:2.8em; text-align:center; padding:7px 0; font-size:18px; line-height:1.3; }
-.denpyo .veh-chips .vehqty { width:1.9em; font-size:18px; }
-.denpyo .vehu { font-size:13px; font-family:'Noto Sans JP',sans-serif; color:#111; }
+.denpyo .vehpill { display:inline-flex; align-items:center; gap:3px; max-width:100%; }
+.denpyo .veh-chips .chip { width:2.4em; text-align:center; padding:6px 0; font-size:17px; line-height:1.3; flex:0 0 auto; }
+.denpyo .veh-chips .vehqty { width:1.5em; font-size:16px; flex:0 0 auto; }
+.denpyo .vehu { font-size:12px; font-family:'Noto Sans JP',sans-serif; color:#111; flex:0 0 auto; }
 /* 荷下ろし自由入力（1つ。内容は備考に出力） */
 .denpyo .unload-input { width:100%; box-sizing:border-box; margin-top:5px; border:none; border-bottom:1px solid #1b4ea8; background:#f2f7ff; font-family:inherit; font-size:13px; padding:3px 6px; outline:none; color:#111; }
 .denpyo .unload-input::placeholder { color:#9bb4d6; }
