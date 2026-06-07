@@ -880,7 +880,7 @@ function CustomersPage() {
 // ============================================================
 // 出荷登録ページ
 // ============================================================
-const VEHICLE_TYPES = ['4t', '7t', '大型', '空']
+const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
 const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
@@ -1554,7 +1554,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []
     const at = items.findIndex(v => v.type === type)
     if (at >= 0) items.splice(at, 1)
-    else items.push({ type, qty: type === '空' ? '' : '1' })   // 選択時は既定で1台（空は台数なし）
+    else items.push({ type, qty: '1' })   // 選択時は既定で1台
     // VEHICLE_TYPES 並び順を保持
     items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type))
     return { ...f, ...syncVeh(items) }
@@ -1906,7 +1906,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
             {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / PDFインポート（小項目をまとめてコンパクトに） */}
             <div className="band">
-              {/* 車種：縦並び・各チップを大型幅に揃え、台数入力欄の開始位置を統一。空以外は台数入力 */}
+              {/* 車種：縦並び・各チップを大型幅に揃え、台数入力欄の開始位置を統一 */}
               <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
                 <div className="lbl" style={redIf('vehicleType')}>車 種</div>
                 <div className="btn-mid"><div className="veh-chips">
@@ -1916,7 +1916,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     return (
                       <span key={o} className="vehpill">
                         <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                        {on && o !== '空' && (
+                        {on && (
                           <><input className="vehqty" inputMode="numeric" placeholder="台" value={it.qty || ''} onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)} /><span className="vehu">台</span></>
                         )}
                       </span>
@@ -2136,6 +2136,25 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     </div>
                   )
                 })()}
+              </div>
+            </div>
+
+            {/* 担当ドライバー（備考の下・横幅いっぱい・上限なし） */}
+            <div className="band">
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                  {form.drivers.map((d, i) => (
+                    <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
+                      {d.name}
+                      <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                  <select className="f" value="" onChange={addDriver} style={{ width: 'auto', minWidth: 150, border: '1px solid #cdd5e0', borderRadius: 5, padding: '3px 6px' }}>
+                    <option value="">＋ ドライバーを追加</option>
+                    {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -2366,6 +2385,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
+  const [lineTarget, setLineTarget] = useState(null) // LINE送信モーダルで開いている伝票
+  const [lineSel, setLineSel] = useState([])         // LINE送信の送り先（従業員id）
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -2732,38 +2753,38 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 添付PDFを新規ウィンドウで開く
   const openPdfWin = (id) => window.open(`/api/shipments?id=${encodeURIComponent(id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')
 
-  const sendLine = async (s) => {
-    const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
-    if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
-    // 担当ドライバー → 従業員管理のLINEユーザーIDを解決（id一致、なければ氏名一致）
-    // lineId はコピペ混入の空白・改行・不可視文字を除去してから使う
-    const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
-    const resolved = shipDrivers.map(d => {
-      const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name)
-      return { name: d.name, lineId: cleanId(emp?.lineId) }
-    })
-    const withId = resolved.filter(r => r.lineId)
-    const without = resolved.filter(r => !r.lineId)
-    if (withId.length === 0) {
-      alert('担当ドライバーにLINEユーザーIDが紐づいていません。\n従業員管理でLINE IDを設定してください。')
-      return
-    }
-    let msg = `${withId.map(r => r.name).join('、')} にLINEを送信しますか？`
-    if (without.length) msg += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
-    if (!window.confirm(msg)) return
+  // LINE送信：送り先（従業員管理のドライバー）を選んで一括送信→送信できたら担当に追加していく
+  const cleanLineId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+  const openLine = (s) => { setLineTarget(s); setLineSel([]) }
+  const toggleLineSel = (id) => setLineSel(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])
+  const doSendLine = async () => {
+    const s = lineTarget
+    if (!s) return
+    const chosen = drivers.filter(d => lineSel.includes(d.id))
+    if (chosen.length === 0) { alert('送り先を選択してください'); return }
+    const withId = chosen.map(d => ({ id: d.id, name: d.name, lineId: cleanLineId(d.lineId) })).filter(r => r.lineId)
+    const without = chosen.filter(d => !cleanLineId(d.lineId))
+    if (withId.length === 0) { alert('選択した送り先にLINEユーザーIDが設定されていません。\n従業員管理でLINE IDを設定してください。'); return }
     try {
       const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: s.id, lineUserIds: withId.map(r => r.lineId) })
+      // 送信できたら担当に追加（既存とマージ・重複除外）
+      const cur = Array.isArray(s.drivers) ? s.drivers : []
+      const merged = [...cur]
+      chosen.forEach(d => { if (!merged.some(x => (x.id && x.id === d.id) || x.name === d.name)) merged.push({ id: d.id, name: d.name }) })
+      try {
+        const updated = await saveShipmentDrivers(s, merged)
+        setAll(arr => arr.map(x => x.id === updated.id ? updated : x))
+        notifyShipmentsChanged()
+      } catch { /* 担当追加に失敗しても送信自体は完了 */ }
       const fails = (res.results || []).filter(r => !r.ok)
       let msg = `送信しました（${res.sent}/${res.total} 件成功）`
+      if (without.length) msg += `\n（LINE未設定でスキップ: ${without.map(d => d.name).join('、')}）`
       if (fails.length) {
-        // 失敗したIDと担当名・理由を表示
-        const lines = fails.map(f => {
-          const who = withId.find(w => w.lineId === f.to)
-          return `・${who ? who.name : ''}（${f.to}）\n  ${f.error || '不明なエラー'}`
-        })
+        const lines = fails.map(f => { const who = withId.find(w => w.lineId === f.to); return `・${who ? who.name : ''}（${f.to}）\n  ${f.error || '不明なエラー'}` })
         msg += `\n\n■ 送信失敗:\n${lines.join('\n')}`
       }
       alert(msg)
+      setLineTarget(null)
     } catch (e) {
       alert('送信に失敗しました: ' + e.message)
     }
@@ -2868,7 +2889,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-card-actions">
                     <button type="button" onClick={() => setEditModal(s)}
                       style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => sendLine(s)}
+                    <button type="button" onClick={() => openLine(s)}
                       style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
                   </div>
                 </div>
@@ -2926,7 +2947,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <td style={{ textAlign: 'center' }}>
                     <button type="button" onClick={() => openEditWindow(s)}
                       style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => sendLine(s)}
+                    <button type="button" onClick={() => openLine(s)}
                       style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
                   </td>
                 )}
@@ -2968,6 +2989,36 @@ function SchedulePage({ onEditShipment, isPopup }) {
           onClose={() => setEditModal(null)}
           onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
         />
+      )}
+      {lineTarget && (
+        <div onClick={() => setLineTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 460, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
+            <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(lineTarget) || '—'}</b>　<b>{lineTarget.companyName}</b></div>
+            <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 8 }}>{lineTarget.siteName || ''}</div>
+            {Array.isArray(lineTarget.drivers) && lineTarget.drivers.length > 0 && (
+              <div style={{ fontSize: 12, color: '#1a4d8f', marginBottom: 8 }}>現在の担当: {lineTarget.drivers.map(d => d.name).join('、')}</div>
+            )}
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>送り先を選択（従業員管理のドライバー・タップで選択）</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {drivers.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
+                : drivers.map(d => {
+                  const on = lineSel.includes(d.id)
+                  const noId = !cleanLineId(d.lineId)
+                  return (
+                    <button key={d.id} type="button" onClick={() => toggleLineSel(d.id)}
+                      style={{ border: on ? '2px solid #06c755' : '1.5px solid #cdd5e0', background: on ? '#06c755' : '#fff', color: on ? '#fff' : (noId ? '#aab' : '#3a4a5c'), borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                      {d.name}{noId && <span style={{ fontSize: 10, marginLeft: 2 }}>(LINE未設定)</span>}
+                    </button>
+                  )
+                })}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button type="button" onClick={() => setLineTarget(null)} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+              <button type="button" onClick={doSendLine} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>💬 一括送信</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -3499,7 +3550,10 @@ function WeeklySchedulePage() {
                   const lb = BIN_LABELS[bi]
                   return (
                     <div key={bi} style={{ padding: '6px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 13, color: '#3a4a5c', lineHeight: 1.45 }}>
-                      <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>{lb.main}{lb.sub}</div>
+                      <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>{lb.main}</span>
+                        {lb.sub && <span style={{ display: 'block', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{lb.sub}</span>}
+                      </div>
                       <div style={{ fontWeight: 700, color: '#0f3060', fontSize: 14 }}>計{st.total}台</div>
                       <div style={{ fontSize: 13, marginTop: 1 }}>{st.summary || '—'}</div>
                     </div>

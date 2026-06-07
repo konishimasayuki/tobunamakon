@@ -119,11 +119,11 @@ input, textarea, select { font-family: inherit; }
 .denpyo .readonly-date { font-size:15px; color:#444; padding:1px 0; font-family:'Noto Sans JP',sans-serif; }
 .denpyo .ro-note { font-size:9px; color:#9a9a9a; margin-top:1px; font-family:'Noto Sans JP',sans-serif; }
 /* 車種：縦並び・各チップを大型(最も広い)の幅に固定し、台数入力欄の開始位置を統一 */
-.denpyo .veh-chips { display:flex; flex-direction:column; gap:4px; margin-top:2px; align-items:flex-start; }
-.denpyo .vehpill { display:inline-flex; align-items:center; gap:4px; }
-.denpyo .veh-chips .chip { width:2.6em; text-align:center; padding:3px 0; font-size:14px; line-height:1.4; }
-.denpyo .veh-chips .vehqty { width:1.8em; font-size:15px; }
-.denpyo .vehu { font-size:11px; font-family:'Noto Sans JP',sans-serif; color:#111; }
+.denpyo .veh-chips { display:flex; flex-direction:column; gap:9px; margin-top:2px; align-items:flex-start; }
+.denpyo .vehpill { display:inline-flex; align-items:center; gap:5px; }
+.denpyo .veh-chips .chip { width:2.8em; text-align:center; padding:7px 0; font-size:18px; line-height:1.3; }
+.denpyo .veh-chips .vehqty { width:1.9em; font-size:18px; }
+.denpyo .vehu { font-size:13px; font-family:'Noto Sans JP',sans-serif; color:#111; }
 /* 荷下ろし自由入力（1つ。内容は備考に出力） */
 .denpyo .unload-input { width:100%; box-sizing:border-box; margin-top:5px; border:none; border-bottom:1px solid #1b4ea8; background:#f2f7ff; font-family:inherit; font-size:13px; padding:3px 6px; outline:none; color:#111; }
 .denpyo .unload-input::placeholder { color:#9bb4d6; }
