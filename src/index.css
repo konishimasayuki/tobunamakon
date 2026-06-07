@@ -242,15 +242,14 @@ input, textarea, select { font-family: inherit; }
 
 /* PDF出力（印刷）: 用紙はA4横。23行を1ページに収め、画像の帳票のように罫線付きで出す */
 @media print {
-  /* @pageの余白は0にして用紙全面をページボックスにし、4mmの余白は印刷用ラッパーの
-     padding で確保する。こうするとプリンタの物理印字不可領域に表の罫線が掛からず、
-     表の周囲が切れない（A4計算で上下左右4mmの余白を必ず内側に持たせる）。 */
-  @page { size: A4 landscape; margin: 0; }
+  /* 印刷の既定余白は上下左右10mm（@pageで指定）。ラッパー側の余白は0にして
+     10mmの余白内いっぱいに表を配置する。 */
+  @page { size: A4 landscape; margin: 10mm; }
   html, body { background:#fff !important; }
   .no-print { display:none !important; }
   /* 別ウィンドウは表だけを印刷（FitToWidthの縮小スケールを解除して実寸で）。
-     ルートを用紙サイズ(297x210mm)＋4mm paddingにして表を内側に収める。 */
-  .schedule-popup-root { box-sizing:border-box !important; width:297mm !important; min-height:210mm !important; padding:4mm !important; margin:0 auto !important; max-width:none !important; overflow:visible !important; }
+     @pageの10mm余白の内側いっぱいに広げる。 */
+  .schedule-popup-root { box-sizing:border-box !important; width:auto !important; min-height:0 !important; padding:0 !important; margin:0 !important; max-width:none !important; overflow:visible !important; }
   .schedule-popup-root .schedule.popup-view { padding:0 !important; max-width:none !important; overflow:visible !important; }
   .schedule.popup-view { transform:none !important; }
   .schedule.popup-view table { width:100% !important; min-width:0 !important; table-layout:fixed; }
@@ -298,9 +297,8 @@ input, textarea, select { font-family: inherit; }
      ページコンテキスト切替で強制改ページが入り、常に2ページ目が出てしまうため） */
   html, body { margin:0 !important; height:auto !important; }
   .popup-print-root { height:auto !important; overflow:visible !important; margin:0 !important; padding:0 !important; }
-  /* 印刷用ラッパーを用紙サイズ(A4横 297x210mm)＋4mm paddingにして、表が
-     プリンタの印字不可領域に掛からないよう上下左右に必ず4mmの余白を確保する。 */
-  .seikon-wrap { box-sizing:border-box !important; width:297mm !important; padding:4mm !important; margin:0 auto !important; height:auto !important; overflow:visible !important; }
+  /* @pageの10mm余白の内側いっぱいに表を配置（ラッパー側の余白は0） */
+  .seikon-wrap { box-sizing:border-box !important; width:auto !important; padding:0 !important; margin:0 !important; height:auto !important; overflow:visible !important; }
   .seikon-sheet { max-width:none !important; padding:0 !important; margin:0 !important; }
   .seikon-title { padding:0 0 2px; }
   .seikon-title .st-name { font-size:15px; }
