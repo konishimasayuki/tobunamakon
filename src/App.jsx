@@ -3534,8 +3534,7 @@ function WeeklySchedulePage() {
                 }
               })
               const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
-              const summary = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v}:${c[v]}台`).join(' ')
-              return { summary, total }
+              return { total, c }
             }
             // 便の区分：第一便=9時まで(<9:00)／第二便=9時以降の午前(9:00〜11:59)／午後=12:00以降
             const bin = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
@@ -3548,14 +3547,20 @@ function WeeklySchedulePage() {
                 {binList.map((bl, bi) => {
                   const st = vehStats(bl)
                   const lb = BIN_LABELS[bi]
+                  // 内訳：4t/7t を1行目、大型を2行目。常に2行ぶんの高さを確保して下の一覧の開始位置を揃える
+                  const small = ['4t', '7t'].filter(v => st.c[v] > 0).map(v => `${v}:${st.c[v]}台`).join('　')
+                  const big = st.c['大型'] > 0 ? `大型:${st.c['大型']}台` : ''
                   return (
-                    <div key={bi} style={{ padding: '6px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 13, color: '#3a4a5c', lineHeight: 1.45 }}>
+                    <div key={bi} style={{ padding: '6px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 13, color: '#3a4a5c', lineHeight: 1.4 }}>
                       <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>
                         <span style={{ whiteSpace: 'nowrap' }}>{lb.main}</span>
-                        {lb.sub && <span style={{ display: 'block', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{lb.sub}</span>}
+                        {lb.sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{lb.sub}</span>}
                       </div>
                       <div style={{ fontWeight: 700, color: '#0f3060', fontSize: 14 }}>計{st.total}台</div>
-                      <div style={{ fontSize: 13, marginTop: 1 }}>{st.summary || '—'}</div>
+                      <div style={{ fontSize: 13, marginTop: 1, lineHeight: 1.3 }}>
+                        <div style={{ whiteSpace: 'nowrap', minHeight: '1.3em' }}>{st.total === 0 ? '—' : small}</div>
+                        <div style={{ whiteSpace: 'nowrap', minHeight: '1.3em' }}>{big}</div>
+                      </div>
                     </div>
                   )
                 })}
