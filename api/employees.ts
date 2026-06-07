@@ -5,11 +5,28 @@ import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = requireAuth(req)
-  if (!user) return res.status(401).json({ error: '認証が必要です' })
 
   const idParam = req.query.id
   const id = Array.isArray(idParam) ? idParam[0] : idParam
   const hasId = !!id
+
+  // 公開: ドライバー一覧（id/nameのみ）はログイン不要で取得可（配送臨時割り当ての別ウィンドウ用）
+  if (req.method === 'GET' && !hasId && (req.query.drivers === '1' || req.query.drivers === 'true')) {
+    try {
+      const ids = await redis.smembers('employees')
+      if (!ids || ids.length === 0) return res.status(200).json([])
+      const p = redis.pipeline()
+      ids.forEach(eid => p.hgetall(`employee:${eid}`))
+      const rows = await p.exec<Record<string, any>[]>()
+      const drivers = rows.filter(e => e && e.type === 'driver').map(e => ({ id: e.id, name: e.name, type: 'driver', lineId: e.lineId || '' }))
+      drivers.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
+      return res.status(200).json(drivers)
+    } catch (e) {
+      return res.status(500).json({ error: 'サーバーエラーが発生しました' })
+    }
+  }
+
+  if (!user) return res.status(401).json({ error: '認証が必要です' })
 
   // 一覧取得
   if (req.method === 'GET' && !hasId) {

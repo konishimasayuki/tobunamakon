@@ -87,8 +87,8 @@ input, textarea, select { font-family: inherit; }
 .denpyo .mixwrap { display:flex; flex-direction:column; align-items:stretch; justify-content:center; height:118px; gap:6px; overflow:hidden; }
 .denpyo .mixwrap.two { gap:8px; }
 /* 1行のときは数字をできるだけ大きく（固定高96pxに収まる範囲で拡大）・中央揃え */
-.denpyo .mixwrap.one .haigou3 .hg { font-size:48px; }
-.denpyo .mixwrap.one .haigou3 .hgsep { font-size:40px; }
+.denpyo .mixwrap.one .haigou3 .hg { font-size:40px; }
+.denpyo .mixwrap.one .haigou3 .hgsep { font-size:34px; }
 .denpyo .mixwrap.one .addrow { align-self:center; }
 /* 地図キャンバス（モバイルは低め＝全画面化を避ける） */
 .sitemap-canvas { width:100%; height:560px; border-radius:8px; background:#e8eaed; }
@@ -99,7 +99,8 @@ input, textarea, select { font-family: inherit; }
 /* 地図下の操作ボタン: 1行に均等配置し、枠内に収まるよう文字を縮小＋省略 */
 .map-actions { display:flex; flex-wrap:nowrap; gap:5px; align-items:stretch; margin-top:6px; width:100%; }
 .map-actions > button { flex:1 1 0; min-width:0; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-radius:7px; padding:7px 4px; font-size:clamp(10px,2.6vw,13px); font-family:'Noto Sans JP',sans-serif; cursor:pointer; }
-.denpyo .memo-grid { display:grid; grid-template-columns:repeat(var(--memo-cols,2),1fr); grid-auto-rows:1fr; height:var(--memo-h,170px); border-top:1px solid #bbb; border-left:1px solid #bbb; margin-top:3px; width:100%; }
+/* 各行は読める固定高(約30px)で、行数に応じて伸びる（中身が無くても余白を作らない・潰れない） */
+.denpyo .memo-grid { display:grid; grid-template-columns:repeat(var(--memo-cols,2),1fr); grid-auto-rows:30px; border-top:1px solid #bbb; border-left:1px solid #bbb; margin-top:3px; width:100%; }
 .denpyo .memo-cell { min-height:0; overflow:hidden; border-right:1px solid #bbb; border-bottom:1px solid #bbb; position:relative; }
 .denpyo .memo-cell textarea { width:100%; height:100%; border:none; outline:none; resize:none; background:transparent; font-family:inherit; line-height:1.25; color:#111; box-sizing:border-box; padding:3px 36px 3px 6px; overflow:hidden; display:block; }
 .denpyo .memo-cell textarea.is-imp { color:#c81e1e; font-weight:700; }
@@ -108,7 +109,27 @@ input, textarea, select { font-family: inherit; }
 .denpyo .imp { border:1px solid #c81e1e; color:#c81e1e; background:#fff; }
 .denpyo .imp.on { background:#c81e1e; color:#fff; }
 .denpyo .del { border:1px solid #aaa; color:#888; background:#fff; }
-.denpyo .addrow { margin-top:6px; border:1px dashed #999; background:#fafafa; border-radius:5px; font-size:13px; padding:5px 12px; cursor:pointer; font-family:'Noto Sans JP',sans-serif; color:#333; align-self:flex-start; }
+.denpyo .addrow { margin-top:4px; border:1px dashed #999; background:#fafafa; border-radius:5px; font-size:12px; padding:3px 10px; cursor:pointer; font-family:'Noto Sans JP',sans-serif; color:#333; align-self:flex-start; }
+
+/* ===== 出荷登録フォーム（再配置版）: 小ラベル・中央寄せ・車種縦並び・荷下ろし自由入力 ===== */
+/* 小さめラベル */
+.denpyo .lbl.sm { font-size:10px; letter-spacing:.04em; }
+/* ボタン/チップ系の中身をセル内で縦中央に寄せ、下方向の余白を無くす */
+.denpyo .btn-mid { flex:1; display:flex; flex-direction:column; justify-content:center; min-height:0; }
+/* 受注日（作成日・変更不可） */
+.denpyo .readonly-date { font-size:15px; color:#444; padding:1px 0; font-family:'Noto Sans JP',sans-serif; }
+.denpyo .ro-note { font-size:9px; color:#9a9a9a; margin-top:1px; font-family:'Noto Sans JP',sans-serif; }
+/* 車種：縦並び・各チップを大型(最も広い)の幅に固定し、台数入力欄の開始位置を統一 */
+.denpyo .veh-chips { display:flex; flex-direction:column; gap:9px; margin-top:2px; align-items:flex-start; }
+.denpyo .vehpill { display:inline-flex; align-items:center; gap:3px; max-width:100%; }
+.denpyo .veh-chips .chip { width:2.4em; text-align:center; padding:6px 0; font-size:17px; line-height:1.3; flex:0 0 auto; }
+.denpyo .veh-chips .vehqty { width:1.5em; font-size:16px; flex:0 0 auto; }
+.denpyo .vehu { font-size:12px; font-family:'Noto Sans JP',sans-serif; color:#111; flex:0 0 auto; }
+/* 荷下ろし自由入力（1つ。内容は備考に出力） */
+.denpyo .unload-input { width:100%; box-sizing:border-box; margin-top:5px; border:none; border-bottom:1px solid #1b4ea8; background:#f2f7ff; font-family:inherit; font-size:13px; padding:3px 6px; outline:none; color:#111; }
+.denpyo .unload-input::placeholder { color:#9bb4d6; }
+/* 打設箇所の自由入力：透かしを小さくして「一覧」ボタンに隠れないように */
+.denpyo .pour-input::placeholder { font-size:11px; }
 
 /* ===== 出荷予定表 ===== */
 /* フォントはテーブル領域の幅に追従（clamp+cqi）。サイドバーで狭くなる通常画面でも
@@ -132,6 +153,9 @@ input, textarea, select { font-family: inherit; }
 .schedule .sc-in.big.center { font-size:clamp(15px,2.4cqi,30px); }
 /* 車種はさらに一回り大きく（自動リサイズで枠内に収まる） */
 .schedule .sc-in.xl { font-size:clamp(18px,3.1cqi,40px); }
+/* 現場名など：2行まで折り返し、3行を超える前にフォント自動縮小（fitOneがscrollHeight超過で縮める） */
+.schedule .sc-wrap2 { display:block; width:100%; white-space:normal; word-break:break-word; overflow-wrap:anywhere; line-height:1.18; max-height:2.36em; overflow:hidden; text-align:center; }
+.schedule .sc-wrap2-ph { color:#cbd2dc; font-weight:400; }
 .schedule .sc-in.changed { color:#c81e1e; }
 .schedule .sc-in.imp { color:#c81e1e; font-weight:700; }
 /* 配合（桁ごと赤）・備考（行ごと赤）はspanで分割描画。sc-in同等のサイズ・自動リサイズ対象 */
@@ -211,7 +235,6 @@ input, textarea, select { font-family: inherit; }
    縦・横どちらの向きでも内容幅が常にセーフエリア内に収まるよう padding で揃える。 */
 .schedule-popup-root {
   box-sizing:border-box;
-  padding-top:env(safe-area-inset-top, 0px);
   padding-left:env(safe-area-inset-left, 0px);
   padding-right:env(safe-area-inset-right, 0px);
   padding-bottom:env(safe-area-inset-bottom, 0px);
@@ -221,11 +244,15 @@ input, textarea, select { font-family: inherit; }
 
 /* PDF出力（印刷）: 用紙はA4横。23行を1ページに収め、画像の帳票のように罫線付きで出す */
 @media print {
-  @page { size: A4 landscape; margin: 4mm; }
+  /* 印刷の既定余白は上下左右10mm（@pageで指定）。ラッパー側の余白は0にして
+     10mmの余白内いっぱいに表を配置する。 */
+  @page { size: A4 landscape; margin: 10mm; }
   html, body { background:#fff !important; }
   .no-print { display:none !important; }
-  /* 別ウィンドウは表だけを印刷（FitToWidthの縮小スケールを解除して実寸で） */
-  .schedule-popup-root, .schedule-popup-root .schedule.popup-view { padding:0 !important; max-width:none !important; overflow:visible !important; }
+  /* 別ウィンドウは表だけを印刷（FitToWidthの縮小スケールを解除して実寸で）。
+     @pageの10mm余白の内側いっぱいに広げる。 */
+  .schedule-popup-root { box-sizing:border-box !important; width:auto !important; min-height:0 !important; padding:0 !important; margin:0 !important; max-width:none !important; overflow:visible !important; }
+  .schedule-popup-root .schedule.popup-view { padding:0 !important; max-width:none !important; overflow:visible !important; }
   .schedule.popup-view { transform:none !important; }
   .schedule.popup-view table { width:100% !important; min-width:0 !important; table-layout:fixed; }
   /* 1ページ(横A4 ≒ 高さ190mm)に収まるよう行を圧縮（ヘッダー＋23行） */
@@ -248,15 +275,19 @@ input, textarea, select { font-family: inherit; }
 .seikon-title { display:flex; align-items:flex-end; gap:12px; padding:4px 2px 8px; }
 .seikon-title .st-name { flex:0 0 30%; font-size:22px; font-weight:800; letter-spacing:0.12em; color:#111; }
 .seikon-title .st-date { font-size:15px; font-weight:700; color:#111; }
-.seikon-title .st-ampm { font-size:14px; font-weight:700; color:#111; border:1px solid #111; border-radius:4px; padding:1px 10px; margin-left:auto; }
+.seikon-title .st-ampm { font-size:14px; font-weight:700; color:#111; margin-left:auto; white-space:nowrap; }
+.seikon-title .st-test { font-size:13px; font-weight:700; color:#111; margin-left:14px; white-space:nowrap; }
+.seikon-title .st-test-label { border:1px solid #111; border-radius:4px; padding:1px 8px; }
 .seikon-table { width:100%; border-collapse:collapse; table-layout:fixed; font-family:'Noto Sans JP',sans-serif; border:1px solid #111; box-sizing:border-box; }
 .seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:14px; line-height:1.25; word-break:break-all; vertical-align:middle; color:#111; }
-.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:17px; }
+.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:16px; overflow:hidden; }
+/* 打設列：長い文字はセル内で折り返して収める（実データは改行しない＝表示上のみ折り返し） */
+.seikon-table td.seikon-datsu { white-space:normal; word-break:break-word; overflow-wrap:anywhere; text-align:center; }
 .seikon-table td { height:30px; }
 /* 車両は文字を5pt大きく */
 .seikon-table td.seikon-veh { font-size:19px; font-weight:700; text-align:center; }
 /* 配合は本文より8pt大きく・中央揃え */
-.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; }
+.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:pre; }
 /* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
 .seikon-table td.seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; }
 /* 摘要：上=備考／下=荷下ろし・特記の2行 */
@@ -267,23 +298,24 @@ input, textarea, select { font-family: inherit; }
   /* 名前付き@pageは使わず、グローバルの @page(A4 landscape) に任せる（名前付きにすると
      ページコンテキスト切替で強制改ページが入り、常に2ページ目が出てしまうため） */
   html, body { margin:0 !important; height:auto !important; }
-  .popup-print-root { height:auto !important; overflow:visible !important; }
-  .seikon-wrap { padding:0 !important; height:auto !important; overflow:visible !important; }
-  /* 右端罫線が用紙端で切れないよう左右に微小インセット */
-  .seikon-sheet { max-width:none !important; padding:0 1px !important; }
+  .popup-print-root { height:auto !important; overflow:visible !important; margin:0 !important; padding:0 !important; }
+  /* @pageの10mm余白の内側いっぱいに表を配置（ラッパー側の余白は0） */
+  .seikon-wrap { box-sizing:border-box !important; width:auto !important; padding:0 !important; margin:0 !important; height:auto !important; overflow:visible !important; }
+  .seikon-sheet { max-width:none !important; padding:0 !important; margin:0 !important; }
   .seikon-title { padding:0 0 2px; }
   .seikon-title .st-name { font-size:15px; }
   .seikon-title .st-date { font-size:12px; }
   .seikon-title .st-ampm { font-size:12px; }
-  /* テーブル高さを用紙いっぱいに指定し、各行を均等に引き伸ばして最下部まで余白なく埋める */
-  .seikon-table { height:193mm; }
-  /* 本文はセルいっぱいに大きく、列名(th)はさらに5pt大きく */
-  .seikon-table th, .seikon-table td { font-size:14px; padding:1px 3px; line-height:1.15; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .seikon-table th { font-size:16px; }
+  .seikon-title .st-test { font-size:11px; }
+  .seikon-title .st-test-label { padding:1px 6px; }
+  /* 表は用紙上部から開始。基本は23行+ヘッダーを1ページに収める（多行セルも収まるようフォント・行高を圧縮） */
+  .seikon-table th, .seikon-table td { font-size:12px; padding:1px 3px; line-height:1.1; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .seikon-table th { font-size:15px; }
   .seikon-table td.seikon-veh { font-size:20px; }
   .seikon-table td.seikon-mix { font-size:22px; }
-  .seikon-table td.seikon-phone { font-size:10px; white-space:nowrap; }
-  .seikon-table td { height:auto; }
-  .seikon-tekiyo > div { min-height:0; }
-  .seikon-table, .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
+  .seikon-table td.seikon-phone { font-size:9px; white-space:nowrap; }
+  .seikon-table td.seikon-tekiyo { font-size:10px; }
+  .seikon-table td { height:7.2mm; }
+  .seikon-tekiyo > div { min-height:0; line-height:1.1; }
+  .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
 }
