@@ -2821,20 +2821,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
-        /* 別ウィンドウ: タイトル中央＋右に閉じる、その下に日付・AM/PM（中央） */
+        /* 別ウィンドウ: 日付・曜日(左)／タイトル(中央)／閉じる(右)、その下にAM/PM(中央) */
         <div style={{ borderBottom: '1px solid #e5e9f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px 4px' }}>
-            <div style={{ flex: 1 }} />
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap' }}>出荷予定表</div>
-            <div className="no-print" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '10px 12px 4px' }}>
+            <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
+              <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
+            <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => window.close()}
                 style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
             </div>
           </div>
-          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, padding: '0 12px 10px' }}>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
-            <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 12px 10px' }}>
             {ampmButtons}
           </div>
         </div>

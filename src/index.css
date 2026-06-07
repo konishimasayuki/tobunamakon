@@ -232,7 +232,6 @@ input, textarea, select { font-family: inherit; }
    縦・横どちらの向きでも内容幅が常にセーフエリア内に収まるよう padding で揃える。 */
 .schedule-popup-root {
   box-sizing:border-box;
-  padding-top:env(safe-area-inset-top, 0px);
   padding-left:env(safe-area-inset-left, 0px);
   padding-right:env(safe-area-inset-right, 0px);
   padding-bottom:env(safe-area-inset-bottom, 0px);
@@ -306,13 +305,14 @@ input, textarea, select { font-family: inherit; }
   .seikon-title .st-ampm { font-size:12px; }
   .seikon-title .st-test { font-size:11px; }
   .seikon-title .st-test-label { padding:1px 6px; }
-  /* 表は用紙上部から開始（固定高で全体を引き伸ばさない＝上部の余白が出ない）。各行は約7.4mm */
-  .seikon-table th, .seikon-table td { font-size:14px; padding:1px 3px; line-height:1.15; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .seikon-table th { font-size:16px; }
+  /* 表は用紙上部から開始。基本は23行+ヘッダーを1ページに収める（多行セルも収まるようフォント・行高を圧縮） */
+  .seikon-table th, .seikon-table td { font-size:12px; padding:1px 3px; line-height:1.1; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .seikon-table th { font-size:15px; }
   .seikon-table td.seikon-veh { font-size:20px; }
   .seikon-table td.seikon-mix { font-size:22px; }
-  .seikon-table td.seikon-phone { font-size:10px; white-space:nowrap; }
-  .seikon-table td { height:7.4mm; }
-  .seikon-tekiyo > div { min-height:0; }
+  .seikon-table td.seikon-phone { font-size:9px; white-space:nowrap; }
+  .seikon-table td.seikon-tekiyo { font-size:10px; }
+  .seikon-table td { height:7.2mm; }
+  .seikon-tekiyo > div { min-height:0; line-height:1.1; }
   .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
 }
