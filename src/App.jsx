@@ -4180,6 +4180,8 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [usersOpen, setUsersOpen] = useState(false)
+  const [unassignedOpen, setUnassignedOpen] = useState(true)
+  const [employees, setEmployees] = useState([])
   const [pdfDate, setPdfDate] = useState(() => localToday())
 
   // PDF出力：出荷予定表を A4横で別ウィンドウに開き、読み込み後に自動で印刷ダイアログを出す
@@ -4193,6 +4195,13 @@ function SettingsPage() {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+  // 従業員管理のLINE IDを参照して、登録済みLINEユーザーと突き合わせる
+  useEffect(() => { api.get('/api/employees').then(e => setEmployees(Array.isArray(e) ? e : [])).catch(() => {}) }, [])
+  const cleanLineId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+  const empOfUser = (u) => employees.find(e => cleanLineId(e.lineId) && cleanLineId(e.lineId) === cleanLineId(u.userId))
+  const allUsers = data.users || []
+  const assignedUsers = allUsers.filter(u => empOfUser(u))     // 従業員に紐付け済み
+  const unassignedUsers = allUsers.filter(u => !empOfUser(u))  // 未割り当て
 
   const webhookUrl = `${window.location.origin}/api/line`
 
@@ -4208,14 +4217,7 @@ function SettingsPage() {
     if (!window.confirm('このLINEユーザーを削除しますか？')) return
     try { await api.del(`/api/line?userId=${encodeURIComponent(userId)}`); load() } catch (e) { alert(e.message) }
   }
-  const delGroup = async (groupId) => {
-    if (!window.confirm('このグループを一覧から削除しますか？')) return
-    try { await api.del(`/api/line?groupId=${encodeURIComponent(groupId)}`); load() } catch (e) { alert(e.message) }
-  }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
-  const copyText = (t) => { navigator.clipboard?.writeText(t); alert('コピーしました\n' + t) }
-  const fmtDT = (s) => { const d = new Date(s); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
-  const VIA_LABELS = { join: '招待', message: 'メッセージ' }
 
   const inp = { padding: '9px 11px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 16, width: '100%', boxSizing: 'border-box' }
   const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 620, marginBottom: 18 }
@@ -4254,6 +4256,35 @@ function SettingsPage() {
         </div>
       </div>
 
+      {/* 未割り当て：従業員管理のLINE IDに紐付いていないLINEユーザー（折りたたみ・既定で開く） */}
+      <div style={{ ...box, maxWidth: 980 }}>
+        <button
+          onClick={() => setUnassignedOpen(o => !o)}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#1a2332', textAlign: 'left' }}
+        >
+          <span style={{ fontSize: 12, color: '#6b7a8d', width: 12, display: 'inline-block' }}>{unassignedOpen ? '▼' : '▶'}</span>
+          未割り当て（従業員に紐付いていないLINEユーザー）
+          <span style={{ fontSize: 12, fontWeight: 400, color: '#c0392b' }}>{unassignedUsers.length}件</span>
+        </button>
+        {unassignedOpen && (
+          <div style={{ marginTop: 12 }}>
+            {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+              : unassignedUsers.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>未割り当てのLINEユーザーはありません</div>
+                : unassignedUsers.map((u) => (
+                  <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
+                    <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
+                    <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                      <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました。\n従業員管理の「LINE ID」欄に貼り付けると割り当て済みになります。') }}
+                        style={{ border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 IDコピー</button>
+                      <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                    </span>
+                  </div>
+                ))}
+          </div>
+        )}
+      </div>
+
+      {/* 登録済みLINEユーザー（従業員管理のLINE IDと紐付け済み・従業員名を並べて表示） */}
       <div style={{ ...box, maxWidth: 980 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: usersOpen ? 12 : 0, gap: 8 }}>
           <button
@@ -4261,53 +4292,32 @@ function SettingsPage() {
             style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#1a2332', textAlign: 'left' }}
           >
             <span style={{ fontSize: 12, color: '#6b7a8d', width: 12, display: 'inline-block' }}>{usersOpen ? '▼' : '▶'}</span>
-            登録済みLINEユーザー・グループ（友だち追加・グループ招待時に自動登録）
-            <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7a8d' }}>ユーザー{(data.users || []).length}・グループ{data.activeGroupCount || 0}</span>
+            登録済みLINEユーザー（友だち追加時に自動登録・従業員に紐付け済み）
+            <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7a8d' }}>{assignedUsers.length}件</span>
           </button>
           {usersOpen && <button onClick={load} style={S.editBtn}>🔄 更新</button>}
         </div>
         {usersOpen && (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18 }}>
-            {/* 左：登録済みユーザー */}
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 8 }}>👤 ユーザー <span style={{ fontWeight: 400, color: '#9aa7b5' }}>{(data.users || []).length}件</span></div>
-              {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
-                : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
-                  : data.users.map((u) => (
+          <div>
+            {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+              : assignedUsers.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>従業員に紐付いたLINEユーザーはありません（従業員管理でLINE IDを設定してください）</div>
+                : assignedUsers.map((u) => {
+                  const emp = empOfUser(u)
+                  return (
                     <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
-                      <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
+                      <span style={{ fontSize: 13, minWidth: 0 }}>
+                        <b style={{ color: '#1a4d8f' }}>👤 {emp?.name}</b>
+                        <span style={{ color: '#1a8f5a', fontSize: 12, marginLeft: 6 }}>← LINE: {u.name}</span>
+                        <span style={{ display: 'block', color: '#9aa7b5', fontSize: 11, wordBreak: 'break-all', marginTop: 1 }}>{u.userId}</span>
+                      </span>
                       <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
-                        <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました。\n顧客管理の「LINEユーザーID」欄に貼り付けてください。') }}
+                        <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました') }}
                           style={{ border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 IDコピー</button>
                         <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
                       </span>
                     </div>
-                  ))}
-            </div>
-            {/* 右：登録済みグループ（グループID） */}
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 8 }}>👥 グループID <span style={{ fontWeight: 400, color: '#9aa7b5' }}>参加中{data.activeGroupCount || 0}件</span></div>
-              {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
-                : (data.groups || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ取得がありません（公式アカウントをグループに招待すると自動で登録されます）</div>
-                  : data.groups.map((g) => {
-                    const left = g.status === 'left'
-                    return (
-                      <div key={g.groupId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4', opacity: left ? 0.5 : 1 }}>
-                        <span style={{ fontSize: 13, minWidth: 0 }}>
-                          <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: left ? '#9aa7b5' : '#1a8f5a', border: `1px solid ${left ? '#d8dee8' : '#a0dca0'}`, background: left ? '#f4f6f9' : '#f0f9f0', borderRadius: 4, padding: '1px 6px', marginRight: 6 }}>{left ? '退出済み' : '参加中'}</span>
-                          <span style={{ color: '#6b7a8d', fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>{g.groupId}</span>
-                          <span style={{ display: 'block', color: '#9aa7b5', fontSize: 10, marginTop: 2 }}>
-                            {g.sourceType === 'room' ? '複数人' : 'グループ'}・{VIA_LABELS[g.acquiredVia] || g.acquiredVia}取得・初回 {fmtDT(g.firstSeenAt)}・最終 {fmtDT(g.lastSeenAt)}
-                          </span>
-                        </span>
-                        <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          <button onClick={() => copyText(g.groupId)} style={S.editBtn}>コピー</button>
-                          <button onClick={() => delGroup(g.groupId)} style={S.delBtn}>削除</button>
-                        </span>
-                      </div>
-                    )
-                  })}
-            </div>
+                  )
+                })}
           </div>
         )}
       </div>
