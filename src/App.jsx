@@ -882,12 +882,23 @@ function CustomersPage() {
 // ============================================================
 const VEHICLE_TYPES = ['4t', '7t', '大型']
 const CEMENT_TYPES = ['N', 'B']
-const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ']
+const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
-const NOTE_TAGS = ['工TP', '領', '増コン', '追']
+const NOTE_TAGS = ['領', '追']
+const TEST_TAGS = ['現TP', '工TP']            // 試験（現TP=現場 / 工TP=工場）。生コン出荷予定表でのみ集計表示
+const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX', '住所TEL有']   // 備考に追加できる定型メッセージ
+// 備考(notes)の並び順：手入力(manual)→荷下ろし(unload)→メッセージ追加(msg)。出力もこの順になる
+const NOTE_KIND_RANK = { unload: 1, msg: 2 }
+const noteRank = (n) => NOTE_KIND_RANK[n && n.kind] ?? 0
+const sortNotes = (arr) => (Array.isArray(arr) ? arr : [])
+  .map((n, i) => [n, i])
+  .sort((a, b) => (noteRank(a[0]) - noteRank(b[0])) || (a[1] - b[1]))
+  .map(x => x[0])
 // カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる）
 const kanaToHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
+// 全角数字→半角数字（出荷登録の入力用）。数字以外はそのまま
+const z2h = (str) => String(str ?? '').replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
 
 // 数量表示（m³・+a・? と2段目の量をまとめる）
 function shipVolStr(s) {
@@ -903,15 +914,21 @@ function vehicleLabel(s) {
   return s.vehicleType || ''
 }
 // 配合表示: mixRows があれば各行を配列で（{code,note}）、無ければ mixCode/mixNotes 1行
+// 配合は3枠の位置を保持（例: 中央のみ→「-20-」、先頭のみ→「20--」）。数字が無い時は空。
+function mixCodeOf(parts) {
+  const c = (parts || []).slice(0, 3).join('-')
+  return /[0-9]/.test(c) ? c : ''
+}
 function mixRowsOfShip(s) {
   if (Array.isArray(s.mixRows) && s.mixRows.length) {
-    return s.mixRows.map(r => ({ code: (r.parts || []).slice(0, 3).join('-').replace(/-+$/, ''), note: r.note || '' }))
+    return s.mixRows.map(r => ({ code: mixCodeOf(r.parts), note: r.note || '' }))
   }
   return [{ code: s.mixCode || '', note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
 }
 
 const emptyShipForm = {
   date: localToday(),
+  orderDate: localToday(),   // 受注日（作成日。読み取り専用で変更不可）
   companyId: '', companyName: '',
   tradingCompany: '',
   times: [{ text: '', important: false }],
@@ -939,7 +956,8 @@ const emptyShipForm = {
   placements: [],
   pourLocation: '',
   pourFree: false,      // 打設箇所を自由入力モードにしているか
-  noteTags: [],         // 工TP / 領 / 増コン の選択
+  noteTags: [],         // 領 / 追 の選択
+  testTags: [],         // 試験（現TP / 工TP）
   orderContact: '', siteContact: '',
   drivers: [],
   notes: [{ text: '', important: false }],
@@ -964,7 +982,9 @@ function fitText(ta) {
 // プレースホルダ（透かし）も実テキストと同じく縮小される（同じ要素の font-size を縮めるため）。
 function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style }) {
   const ref = useRef(null)
+  const composingRef = useRef(false)   // IME変換中フラグ
   const fit = () => {
+    if (composingRef.current) return   // 変換中はフォント自動調整しない（変換が壊れるため）
     const el = ref.current
     if (!el) return
     el.style.fontSize = baseSize + 'px'
@@ -985,7 +1005,9 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
   }, [])
   return (
     <input ref={ref} className={className} type={type} value={value}
-      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
+      onChange={e => { if (composingRef.current) return; onChange(e); requestAnimationFrame(fit) }}
+      onCompositionStart={() => { composingRef.current = true }}
+      onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
   )
 }
@@ -996,6 +1018,7 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)   // ▼で開いたら全件、入力中は絞り込み
   const wrapRef = useRef(null)
+  const blurTimer = useRef(null)
   const q = kanaToHira(value)
   const filtered = ((value && !showAll) ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 200)
   useEffect(() => {
@@ -1004,25 +1027,25 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
     document.addEventListener('touchstart', onDoc)
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('touchstart', onDoc) }
   }, [])
-  const pick = (o) => { onPick(o); setOpen(false); setShowAll(false) }
+  const pick = (o) => { if (blurTimer.current) clearTimeout(blurTimer.current); onPick(o); setOpen(false); setShowAll(false) }
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
       <input className={className} style={style} value={value} placeholder={placeholder} required={required}
         onChange={e => { onChange(e); setShowAll(false); setOpen(true) }}
-        onFocus={() => setOpen(true)} />
+        onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setOpen(true) }}
+        onBlur={() => { blurTimer.current = setTimeout(() => { setOpen(false); setShowAll(false) }, 200) }} />
       <button type="button" tabIndex={-1} title="一覧から選択"
         onMouseDown={(e) => { e.preventDefault(); setShowAll(true); setOpen(o => !o) }}
         style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 16, padding: '0 6px', alignSelf: 'center' }}>▼</button>
-      {open && (
+      {/* 入力欄にフォーカスがある時かつ候補がある時だけ表示（該当なしのときは出さない） */}
+      {open && filtered.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 260, overflowY: 'auto' }}>
-          {filtered.length > 0 ? filtered.map((o, i) => (
-            <div key={(o.id || o.label) + '_' + i} onClick={() => pick(o)}
+          {filtered.map((o, i) => (
+            <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => { e.preventDefault(); pick(o) }} onClick={() => pick(o)}
               style={{ padding: '9px 10px', fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111', borderBottom: '1px solid #f2f4f8' }}>
               {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
             </div>
-          )) : (
-            <div style={{ padding: '9px 10px', fontSize: 12, color: '#9aa7b5', lineHeight: 1.5 }}>該当なし（顧客管理で会社名カナを登録してください）</div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -1059,7 +1082,9 @@ function Chips({ options, value, multi, multiStr, onChange, big }) {
 // 固定枠＋分割＋文字自動リサイズの動的マス群（時間 / 備考 / ドライバー連絡 共通）
 function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel }) {
   const refs = useRef([])
+  const composingRef = useRef(false)   // IME変換中フラグ
   const refit = () => requestAnimationFrame(() => {
+    if (composingRef.current) return   // 変換中はフォント自動調整を行わない（変換が壊れるため）
     for (let i = 0; i < items.length; i++) fitText(refs.current[i])
   })
   useLayoutEffect(() => { refit() })
@@ -1083,7 +1108,9 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
               ref={el => { refs.current[i] = el }}
               className={it.important ? 'is-imp' : ''}
               value={it.text}
-              onChange={e => update(i, { text: e.target.value })}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i])) }}
+              onChange={e => { if (!composingRef.current) update(i, { text: e.target.value }) }}
             />
             <div className="ctl">
               <button type="button" className={'imp' + (it.important ? ' on' : '')} title="重要" onClick={() => update(i, { important: !it.important })}>!</button>
@@ -1400,6 +1427,379 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   )
 }
 
+// 伝票→フォーム初期値（出荷登録フォーム／スマホ予定表の編集モーダルで共用）。
+// vehicleItems/mixRows/notes(kind付き)など構造化フィールドを既存伝票から復元する。
+function shipmentToForm(s) {
+  return ({
+    date: s.date || localToday(),
+    orderDate: s.orderDate || (s.createdAt ? String(s.createdAt).slice(0, 10) : (s.date || localToday())),
+    companyId: s.companyId || '',
+    companyName: s.companyName || '',
+    tradingCompany: s.tradingCompany || '',
+    times: (Array.isArray(s.times) && s.times.length ? s.times : ['']).map(t => ({ text: String((t && t.text != null) ? t.text : t ?? ''), important: false })),
+    siteName: s.siteName || '',
+    siteAddress: (s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim(),
+    vehicleType: s.vehicleType || '',
+    truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
+    vehicleItems: (Array.isArray(s.vehicleItems) && s.vehicleItems.length)
+      ? s.vehicleItems.map(v => ({ type: v.type, qty: (v.qty ?? '') === '' ? '' : String(v.qty) }))
+      : String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).map(t => ({ type: t, qty: '' })),
+    mixCode: s.mixCode || '',
+    specialNote: s.specialNote || '',
+    mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
+    mixRows: (Array.isArray(s.mixRows) && s.mixRows.length)
+      ? s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
+      : [{ parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''], note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }],
+    cementType: s.cementType || '',
+    volume: (s.volume ?? '') === '' ? '' : String(s.volume),
+    volumeUncertain: !!s.volumeUncertain,
+    volumePlusA: !!s.volumePlusA,
+    volume2: (s.volume2 ?? '') === '' ? '' : String(s.volume2),
+    volumeUncertain2: !!s.volumeUncertain2,
+    volumePlusA2: !!s.volumePlusA2,
+    hasVolume2: !!(s.volume2 || s.volumeUncertain2 || s.volumePlusA2),
+    pdfName: s.pdfName || '',
+    pdfData: '',
+    hasPdf: !!s.hasPdf,
+    pdfRemove: false,
+    placements: Array.isArray(s.placements) ? s.placements : [],
+    pourLocation: s.pourLocation || '',
+    pourFree: typeof s.pourFree === 'boolean' ? s.pourFree
+      : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
+    noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
+    testTags: Array.isArray(s.testTags) ? s.testTags : [],
+    orderContact: s.orderContact || '',
+    siteContact: s.siteContact || '',
+    drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
+    notes: sortNotes((Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important, kind: n.kind || '' }))),
+    driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
+    mapView: s.mapView || null,
+    mapArrows: Array.isArray(s.mapArrows) ? s.mapArrows : [],
+  })
+}
+
+// フォーム→保存ペイロード（出荷登録・予定編集モーダルで共用）。
+function buildShipmentPayload(form) {
+  const payload = {
+    ...form,
+    times: form.times.map(t => z2h(t.text).replace(/：/g, ':')).filter(t => t.trim() !== ''),
+    notes: form.notes.filter(n => n.text.trim() !== ''),
+    driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
+  }
+  if (form.pdfRemove) payload.pdfData = ''
+  else if (!form.pdfData) delete payload.pdfData
+  return payload
+}
+
+// 出荷登録フォームの「伝票シート」本体（出荷登録ページとスマホ予定表の編集モーダルで共用）。
+// form/setForm を受け取り、各フィールドのハンドラとレイアウトを内包する。地図・登録ボタンは親側で描画。
+function DenpyoFields({ form, setForm, editChanged = [], editing = null, employees = [], companyComboOptions = [], tradingComboOptions = [], onPdfImport, removePdf, previewPdf }) {
+  const sheetRef = useRef(null)
+  const set = (key) => (e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, [key]: composing ? v : z2h(v) })) }
+  const setVal = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
+  const focusNextHg = (fromEl) => { const root = sheetRef.current; if (!root) return; const hgs = Array.from(root.querySelectorAll('input.hg')); const i = hgs.indexOf(fromEl); if (i >= 0 && i + 1 < hgs.length) hgs[i + 1].focus() }
+  const handleCompanyInput = (e) => { const v = e.target.value; const o = companyComboOptions.find(o => o.label === v); setForm(f => ({ ...f, companyId: o?.id || '', companyName: v })) }
+  const syncMix = (rows) => { const r0 = rows[0] || { parts: ['', '', ''], note: '' }; return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] } }
+  const setMixCell = (row, i, v, raw) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2); return { ...f, ...syncMix(rows) } })
+  const setMixRowNote = (row, v) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].note = v; return { ...f, ...syncMix(rows) } })
+  const addMixRow = () => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); if (rows.length >= 2) return f; rows.push({ parts: ['', '', ''], note: '' }); return { ...f, ...syncMix(rows) } })
+  const delMixRow = (row) => setForm(f => { let rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); rows = rows.filter((_, idx) => idx !== row); if (!rows.length) rows = [{ parts: ['', '', ''], note: '' }]; return { ...f, ...syncMix(rows) } })
+  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [{ parts: ['', '', ''], note: '' }])
+  const onHg = (ri, i) => (e) => { const c = e.nativeEvent?.isComposing; setMixCell(ri, i, e.target.value, c); if (!c && z2h(e.target.value).replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
+  const syncVeh = (items) => ({ vehicleItems: items, vehicleType: items.map(v => v.type).join('・') })
+  const toggleVehItem = (type) => setForm(f => { const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []; const at = items.findIndex(v => v.type === type); if (at >= 0) items.splice(at, 1); else items.push({ type, qty: '1' }); items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type)); return { ...f, ...syncVeh(items) } })
+  const setVehQty = (type, qty, composing) => setForm(f => { const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: composing ? String(qty).slice(0, 2) : z2h(qty).replace(/[^0-9]/g, '').slice(0, 2) } : v); return { ...f, ...syncVeh(items) } })
+  const vehItems = () => (Array.isArray(form.vehicleItems) ? form.vehicleItems : [])
+  const toggleNoteTag = (tag) => setForm(f => { const cur = Array.isArray(f.noteTags) ? f.noteTags : []; return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
+  const toggleTestTag = (tag) => setForm(f => { const cur = Array.isArray(f.testTags) ? f.testTags : []; return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
+  const addNoteMessage = (msg) => setForm(f => { const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []; const i = notes.findIndex(n => n && n.kind === 'msg'); if (i >= 0) { const cur = String(notes[i].text || ''); if (cur.split(/\s+/).filter(Boolean).includes(msg)) return f; notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg } } else { notes.push({ text: msg, important: false, kind: 'msg' }) } return { ...f, notes: sortNotes(notes) } })
+  const unloadText = () => { const n = (form.notes || []).find(n => n && n.kind === 'unload'); return n ? n.text : '' }
+  const setUnload = (val) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload')); if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' }); return { ...f, notes: sortNotes(notes) } })
+  const addDriver = (e) => { const emp = employees.find(emp => emp.id === e.target.value); if (!emp) return; setForm(f => f.drivers.some(d => d.id === emp.id) ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] })) }
+  const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
+  return (
+          <div className="sheet" ref={sheetRef} style={{ margin: 0 }}>
+            {/* 1段: 受注日 / 日付 / 業者名 / 商社名 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 17%' }}>
+                <div className="lbl">受 注 日</div>
+                <input className="f" type="date" value={form.orderDate} onChange={set('orderDate')} />
+              </div>
+              <div className="cell" style={{ flex: '0 0 19%' }}>
+                <div className="lbl">日 付</div>
+                <input className="f" type="date" value={form.date} onChange={set('date')} required />
+              </div>
+              <div className="cell" style={{ flex: '0 0 36%' }}>
+                <div className="lbl" style={redIf('companyName')}>業 者 名</div>
+                <KanaCombo value={form.companyName} onChange={handleCompanyInput}
+                  onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
+                  options={companyComboOptions} placeholder="入力して検索（ひらがな可）" style={redIf('companyName')} required />
+              </div>
+              <div className="cell" style={{ flex: 1 }}>
+                <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
+                <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
+                  onPick={o => setVal('tradingCompany', o.label)}
+                  options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" style={redIf('tradingCompany')} />
+              </div>
+            </div>
+            {/* 2段: 時間 / 現場名 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 24%' }}>
+                <div className="lbl" style={redIf('times')}>時 間</div>
+                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
+              </div>
+              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
+                <div className="subrow">
+                  <div className="cell" style={{ flex: 1 }}>
+                    <div className="lbl" style={redIf('siteName')}>現 場 名</div>
+                    <FitField value={form.siteName} onChange={set('siteName')} style={redIf('siteName')} />
+                  </div>
+                </div>
+                <div className="subrow">
+                  <div className="cell" style={{ flex: 1 }}>
+                    <div className="lbl">現 場 住 所</div>
+                    <FitField value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / PDF */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 20%', minWidth: 0 }}>
+                <div className="lbl" style={redIf('vehicleType')}>車 種</div>
+                <div className="btn-mid"><div className="veh-chips">
+                  {VEHICLE_TYPES.map(o => {
+                    const it = vehItems().find(v => v.type === o)
+                    const on = !!it
+                    return (
+                      <span key={o} className="vehpill">
+                        <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
+                        {on && (
+                          <><input className="vehqty" inputMode="numeric" placeholder="台" value={it.qty || ''} onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)} /><span className="vehu">台</span></>
+                        )}
+                      </span>
+                    )
+                  })}
+                </div></div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 19%', minWidth: 0 }}>
+                <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
+                <div className="btn-mid">
+                  {!form.pourFree ? (
+                    <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 18, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
+                      onChange={e => {
+                        if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
+                        else setVal('pourLocation', e.target.value)
+                      }}>
+                      <option value=""></option>
+                      {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ position: 'relative' }}>
+                      <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={13} placeholder="入力" className="f pour-input"
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 42px 5px 6px', boxSizing: 'border-box' }} />
+                      <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
+                        style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
+                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                  {CEMENT_TYPES.map(o => (
+                    <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
+                  ))}
+                </div></div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>試験</div>
+                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                  {TEST_TAGS.map(t => (
+                    <span key={t} className={'chip' + ((form.testTags || []).includes(t) ? ' on' : '')} onClick={() => toggleTestTag(t)}>{t}</span>
+                  ))}
+                </div></div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>特記</div>
+                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                  {NOTE_TAGS.map(t => (
+                    <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
+                  ))}
+                </div></div>
+              </div>
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>PDFインポート</div>
+                <div className="btn-mid" style={{ alignItems: 'center', gap: 4 }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #999', background: '#fafafa', borderRadius: 6, padding: '7px 16px', fontSize: 20, cursor: 'pointer', color: '#333' }}>📄
+                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
+                  </label>
+                  {(form.pdfData || form.hasPdf) && (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {(form.pdfData || (form.hasPdf && editing)) && (
+                        <button type="button" onClick={previewPdf} title="プレビュー"
+                          style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 5, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>👁</button>
+                      )}
+                      <button type="button" onClick={removePdf} title="削除"
+                        style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>🗑</button>
+                    </div>
+                  )}
+                  {(form.pdfName || form.hasPdf) && (
+                    <div style={{ fontSize: 10, color: '#1a8f5a', textAlign: 'center', wordBreak: 'break-all', lineHeight: 1.2 }}>
+                      {form.pdfData ? '選択中' : '添付済'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* 4段: 配合 / 量・荷下ろし */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 42%', minWidth: 0 }}>
+                <div className="lbl" style={redIf('mixCode')}>配 合</div>
+                <div className="btn-mid">
+                {(() => {
+                  const rows = mixRowsOf()
+                  const two = rows.length > 1
+                  return (
+                    <>
+                    <div className={'mixwrap' + (two ? ' two' : ' one')}>
+                      {rows.map((r, ri) => (
+                        <div key={ri} className="mixrow">
+                          <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
+                            <div className="hgcol">
+                              <div className="hgnote-spacer" />
+                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} onCompositionEnd={e => setMixCell(ri, 0, e.target.value, false)} />
+                            </div>
+                            <span className="hgsep">-</span>
+                            <div className="hgcol">
+                              <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
+                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} onCompositionEnd={e => setMixCell(ri, 1, e.target.value, false)} />
+                            </div>
+                            <span className="hgsep">-</span>
+                            <div className="hgcol">
+                              <div className="hgnote-spacer" />
+                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} onCompositionEnd={e => setMixCell(ri, 2, e.target.value, false)} />
+                            </div>
+                          </div>
+                          {ri > 0 && (
+                            <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
+                              style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {rows.length < 2 && (
+                      <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }} onClick={addMixRow}>＋ 配合を追加</button>
+                    )}
+                    </>
+                  )
+                })()}
+                </div>
+              </div>
+              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
+                <div className="subrow" style={{ flex: '0 0 auto' }}>
+                  <div className="cell m3" style={{ flex: 1, minWidth: 0, flexDirection: 'column', justifyContent: 'center', padding: '8px 6px' }}>
+                    {[0, 1].map(idx => {
+                      if (idx === 1 && !form.hasVolume2) return null
+                      const vKey = idx === 0 ? 'volume' : 'volume2'
+                      const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
+                      const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+                      return (
+                        <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
+                          <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
+                            {idx === 1 ? (
+                              <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
+                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                            ) : null}
+                          </span>
+                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]}
+                            onChange={e => { const v = e.target.value; setVal(vKey, e.nativeEvent?.isComposing ? v : z2h(v).replace(/．/g, '.').replace(/[^0-9.]/g, '')) }}
+                            onCompositionEnd={e => setVal(vKey, z2h(e.target.value).replace(/．/g, '.').replace(/[^0-9.]/g, ''))} />
+                          <span className="unit" style={redIf('volume')}>m<sup>3</sup>
+                            {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
+                            <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
+                          </span>
+                          <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
+                          <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
+                        </div>
+                      )
+                    })}
+                    {!form.hasVolume2 && (
+                      <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }}
+                        onClick={() => setForm(f => ({ ...f, hasVolume2: true }))}>＋ 量を追加</button>
+                    )}
+                  </div>
+                </div>
+                <div className="subrow" style={{ flex: 1 }}>
+                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="lbl">荷下ろし</div>
+                    <div className="btn-mid">
+                      <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
+                      <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* 5段: 連絡先 / 現場連絡先 */}
+            <div className="band">
+              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em' }}>連 絡 先</div>
+                <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
+              </div>
+              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em', ...redIf('siteContact') }}>現 場 連 絡 先</div>
+                <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} />
+              </div>
+            </div>
+            {/* 6段: 備考 ＋ メッセージ追加 */}
+            <div className="band">
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl" style={redIf('notes')}>備 考</div>
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" />
+              </div>
+              <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
+                {(() => {
+                  const msgNote = (form.notes || []).find(n => n && n.kind === 'msg')
+                  const used = msgNote ? String(msgNote.text || '').split(/\s+/).filter(Boolean) : []
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+                      {NOTE_MESSAGES.map(m => {
+                        const isUsed = used.includes(m)
+                        return (
+                          <button key={m} type="button" disabled={isUsed} onClick={() => addNoteMessage(m)}
+                            style={{ border: isUsed ? '1.5px solid #cdd5e0' : '1.5px solid #1b4ea8', background: isUsed ? '#eef0f4' : '#eef4ff', color: isUsed ? '#9aa7b5' : '#1b4ea8', borderRadius: 6, padding: '7px 10px', fontSize: 13, fontWeight: 700, cursor: isUsed ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>＋ {m}</button>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+            {/* 7段: 担当ドライバー */}
+            <div className="band">
+              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                  {form.drivers.map((d, i) => (
+                    <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
+                      {d.name}
+                      <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                  <select className="f" value="" onChange={addDriver} style={{ width: 'auto', minWidth: 150, border: '1px solid #cdd5e0', borderRadius: 5, padding: '3px 6px' }}>
+                    <option value="">＋ ドライバーを追加</option>
+                    {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+  )
+}
+
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, isPopup }) {
   const isMobile = useIsMobile()
   const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
@@ -1420,13 +1820,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const topRef = useRef(null)
   const formRef = useRef(null)   // Enter/桁送りでの次項目フォーカス移動に使う
   const PAGE_SIZE = 10
-  // 直近7日（本日起点）の日付配列
+  // 本日〜2週間先まで（日曜を除く）の日付配列。一覧の日付ボタン用
   const weekDates = (() => {
     const base = new Date()
-    return Array.from({ length: 7 }, (_, i) => {
+    const out = []
+    for (let i = 0; i <= 14; i++) {
       const d = new Date(base); d.setDate(base.getDate() + i)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    })
+      if (d.getDay() === 0) continue   // 日曜は除外
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+    }
+    return out
   })()
 
   const load = useCallback(async () => {
@@ -1445,7 +1848,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
   useEffect(() => { load() }, [load])
 
-  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+  // テキスト入力は全角数字を半角に変換して保持（出荷登録）。ただしIME変換中は書き換えず確定後に変換（二重入力防止）
+  const set = (key) => (e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, [key]: composing ? v : z2h(v) })) }
   const setVal = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
   // 入力が終わったら次の項目へフォーカスを移す（Enter／配合は規定桁到達で自動送り）
@@ -1465,9 +1869,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     if (i >= 0 && i + 1 < hgs.length) hgs[i + 1].focus()
   }
   // 配合セル：値を反映しつつ2桁入力で次のセルへ自動送り
-  const onHg = (ri, i) => (e) => { setMixCell(ri, i, e.target.value); if (e.target.value.replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
+  const onHg = (ri, i) => (e) => { const c = e.nativeEvent?.isComposing; setMixCell(ri, i, e.target.value, c); if (!c && z2h(e.target.value).replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
   const onFormKeyDown = (e) => {
     if (e.key !== 'Enter') return
+    // IME変換中・変換確定のEnterでは次項目に移動しない
+    if (e.isComposing || e.keyCode === 229 || e.nativeEvent?.isComposing) return
     const t = e.target
     if (!t || t.tagName === 'TEXTAREA') return
     if (t.tagName === 'INPUT' && t.type !== 'button' && t.type !== 'submit') {
@@ -1493,10 +1899,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const r0 = rows[0] || { parts: ['', '', ''], note: '' }
     return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] }
   }
-  const setMixCell = (row, i, v) => setForm(f => {
+  // 配合の数字：IME変換中(raw)はそのまま、確定/通常入力時は全角でも強制半角（特記=hgnoteはカタカナ可）
+  const setMixCell = (row, i, v, raw) => setForm(f => {
     const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
     while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' })
-    rows[row].parts[i] = v.replace(/\D/g, '').slice(0, 2)
+    rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2)
     return { ...f, ...syncMix(rows) }
   })
   const setMixRowNote = (row, v) => setForm(f => {
@@ -1525,13 +1932,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []
     const at = items.findIndex(v => v.type === type)
     if (at >= 0) items.splice(at, 1)
-    else items.push({ type, qty: '' })
+    else items.push({ type, qty: '1' })   // 選択時は既定で1台
     // VEHICLE_TYPES 並び順を保持
     items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type))
     return { ...f, ...syncVeh(items) }
   })
-  const setVehQty = (type, qty) => setForm(f => {
-    const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: qty.replace(/[^0-9]/g, '').slice(0, 2) } : v)
+  const setVehQty = (type, qty, composing) => setForm(f => {
+    const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: composing ? String(qty).slice(0, 2) : z2h(qty).replace(/[^0-9]/g, '').slice(0, 2) } : v)
     return { ...f, ...syncVeh(items) }
   })
   const vehItems = () => (Array.isArray(form.vehicleItems) ? form.vehicleItems : [])
@@ -1540,11 +1947,35 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     const cur = Array.isArray(f.noteTags) ? f.noteTags : []
     return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
   })
+  const toggleTestTag = (tag) => setForm(f => {
+    const cur = Array.isArray(f.testTags) ? f.testTags : []
+    return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
+  })
+  // メッセージ追加：1回目は備考にmsg段落を新規追加。2回目以降は同じmsg段落の後ろに半角スペース＋メッセージを追記
+  const addNoteMessage = (msg) => setForm(f => {
+    const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []
+    const i = notes.findIndex(n => n && n.kind === 'msg')
+    if (i >= 0) {
+      const cur = String(notes[i].text || '')
+      if (cur.split(/\s+/).filter(Boolean).includes(msg)) return f   // 追加済みは重複させない
+      notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg }
+    } else {
+      notes.push({ text: msg, important: false, kind: 'msg' })
+    }
+    return { ...f, notes: sortNotes(notes) }
+  })
+  // 荷下ろしの自由入力（kind:'unload' の段落1つで保持。空なら段落を消す）。内容は備考に出力される
+  const unloadText = () => { const n = (form.notes || []).find(n => n && n.kind === 'unload'); return n ? n.text : '' }
+  const setUnload = (val) => setForm(f => {
+    const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload'))
+    if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' })
+    return { ...f, notes: sortNotes(notes) }
+  })
 
   const addDriver = (e) => {
     const emp = employees.find(emp => emp.id === e.target.value)
     if (!emp) return
-    setForm(f => (f.drivers.length >= 4 || f.drivers.some(d => d.id === emp.id))
+    setForm(f => f.drivers.some(d => d.id === emp.id)
       ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] }))
   }
   const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
@@ -1580,50 +2011,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const firstTime = (s) => Array.isArray(s.times) ? (s.times[0] || '') : ''
   const sortShip = (arr) => [...arr].sort((a, b) => (String(a.date) + firstTime(a)).localeCompare(String(b.date) + firstTime(b)))
 
-  const toForm = (s) => ({
-    date: s.date || localToday(),
-    companyId: s.companyId || '',
-    companyName: s.companyName || '',
-    tradingCompany: s.tradingCompany || '',
-    times: (Array.isArray(s.times) && s.times.length ? s.times : ['']).map(t => ({ text: String(t ?? ''), important: false })),
-    siteName: s.siteName || '',
-    siteAddress: (s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim(),
-    vehicleType: s.vehicleType || '',
-    truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
-    vehicleItems: (Array.isArray(s.vehicleItems) && s.vehicleItems.length)
-      ? s.vehicleItems.map(v => ({ type: v.type, qty: (v.qty ?? '') === '' ? '' : String(v.qty) }))
-      : String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).map(t => ({ type: t, qty: '' })),
-    mixCode: s.mixCode || '',
-    specialNote: s.specialNote || '',
-    mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
-    mixRows: (Array.isArray(s.mixRows) && s.mixRows.length)
-      ? s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
-      : [{ parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''], note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }],
-    cementType: s.cementType || '',
-    volume: (s.volume ?? '') === '' ? '' : String(s.volume),
-    volumeUncertain: !!s.volumeUncertain,
-    volumePlusA: !!s.volumePlusA,
-    volume2: (s.volume2 ?? '') === '' ? '' : String(s.volume2),
-    volumeUncertain2: !!s.volumeUncertain2,
-    volumePlusA2: !!s.volumePlusA2,
-    hasVolume2: !!(s.volume2 || s.volumeUncertain2 || s.volumePlusA2),
-    pdfName: s.pdfName || '',
-    pdfData: '',
-    hasPdf: !!s.hasPdf,
-    pdfRemove: false,
-    placements: Array.isArray(s.placements) ? s.placements : [],
-    pourLocation: s.pourLocation || '',
-    pourFree: typeof s.pourFree === 'boolean' ? s.pourFree
-      : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
-    noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
-    orderContact: s.orderContact || '',
-    siteContact: s.siteContact || '',
-    drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
-    notes: (Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
-    driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
-    mapView: s.mapView || null,
-    mapArrows: Array.isArray(s.mapArrows) ? s.mapArrows : [],
-  })
+  const toForm = shipmentToForm
 
   const startEdit = (s) => {
     setEditing(s.id)
@@ -1650,18 +2038,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   }, [pendingEditId, shipments])
 
   // フォームから保存用ペイロードを組み立てる（handleSubmit と 行切替保存で共通）
-  const buildPayload = () => {
-    const payload = {
-      ...form,
-      times: form.times.map(t => t.text).filter(t => t.trim() !== ''),
-      notes: form.notes.filter(n => n.text.trim() !== ''),
-      driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
-    }
-    // PDF: 削除指示なら空を送って消す／新規選択時はその本体を送る／いずれでもなければ既存維持のためキーを外す
-    if (form.pdfRemove) payload.pdfData = ''
-    else if (!form.pdfData) delete payload.pdfData
-    return payload
-  }
+  const buildPayload = () => buildShipmentPayload(form)
 
   // 編集中の伝票を「更新」と同じ処理で保存（UIはリセットしない＝直後に別伝票へ切替できる）
   const saveCurrentEdit = async () => {
@@ -1720,10 +2097,22 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   }
 
   const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
+  // コピーして複製：今のフォーム内容を新規扱いにする（保存すると新しい伝票になる。PDF添付は引き継がない）
+  const handleDuplicate = () => {
+    setEditing(null)
+    setEditChanged([])
+    // 複製と分かるよう現場名に「 コピー」を付ける。PDF添付は引き継がない。受注日は本日（新規作成日）に
+    setForm(f => ({ ...f, orderDate: localToday(), siteName: ((f.siteName || '') + ' コピー').trim(), pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
+    setMapKey(k => k + 1)
+    topRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    alert('コピーされました')
+  }
 
+  // 出荷一覧の「削除」はキャンセル（ソフト削除）。キャンセル伝票に保管され、復元できる
   const handleDelete = async (id) => {
     try {
-      await api.del(`/api/shipments/${id}`)
+      await api.put(`/api/shipments/${id}?cancel=1`, { cancelled: true })
+      notifyShipmentsChanged()
       setDeleteConfirm(null)
       setShipments(ss => ss.filter(s => s.id !== id))
     } catch (e) { alert('エラー: ' + e.message) }
@@ -1748,19 +2137,35 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
   const kanaOfCompany = (s) => { const c = customers.find(c => c.id === s.companyId) || customers.find(c => c.companyName === s.companyName); return c ? (c.companyNameKana || '') : '' }
   const kanaOfTrading = (s) => { if (!s.tradingCompany) return ''; const c = customers.find(c => c.companyName === s.tradingCompany); return c ? (c.companyNameKana || '') : '' }
+  // 日付を色々な表記で検索できるように（例: 6/4・06/04・6月4日・6-4）
+  const dateVariants = (dateStr) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ''))
+    if (!m) return [String(dateStr || '')]
+    const [, y, mo, d] = m, moN = String(+mo), dN = String(+d)
+    return [dateStr, `${y}/${mo}/${d}`, `${y}/${moN}/${dN}`, `${mo}/${d}`, `${moN}/${dN}`, `${moN}月${dN}日`, `${mo}-${d}`, `${moN}-${dN}`]
+  }
+  // 電話番号検索用：ハイフン・空白を除去して数字だけで比較できるようにする
+  const noHyphen = (str) => String(str || '').replace(/[-－ー―‐\s]/g, '')
   const filtered = shipments.filter(s => {
     if (dateFilter && s.date !== dateFilter) return false
     if (!search) return true
     const q = toHira(search)
-    return [s.date, s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, kanaOfCompany(s), kanaOfTrading(s)]
-      .some(v => toHira(v).includes(q))
+    const fields = [s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, s.orderContact, s.siteContact, kanaOfCompany(s), kanaOfTrading(s), ...dateVariants(s.date)]
+    if (fields.some(v => toHira(v).includes(q))) return true
+    // 連絡先・現場連絡先はハイフン無しでも検索可（例:「9131999」で「913-1999-…」にヒット）
+    const qNo = noHyphen(q)
+    if (qNo && [s.orderContact, s.siteContact].some(v => noHyphen(toHira(v)).includes(qNo))) return true
+    return false
   })
-  // 直近に登録したものを一番上に（登録日時の新しい順）
-  const sortedList = [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
-  // 10件ずつページング
-  const pageCount = Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
-  const curPage = Math.min(page, pageCount - 1)
-  const pageRows = sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
+  // 日付ボタンで絞り込み中（その日表示）は時間順（週間予定表と同条件）、それ以外は登録日時の新しい順
+  const noPaging = !!dateFilter
+  const sortedList = noPaging
+    ? [...filtered].sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+    : [...filtered].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  // 10件ずつページング（日付絞り込み中はページ送りせず全部1ページ）
+  const pageCount = noPaging ? 1 : Math.max(1, Math.ceil(sortedList.length / PAGE_SIZE))
+  const curPage = noPaging ? 0 : Math.min(page, pageCount - 1)
+  const pageRows = noPaging ? sortedList : sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
   // 検索・日付絞り込みが変わったら1ページ目へ
   useEffect(() => { setPage(0) }, [search, dateFilter])
 
@@ -1774,253 +2179,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         <form onSubmit={handleSubmit} ref={formRef} onKeyDown={onFormKeyDown}>
           <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', flexWrap: 'nowrap', gap: stacked ? 12 : 20, alignItems: 'stretch', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
           <FitToWidth width={700} max={stacked ? 1 : 1} style={{ flex: stacked ? '0 0 auto' : '0 1 700px', minWidth: 0 }}>
-          <div className="sheet" style={{ margin: 0 }}>
-            {/* 1段: 日付 / 業者名 / 商社名 */}
-            <div className="band">
-              <div className="cell" style={{ flex: '0 0 24%' }}>
-                <div className="lbl">日 付</div>
-                <input className="f" type="date" value={form.date} onChange={set('date')} required />
-              </div>
-              <div className="cell" style={{ flex: '0 0 45%' }}>
-                <div className="lbl" style={redIf('companyName')}>業 者 名</div>
-                <KanaCombo value={form.companyName} onChange={handleCompanyInput}
-                  onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
-                  options={companyComboOptions} placeholder="入力して検索（ひらがな可）" style={redIf('companyName')} required />
-              </div>
-              <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
-                <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
-                  onPick={o => setVal('tradingCompany', o.label)}
-                  options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" style={redIf('tradingCompany')} />
-              </div>
-            </div>
-
-            {/* 2段: 時間 / 現場名 */}
-            <div className="band">
-              <div className="cell" style={{ flex: '0 0 24%' }}>
-                <div className="lbl" style={redIf('times')}>時 間</div>
-                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
-              </div>
-              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
-                <div className="subrow">
-                  <div className="cell" style={{ flex: 1 }}>
-                    <div className="lbl" style={redIf('siteName')}>現 場 名</div>
-                    <FitField value={form.siteName} onChange={set('siteName')} style={redIf('siteName')} />
-                  </div>
-                </div>
-                <div className="subrow">
-                  <div className="cell" style={{ flex: 1 }}>
-                    <div className="lbl">現 場 住 所</div>
-                    <FitField value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 4段: 車種 / 配合・m³ / セメント種・配置 */}
-            <div className="band">
-              <div className="cell stack" style={{ flex: '0 0 24%', minHeight: 140, padding: 0 }}>
-                <div className="subrow" style={{ flex: '0 0 auto' }}>
-                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="lbl" style={redIf('vehicleType')}>車 種</div>
-                    {/* 車種：選択ボタン（台数なし） */}
-                    <div className="chips big">
-                      {VEHICLE_TYPES.map(o => {
-                        const it = vehItems().find(v => v.type === o)
-                        return (
-                          <span key={o} className={'chip' + (it ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="subrow" style={{ flex: 1 }}>
-                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="lbl" style={redIf('pourLocation')}>打 設 箇 所</div>
-                    {/* 打設箇所：プルダウン or 自由入力。文字大きく中央揃え（位置はプルダウン基準で統一） */}
-                    {!form.pourFree ? (
-                      <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
-                        onChange={e => {
-                          if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
-                          else setVal('pourLocation', e.target.value)
-                        }}>
-                        <option value=""></option>
-                        {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <div style={{ position: 'relative' }}>
-                        <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={15} placeholder="打設箇所を入力"
-                          style={{ ...redIf('pourLocation'), fontSize: 15, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 30px 5px 6px', boxSizing: 'border-box' }} />
-                        <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
-                          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
-                <div className="subrow">
-                  <div className="cell" style={{ flex: '0 0 56%', minWidth: 0 }}>
-                    <div className="lbl" style={redIf('mixCode')}>配 合</div>
-                    {/* 配合：上半分・下半分の2行まで（各行に特記）。1行/2行で高さを完全に揃える（常にcompact＋固定高） */}
-                    {(() => {
-                      const rows = mixRowsOf()
-                      const two = rows.length > 1
-                      return (
-                        <div className={'mixwrap' + (two ? ' two' : ' one')}>
-                          {rows.map((r, ri) => (
-                            <div key={ri} className="mixrow">
-                              <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
-                                <div className="hgcol">
-                                  <div className="hgnote-spacer" />
-                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} />
-                                </div>
-                                <span className="hgsep">-</span>
-                                <div className="hgcol">
-                                  <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
-                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} />
-                                </div>
-                                <span className="hgsep">-</span>
-                                <div className="hgcol">
-                                  <div className="hgnote-spacer" />
-                                  <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} />
-                                </div>
-                              </div>
-                              {ri > 0 && (
-                                <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
-                                  style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
-                              )}
-                            </div>
-                          ))}
-                          {rows.length < 2 && (
-                            <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px' }} onClick={addMixRow}>＋ 配合を追加</button>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </div>
-                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
-                    <div className="lbl">セメント種</div>
-                    <Chips options={CEMENT_TYPES} value={form.cementType} onChange={v => setVal('cementType', v)} big />
-                  </div>
-                </div>
-                <div className="subrow">
-                  <div className="cell m3" style={{ flex: '0 0 56%', minWidth: 0, flexDirection: 'column', justifyContent: 'center' }}>
-                    {/* 量（1段目／2段目）。各段に「?」「+a」ボタン */}
-                    {[0, 1].map(idx => {
-                      if (idx === 1 && !form.hasVolume2) return null
-                      const vKey = idx === 0 ? 'volume' : 'volume2'
-                      const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
-                      const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
-                      return (
-                        <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
-                          {/* 先頭の×スロット（1段目は空スペーサーで数字の開始位置を揃える） */}
-                          <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
-                            {idx === 1 ? (
-                              <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
-                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
-                            ) : null}
-                          </span>
-                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]} onChange={e => setVal(vKey, e.target.value.replace(/[^0-9.]/g, ''))} />
-                          <span className="unit" style={redIf('volume')}>m<sup>3</sup>
-                            {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
-                            <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
-                          </span>
-                          <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
-                          <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
-                        </div>
-                      )
-                    })}
-                    {!form.hasVolume2 && (
-                      <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }}
-                        onClick={() => setForm(f => ({ ...f, hasVolume2: true }))}>＋ 量を追加</button>
-                    )}
-                  </div>
-                  <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
-                    <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 5段: 連絡先 / 現場連絡先（ラベル左・入力右） */}
-            <div className="band">
-              <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em' }}>連 絡 先</div>
-                <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
-              </div>
-              <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em', ...redIf('siteContact') }}>現 場 連 絡 先</div>
-                <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} />
-              </div>
-            </div>
-
-            {/* 6段: 備考 */}
-            <div className="band">
-              <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl" style={redIf('notes')}>備 考</div>
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', v)} cols={2} max={2} height={90} addLabel="＋ 段落を追加" />
-              </div>
-            </div>
-
-            {/* 7段: 担当ドライバー / ドライバーへの連絡 */}
-            <div className="band">
-              <div className="cell" style={{ flex: '0 0 30%' }}>
-                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー（最大4）</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
-                  {form.drivers.map((d, i) => (
-                    <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
-                      {d.name}
-                      <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-                    </span>
-                  ))}
-                </div>
-                {form.drivers.length < 4 && (
-                  <select className="f" value="" onChange={addDriver} style={{ marginTop: 5 }}>
-                    <option value="">＋ ドライバーを追加</option>
-                    {employees.filter(e => !form.drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                )}
-              </div>
-              <div className="cell" style={{ flex: '0 0 34%', minWidth: 0 }}>
-                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>ドライバーへの連絡</div>
-                {/* 縦に段落追加（段落を追加で上の段落の下に追加） */}
-                <DenpyoGrid items={form.driverMessages} onChange={v => setVal('driverMessages', v)} cols={1} max={4} height={80} addLabel="＋ 段落を追加" />
-              </div>
-              {/* 選択したものだけ表示（工TP / 領 / 増コン） */}
-              <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
-                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>特記</div>
-                <div className="chips">
-                  {NOTE_TAGS.map(t => (
-                    <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
-                  ))}
-                </div>
-              </div>
-              {/* PDFインポート（保存時に開いている伝票へ添付。プレビュー可） */}
-              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>PDFインポート</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px dashed #999', background: '#fafafa', borderRadius: 5, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: '#333' }}>
-                    📄 PDFを選択
-                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
-                  </label>
-                  {(form.pdfData || (form.hasPdf && editing)) && (
-                    <button type="button" onClick={previewPdf}
-                      style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>👁 プレビュー</button>
-                  )}
-                  {(form.pdfData || form.hasPdf) && (
-                    <button type="button" onClick={removePdf}
-                      style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>🗑 削除</button>
-                  )}
-                </div>
-                {(form.pdfName || form.hasPdf) && (
-                  <div style={{ fontSize: 11, color: '#1a8f5a', marginTop: 4, wordBreak: 'break-all' }}>
-                    {form.pdfData ? '選択中: ' : '添付済: '}{form.pdfName || 'shipment.pdf'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <DenpyoFields form={form} setForm={setForm} editChanged={editChanged} editing={editing}
+            employees={employees} companyComboOptions={companyComboOptions} tradingComboOptions={tradingComboOptions}
+            onPdfImport={onPdfImport} removePdf={removePdf} previewPdf={previewPdf} />
           </FitToWidth>
           <div style={{ flex: stacked ? '0 0 auto' : '1 1 480px', width: stacked ? '100%' : undefined, minWidth: 0, maxWidth: stacked ? undefined : 640 }}>
             <SiteMap
@@ -2040,6 +2201,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 </>
               }
             />
+            {/* 矢印/戻す/消去・リセット/登録 の下の段左：コピーして複製 */}
+            <div style={{ marginTop: 10, display: 'flex' }}>
+              <button type="button" onClick={handleDuplicate}
+                style={{ border: '1.5px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📋 コピーして複製</button>
+            </div>
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
             {(() => {
               // mix0/note0 等のサブキーは親(配合/備考)に集約し、ラベルが付くものだけ重複なく表示
@@ -2065,11 +2231,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 24, height: 24, fontSize: 14, cursor: 'pointer', lineHeight: 1, zIndex: 2 }}>×</button>
             )}
           </div>
-          {/* 直近7日の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
+          {/* 本日〜2週間先（日曜除く）の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
-            {weekDates.map((d, i) => {
+            {weekDates.map((d) => {
               const active = dateFilter === d
-              const label = i === 0 ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
+              const label = d === localToday() ? '本日' : `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
               return (
                 <button key={d} type="button"
                   onClick={() => { if (active) setDateFilter(''); else { setDateFilter(d); setSearch('') } }}
@@ -2085,7 +2251,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             })}
           </div>
         </div>
-        <div style={S.countBar}>{loading ? '読み込み中...' : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
+        <div style={S.countBar}>{loading ? '読み込み中...' : noPaging ? `${dateFilter} の伝票 ${filtered.length} 件を表示` : `${filtered.length} 件中 ${filtered.length === 0 ? 0 : curPage * PAGE_SIZE + 1}〜${Math.min((curPage + 1) * PAGE_SIZE, filtered.length)} 件を表示`}</div>
 
         {loading ? (
           <div style={S.empty}>読み込み中...</div>
@@ -2132,7 +2298,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
           </div>
         )}
 
-        {!loading && filtered.length > PAGE_SIZE && (
+        {!loading && !noPaging && filtered.length > PAGE_SIZE && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '12px 16px' }}>
             <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={curPage === 0}
               style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage === 0 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage === 0 ? 'default' : 'pointer' }}>← 戻る</button>
@@ -2146,9 +2312,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       {deleteConfirm && (
         <div style={S.overlay}>
           <div style={S.confirmBox}>
-            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>この出荷登録を削除しますか？</p>
+            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>この伝票を削除（キャンセル）しますか？<br /><span style={{ fontSize: 12, color: '#6b7a8d' }}>「キャンセル伝票」に保管され、復元できます。</span></p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>キャンセル</button>
+              <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>やめる</button>
               <button style={S.dangerBtn} onClick={() => handleDelete(deleteConfirm)}>削除する</button>
             </div>
           </div>
@@ -2238,10 +2404,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return localToday()
   })
   useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
+  const [ampm, setAmpm] = useState('both')   // 表示の絞り込み（'both' | 'AM' | 'PM'）
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
+  const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
+  const [lineTarget, setLineTarget] = useState(null) // LINE送信モーダルで開いている伝票
+  const [lineSel, setLineSel] = useState([])         // LINE送信の送り先（従業員id）
 
   const load = useCallback(async () => {
     try { setAll(await api.get('/api/shipments')) }
@@ -2252,6 +2422,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
   useEffect(() => {
     api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
   }, [])
+  // 編集モーダルの業者名・商社名サジェスト用に顧客マスタを読み込む（別ウィンドウ＝ログイン不要時は失敗しても無視）
+  useEffect(() => {
+    api.get('/api/customers').then(c => setCustomers(c || [])).catch(() => {})
+  }, [])
+
+  // 業者名・商社名のカナ付き候補（出荷登録フォームと同じロジック）
+  const companyComboOptions = customers.map(c => ({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }))
+  const tradingComboOptions = (() => {
+    const seen = new Set()
+    const out = []
+    customers.forEach(c => { if (c.companyName && !seen.has(c.companyName)) { seen.add(c.companyName); out.push({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }) } })
+    Array.from(new Set(all.map(s => (s.tradingCompany || '').trim()).filter(Boolean))).sort()
+      .forEach(t => { if (t && !seen.has(t)) { seen.add(t); out.push({ label: t, kana: '' }) } })
+    return out
+  })()
 
   // ?print=1 の別ウィンドウ（設定のPDF出力）は、データ読み込み完了後に自動で印刷ダイアログ（A4横）を開く
   useEffect(() => {
@@ -2293,19 +2478,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
   useShipmentsChanged(refetch)
 
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
-  // 時間を分に変換してソート。午前=11:59(719分)・午後=23:59(1439分)扱い、空欄は最後
+  // 時間を分に変換してソート。午前/AM=11:59(719分)・午後/PM=23:59(1439分)扱い、空欄は最後。"08:30"と"8:30"は同一
   const timeToMin = (t) => {
     const str = String(t || '').trim()
     if (!str) return 100000
     const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
     if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
-    if (str.includes('午前')) return 11 * 60 + 59   // 11:59
-    if (str.includes('午後')) return 23 * 60 + 59   // 23:59
+    const up = str.toUpperCase()
+    if (str.includes('午前') || up.includes('AM')) return 11 * 60 + 59   // 11:59
+    if (str.includes('午後') || up.includes('PM')) return 23 * 60 + 59   // 23:59
     const h = str.match(/(\d{1,2})\s*時/)
     if (h) return parseInt(h[1], 10) * 60
     return 99999   // 解析できない文字 → 空欄の手前
   }
-  const rows = all.filter(s => s.date === date)
+  const inAmPm = (s) => { if (ampm === 'both') return true; const mm = timeToMin(firstT(s)); return ampm === 'AM' ? mm < 720 : mm >= 720 }
+  const rows = all.filter(s => s.date === date && inAmPm(s))
     .sort((a, b) => timeToMin(firstT(a)) - timeToMin(firstT(b)) || String(firstT(a)).localeCompare(String(firstT(b))))
 
   const isChanged = (s, f) => Array.isArray(s.changedFields) && s.changedFields.includes(f)
@@ -2397,6 +2584,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
       + (opts.xl ? ' xl' : '')
       + (opts.tokki ? ' tokki' : '')
       + (imp ? ' imp' : (opts.plain ? ' plain' : ''))
+    // 現場名など：1行で見切れる前に2行まで折り返し、3行目に行く前にフォントを縮小する
+    if (opts.wrap) {
+      const v = getVal(s, f)
+      return (
+        <div key={f + (isChanged(s, f) ? '_c' : '')} ref={fitRef} className={cls + ' sc-wrap2' + (v ? '' : ' sc-wrap2-ph')}>{v || ph || ''}</div>
+      )
+    }
     return (
       <input
         key={f + (isChanged(s, f) ? '_c' : '') + (imp ? '_i' : '')}
@@ -2606,38 +2800,38 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 添付PDFを新規ウィンドウで開く
   const openPdfWin = (id) => window.open(`/api/shipments?id=${encodeURIComponent(id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')
 
-  const sendLine = async (s) => {
-    const shipDrivers = Array.isArray(s.drivers) ? s.drivers : []
-    if (shipDrivers.length === 0) { alert('担当が入っていません'); return }
-    // 担当ドライバー → 従業員管理のLINEユーザーIDを解決（id一致、なければ氏名一致）
-    // lineId はコピペ混入の空白・改行・不可視文字を除去してから使う
-    const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
-    const resolved = shipDrivers.map(d => {
-      const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name)
-      return { name: d.name, lineId: cleanId(emp?.lineId) }
-    })
-    const withId = resolved.filter(r => r.lineId)
-    const without = resolved.filter(r => !r.lineId)
-    if (withId.length === 0) {
-      alert('担当ドライバーにLINEユーザーIDが紐づいていません。\n従業員管理でLINE IDを設定してください。')
-      return
-    }
-    let msg = `${withId.map(r => r.name).join('、')} にLINEを送信しますか？`
-    if (without.length) msg += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
-    if (!window.confirm(msg)) return
+  // LINE送信：送り先（従業員管理のドライバー）を選んで一括送信→送信できたら担当に追加していく
+  const cleanLineId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+  const openLine = (s) => { setLineTarget(s); setLineSel([]) }
+  const toggleLineSel = (id) => setLineSel(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])
+  const doSendLine = async () => {
+    const s = lineTarget
+    if (!s) return
+    const chosen = drivers.filter(d => lineSel.includes(d.id))
+    if (chosen.length === 0) { alert('送り先を選択してください'); return }
+    const withId = chosen.map(d => ({ id: d.id, name: d.name, lineId: cleanLineId(d.lineId) })).filter(r => r.lineId)
+    const without = chosen.filter(d => !cleanLineId(d.lineId))
+    if (withId.length === 0) { alert('選択した送り先にLINEユーザーIDが設定されていません。\n従業員管理でLINE IDを設定してください。'); return }
     try {
       const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: s.id, lineUserIds: withId.map(r => r.lineId) })
+      // 送信できたら担当に追加（既存とマージ・重複除外）
+      const cur = Array.isArray(s.drivers) ? s.drivers : []
+      const merged = [...cur]
+      chosen.forEach(d => { if (!merged.some(x => (x.id && x.id === d.id) || x.name === d.name)) merged.push({ id: d.id, name: d.name }) })
+      try {
+        const updated = await saveShipmentDrivers(s, merged)
+        setAll(arr => arr.map(x => x.id === updated.id ? updated : x))
+        notifyShipmentsChanged()
+      } catch { /* 担当追加に失敗しても送信自体は完了 */ }
       const fails = (res.results || []).filter(r => !r.ok)
       let msg = `送信しました（${res.sent}/${res.total} 件成功）`
+      if (without.length) msg += `\n（LINE未設定でスキップ: ${without.map(d => d.name).join('、')}）`
       if (fails.length) {
-        // 失敗したIDと担当名・理由を表示
-        const lines = fails.map(f => {
-          const who = withId.find(w => w.lineId === f.to)
-          return `・${who ? who.name : ''}（${f.to}）\n  ${f.error || '不明なエラー'}`
-        })
+        const lines = fails.map(f => { const who = withId.find(w => w.lineId === f.to); return `・${who ? who.name : ''}（${f.to}）\n  ${f.error || '不明なエラー'}` })
         msg += `\n\n■ 送信失敗:\n${lines.join('\n')}`
       }
       alert(msg)
+      setLineTarget(null)
     } catch (e) {
       alert('送信に失敗しました: ' + e.message)
     }
@@ -2655,20 +2849,35 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
   }
 
+  // AM/PM表示切替（未選択=全体）。印刷には出さない
+  const ampmButtons = (
+    <span className="no-print" style={{ display: 'inline-flex', gap: 6 }}>
+      {['AM', 'PM'].map(p => (
+        <button key={p} type="button" onClick={() => setAmpm(a => a === p ? 'both' : p)}
+          style={{ border: ampm === p ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === p ? '#0f3060' : '#fff', color: ampm === p ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{p}</button>
+      ))}
+    </span>
+  )
+
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
-        /* 別ウィンドウ: タイトルを画面中央に絶対配置し、日付(左)/閉じる(右)を両端に重ねる */
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e5e9f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', position: 'relative', zIndex: 1 }}>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6 }} />
-            <span style={{ fontSize: 13, color: '#111' }}>（{weekday}）</span>
+        /* 別ウィンドウ: 日付・曜日(左)／タイトル(中央)／閉じる(右)、その下にAM/PM(中央) */
+        <div style={{ borderBottom: '1px solid #e5e9f0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '10px 12px 4px' }}>
+            <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
+              <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
+            <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => window.close()}
+                style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+            </div>
           </div>
-          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', pointerEvents: 'none' }}>出荷予定表</div>
-          <div className="no-print" style={{ flex: '0 0 auto', position: 'relative', zIndex: 1, display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => window.close()}
-              style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ 閉じる</button>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 12px 10px' }}>
+            {ampmButtons}
           </div>
         </div>
       ) : (
@@ -2682,7 +2891,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
+          {compact && ampmButtons}
         </div>
+        {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
+        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10 }}>{ampmButtons}</div>}
       </div>
       )}
       {compact ? (
@@ -2704,7 +2916,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     </div>
                   </div>
                   {/* 現場名（中央・大きく） */}
-                  <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
+                  <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true, wrap: true })}</span></div>
                   {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
                   <div className="sc-grid2">
                     <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
@@ -2730,7 +2942,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-card-actions">
                     <button type="button" onClick={() => setEditModal(s)}
                       style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => sendLine(s)}
+                    <button type="button" onClick={() => openLine(s)}
                       style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
                   </div>
                 </div>
@@ -2753,7 +2965,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <colgroup>
             <col style={{ width: '11%' }} />
             <col style={{ width: '15%' }} />
-            <col style={{ width: '7%' }} />
+            {!isPopup && <col style={{ width: '7%' }} />}
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '6%' }} />
@@ -2765,7 +2977,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>📄PDF</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
+              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2774,10 +2986,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {rows.map(s => (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
-                <td>{cell(s, 'siteName', '', { big: true })}</td>
+                <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
+                {!isPopup && (
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>
                   {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}
                 </td>
+                )}
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
@@ -2788,7 +3002,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <td style={{ textAlign: 'center' }}>
                     <button type="button" onClick={() => openEditWindow(s)}
                       style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => sendLine(s)}
+                    <button type="button" onClick={() => openLine(s)}
                       style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
                   </td>
                 )}
@@ -2827,306 +3041,118 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <ScheduleEditModal
           shipment={editModal}
           driverOptions={drivers}
+          companyComboOptions={companyComboOptions}
+          tradingComboOptions={tradingComboOptions}
           onClose={() => setEditModal(null)}
           onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
         />
+      )}
+      {lineTarget && (
+        <div onClick={() => setLineTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 460, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
+            <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(lineTarget) || '—'}</b>　<b>{lineTarget.companyName}</b></div>
+            <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 8 }}>{lineTarget.siteName || ''}</div>
+            {Array.isArray(lineTarget.drivers) && lineTarget.drivers.length > 0 && (
+              <div style={{ fontSize: 12, color: '#1a4d8f', marginBottom: 8 }}>現在の担当: {lineTarget.drivers.map(d => d.name).join('、')}</div>
+            )}
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>送り先を選択（従業員管理のドライバー・タップで選択）</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {drivers.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
+                : drivers.map(d => {
+                  const on = lineSel.includes(d.id)
+                  const noId = !cleanLineId(d.lineId)
+                  return (
+                    <button key={d.id} type="button" onClick={() => toggleLineSel(d.id)}
+                      style={{ border: on ? '2px solid #06c755' : '1.5px solid #cdd5e0', background: on ? '#06c755' : '#fff', color: on ? '#fff' : (noId ? '#aab' : '#3a4a5c'), borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                      {d.name}{noId && <span style={{ fontSize: 10, marginLeft: 2 }}>(LINE未設定)</span>}
+                    </button>
+                  )
+                })}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button type="button" onClick={() => setLineTarget(null)} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+              <button type="button" onClick={doSendLine} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>💬 一括送信</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
 // スマホ予定表の編集モーダル。更新で差分保存→閉じると予定表に戻り変更が赤文字反映される。
-function ScheduleEditModal({ shipment, driverOptions = [], onClose, onSave }) {
-  const s = shipment
-  // --- 構造化した初期状態を伝票から組み立てる ---
-  const initTimes = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
-    .map(x => String(x ?? '')).filter(x => x.trim() !== '')
-  const initDrivers = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []))
-    .map(d => ({ id: d.id || '', name: d.name }))
-  const [times, setTimes] = useState(initTimes.length ? initTimes : [''])
-  const [date, setDate] = useState(s.date || '')
-  const [companyName, setCompanyName] = useState(s.companyName || '')
-  const [tradingCompany, setTradingCompany] = useState(s.tradingCompany || '')
-  const [siteName, setSiteName] = useState(s.siteName || '')
-  const [pourLocation, setPourLocation] = useState(s.pourLocation || '')
-  const [pourFree, setPourFree] = useState(() => !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)))
-  const [siteAddress, setSiteAddress] = useState(s.siteAddress || '')
-  const [mapView, setMapView] = useState(s.mapView || null)
-  const [mapArrows, setMapArrows] = useState(Array.isArray(s.mapArrows) ? s.mapArrows : [])
-  const [vehicleType, setVehicleType] = useState(s.vehicleType || '')   // "4t・7t" 連結（台数なし）
-  const [mixRows, setMixRows] = useState(() => {
-    if (Array.isArray(s.mixRows) && s.mixRows.length) {
-      return s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
-    }
-    const p = String(s.mixCode || '').split('-')
-    const n = Array.isArray(s.mixNotes) ? s.mixNotes : []
-    return [{ parts: [p[0] || '', p[1] || '', p[2] || ''], note: n[1] || '' }]
-  })
-  const [volume, setVolume] = useState(s.volume == null ? '' : String(s.volume))
-  const [volumeUncertain, setVolumeUncertain] = useState(!!s.volumeUncertain)
-  const [volumePlusA, setVolumePlusA] = useState(!!s.volumePlusA)
-  const [volume2, setVolume2] = useState(s.volume2 == null ? '' : String(s.volume2))
-  const [volumeUncertain2, setVolumeUncertain2] = useState(!!s.volumeUncertain2)
-  const [volumePlusA2, setVolumePlusA2] = useState(!!s.volumePlusA2)
-  const [hasVolume2, setHasVolume2] = useState(!!(s.volume2 || s.volumeUncertain2 || s.volumePlusA2))
-  const [drivers, setDrivers] = useState(initDrivers)
-  const [notes, setNotes] = useState(Array.isArray(s.notes) ? s.notes.map(n => n.text).join('\n') : '')
-  const [noteTags, setNoteTags] = useState(Array.isArray(s.noteTags) ? s.noteTags : [])
-  const [placements, setPlacements] = useState(Array.isArray(s.placements) ? s.placements : [])
-  const [siteContact, setSiteContact] = useState(s.siteContact || '')
-  const toggleNoteTag = (t) => setNoteTags(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
-  const togglePlacement = (t) => setPlacements(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
+function ScheduleEditModal({ shipment, driverOptions = [], companyComboOptions = [], tradingComboOptions = [], onClose, onSave }) {
+  // スマホ予定表の編集モーダル。出荷登録フォーム（DenpyoFields）をそのまま使って再構築する。
+  const [form, setForm] = useState(() => shipmentToForm(shipment))
   const [saving, setSaving] = useState(false)
 
-  // 時間：行ごとに編集／追加／削除（最大2）
-  const setTime = (i, v) => setTimes(ts => ts.map((t, idx) => idx === i ? v : t))
-  const addTime = () => setTimes(ts => ts.length < 2 ? [...ts, ''] : ts)
-  const delTime = (i) => setTimes(ts => ts.length > 1 ? ts.filter((_, idx) => idx !== i) : [''])
-  // 配合：複数行。各行3セクション（各2桁）＋中央の特記
-  const setMixPart = (ri, i, v) => setMixRows(rs => rs.map((r, idx) => idx === ri ? { ...r, parts: r.parts.map((x, j) => j === i ? v : x) } : r))
-  const setMixNote = (ri, v) => setMixRows(rs => rs.map((r, idx) => idx === ri ? { ...r, note: v } : r))
-  const addMixRow = () => setMixRows(rs => [...rs, { parts: ['', '', ''], note: '' }])
-  const removeMixRow = (ri) => setMixRows(rs => rs.length > 1 ? rs.filter((_, idx) => idx !== ri) : rs)
-
-  // 車種：3種から複数トグル（VEHICLE_TYPESの順を維持）
-  const vehList = vehicleType.split('・').map(x => x.trim()).filter(Boolean)
-  const toggleVeh = (o) => {
-    const isOn = vehList.includes(o)
-    const next = isOn ? vehList.filter(x => x !== o) : [...vehList, o]
-    setVehicleType(VEHICLE_TYPES.filter(v => next.includes(v)).join('・'))
-  }
-
-  // 担当：最大4人。選択肢から追加／チップで削除
-  const addDriver = (e) => {
-    const d = driverOptions.find(x => x.id === e.target.value)
-    if (d && drivers.length < 4 && !drivers.some(x => x.id === d.id)) setDrivers(ds => [...ds, { id: d.id, name: d.name }])
+  // PDFインポート（出荷登録と同じ。保存時にこの伝票へ添付される）
+  const onPdfImport = (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) { alert('PDFファイルを選択してください'); e.target.value = ''; return }
+    const MAX = 2.5 * 1024 * 1024
+    if (file.size > MAX) { alert(`PDFが大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。\n2.5MB以下に圧縮してください。`); e.target.value = ''; return }
+    const reader = new FileReader()
+    reader.onload = () => setForm(f => ({ ...f, pdfData: String(reader.result || ''), pdfName: file.name, hasPdf: true, pdfRemove: false }))
+    reader.onerror = () => alert('PDFの読み込みに失敗しました')
+    reader.readAsDataURL(file)
     e.target.value = ''
   }
-  const removeDriver = (i) => setDrivers(ds => ds.filter((_, idx) => idx !== i))
-
-  const submit = async () => {
-    setSaving(true)
-    // 構造化パッチを作り、元と異なるフィールドだけ changed に積む
-    const cleanTimes = times.map(t => t.trim()).filter(Boolean)
-    // 配合：複数行を整形（全行空の行は落とす）。1行目を mixCode/mixNotes に同期
-    const cleanRows = mixRows
-      .map(r => ({ parts: [r.parts[0].trim(), r.parts[1].trim(), r.parts[2].trim()], note: (r.note || '').trim() }))
-      .filter(r => r.parts.some(Boolean) || r.note)
-    const finalRows = cleanRows.length ? cleanRows : [{ parts: ['', '', ''], note: '' }]
-    const mixCode = finalRows[0].parts.join('-').replace(/-+$/, '')
-    const mixNotesClean = ['', finalRows[0].note || '', '']
-    // 車種：選択中の車種名のみ（台数は持たない）
-    const vehTypes = String(vehicleType || '').split('・').map(x => x.trim()).filter(Boolean)
-    const vehicleItems = vehTypes.map(t => ({ type: t, qty: '' }))
-    const patch = {
-      times: cleanTimes,
-      date: date || s.date,
-      companyName, tradingCompany, siteName, siteAddress, pourLocation,
-      mapView, mapArrows,
-      vehicleType, vehicleItems, mixCode, mixNotes: mixNotesClean, mixRows: finalRows,
-      volume, volumeUncertain, volumePlusA,
-      volume2: hasVolume2 ? volume2 : '', volumeUncertain2: hasVolume2 ? volumeUncertain2 : false, volumePlusA2: hasVolume2 ? volumePlusA2 : false,
-      drivers: drivers.map(d => ({ id: d.id, name: d.name })),
-      notes: notes.split('\n').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })),
-      noteTags,
-      placements,
-      siteContact,
+  const removePdf = () => setForm(f => ({ ...f, pdfData: '', pdfName: '', hasPdf: false, pdfRemove: true }))
+  const previewPdf = () => {
+    const feat = 'width=900,height=1000,scrollbars=yes,resizable=yes'
+    if (form.pdfData) {
+      const w = window.open('', '_blank', feat)
+      if (w) { w.document.write(`<title>${form.pdfName || 'PDF'}</title><iframe src="${form.pdfData}" style="border:0;position:absolute;inset:0;width:100%;height:100%"></iframe>`); w.document.close() }
+      return
     }
-    // 配合は桁ごと・備考は行ごとに変更を検出（共通ヘルパー）
-    const changed = diffChangedFields(s, patch)
-    try { await onSave(patch, changed) } catch { setSaving(false) }
+    if (shipment.id && form.hasPdf) window.open(`/api/shipments?id=${encodeURIComponent(shipment.id)}&pdf=1`, '_blank', feat)
   }
 
-  const lblS = { fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 4, display: 'block' }
-  const inS = { width: '100%', fontSize: 16, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, fontFamily: 'inherit', color: '#111', boxSizing: 'border-box' }
-  const chip = (on) => ({ border: on ? '1.5px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 0', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center' })
+  const submit = async () => {
+    if (!String(form.companyName || '').trim() || !String(form.date || '').trim()) { alert('日付と業者名は必須です'); return }
+    setSaving(true)
+    const payload = buildShipmentPayload(form)
+    // 配合は桁ごと・備考は行ごとに変更を検出（予定表で赤字表示するため）
+    const changed = diffChangedFields(shipment, payload)
+    try { await onSave(payload, changed) } catch { setSaving(false) }
+  }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 520, maxHeight: '90dvh', overflowY: 'auto', borderRadius: '16px 16px 0 0', padding: 'calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'sticky', top: 0, background: '#fff', paddingBottom: 4 }}>
+    <div onClick={() => { if (!saving) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#f3f1ec', width: '100%', maxWidth: 760, maxHeight: '92dvh', display: 'flex', flexDirection: 'column', borderRadius: '16px 16px 0 0', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', paddingTop: 'env(safe-area-inset-top)' }}>
+        {/* ヘッダー：スクロールに付いてこない（固定しない）。閉じるボタンのみ常設 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 11px', borderBottom: '1px solid #dde3ed', background: '#fff', borderRadius: '16px 16px 0 0', flex: '0 0 auto' }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
           <button type="button" onClick={onClose} disabled={saving}
-            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '7px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
-
-        {/* 日付（左・業者名と同じ幅）／時間（右・商社名と同じ開始位置）。下の業者名/商社名グリッドと列を揃える */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14, alignItems: 'start' }}>
-          <div style={{ minWidth: 0 }}>
-            <label style={lblS}>日付</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inS, width: 'auto', maxWidth: '100%', display: 'block' }} />
+        {/* 本体：唯一のスクロール領域。出荷登録フォームをそのまま使う */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px calc(16px + env(safe-area-inset-bottom))' }}>
+          <div className="denpyo">
+            <FitToWidth width={700}>
+              <DenpyoFields form={form} setForm={setForm} editing={shipment.id}
+                employees={driverOptions} companyComboOptions={companyComboOptions} tradingComboOptions={tradingComboOptions}
+                onPdfImport={onPdfImport} removePdf={removePdf} previewPdf={previewPdf} />
+            </FitToWidth>
           </div>
-          <div style={{ minWidth: 0 }}>
-            <label style={lblS}>時間（最大2・上から順）</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {times.map((t, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input value={t} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inS, flex: '1 1 0', minWidth: 0 }} />
-                  {times.length > 1 && (
-                    <button type="button" onClick={() => delTime(i)}
-                      style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 38, fontSize: 16, cursor: 'pointer' }}>×</button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {times.length < 2 && (
-              <button type="button" onClick={addTime}
-                style={{ marginTop: 6, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 時間を追加</button>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <div><label style={lblS}>業者名</label><input value={companyName} onChange={e => setCompanyName(e.target.value)} style={inS} /></div>
-          <div><label style={lblS}>商社名</label><input value={tradingCompany} onChange={e => setTradingCompany(e.target.value)} style={inS} /></div>
-        </div>
-        <div style={{ marginBottom: 12 }}><label style={lblS}>現場名</label><input value={siteName} onChange={e => setSiteName(e.target.value)} style={inS} /></div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>打設箇所</label>
-          {!pourFree ? (
-            <select value={pourLocation} style={{ ...inS, cursor: 'pointer' }}
-              onChange={e => {
-                if (e.target.value === '入力する') { setPourFree(true); setPourLocation('') }
-                else setPourLocation(e.target.value)
-              }}>
-              <option value=""></option>
-              {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          ) : (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input value={pourLocation} onChange={e => setPourLocation(e.target.value)} placeholder="打設箇所を入力" style={{ ...inS, flex: 1 }} />
-              <button type="button" onClick={() => { setPourFree(false); setPourLocation('') }}
-                style={{ flex: '0 0 auto', border: '1.5px solid #cdd5e0', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>一覧</button>
-            </div>
-          )}
-        </div>
-
-        {/* 現場住所＋地図（住所編集・ピン/矢印編集） */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>現場住所</label>
-          <input value={siteAddress} onChange={e => setSiteAddress(e.target.value)} placeholder={DEFAULT_SITE_ADDRESS} style={inS} />
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 12 }}>
             <SiteMap
-              address={siteAddress}
-              onAddressChange={setSiteAddress}
-              mapView={mapView}
-              onMapViewChange={setMapView}
-              arrows={mapArrows}
-              onArrowsChange={setMapArrows}
+              address={form.siteAddress}
+              onAddressChange={(a) => setForm(f => ({ ...f, siteAddress: a }))}
+              mapView={form.mapView}
+              onMapViewChange={(v) => setForm(f => ({ ...f, mapView: v }))}
+              arrows={form.mapArrows}
+              onArrowsChange={(a) => setForm(f => ({ ...f, mapArrows: a }))}
             />
           </div>
+          <button type="button" onClick={submit} disabled={saving}
+            style={{ width: '100%', marginTop: 14, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '15px', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? '更新中…' : '更新'}
+          </button>
         </div>
-
-        {/* 車種（3種複数選択） */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>車種（複数選択可）</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-            {VEHICLE_TYPES.map(o => (
-              <div key={o} onClick={() => toggleVeh(o)} style={chip(vehList.includes(o))}>{o}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* 配合（複数行・3セクション・中央に特記）＋量（?トグル） */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>配合（中央のみ特記可）</label>
-          {mixRows.map((row, ri) => (
-            <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 10 : 0 }}>
-              {[0, 1, 2].map(i => (
-                <Fragment key={i}>
-                  {i > 0 && <span style={{ fontSize: 22, fontWeight: 700, color: '#111', paddingBottom: 8 }}>-</span>}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {i === 1
-                      ? <input value={row.note} onChange={e => setMixNote(ri, e.target.value)} placeholder="特記"
-                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 2px', fontFamily: 'inherit' }} />
-                      : <div style={{ height: 15 }} />}
-                    <input value={row.parts[i]} onChange={e => setMixPart(ri, i, e.target.value)} inputMode="numeric" maxLength={2} placeholder="00"
-                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 20, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 8, padding: '8px 4px', fontFamily: 'inherit', color: '#111', marginTop: 3 }} />
-                  </div>
-                </Fragment>
-              ))}
-              {ri > 0 && (
-                <button type="button" onClick={() => removeMixRow(ri)} title="この配合を削除"
-                  style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, width: 38, height: 40, fontSize: 16, cursor: 'pointer' }}>×</button>
-              )}
-            </div>
-          ))}
-          <button type="button" onClick={addMixRow}
-            style={{ marginTop: 8, border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 配合を追加</button>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>数量（m³）</label>
-          {(() => {
-            const sqBtn = (on, label, onClick, title) => (
-              <button type="button" onClick={onClick} title={title}
-                style={{ flex: '0 0 auto', border: on ? '1.5px solid #c0392b' : '1.5px solid #cdd5e0', background: on ? '#c0392b' : '#fff', color: on ? '#fff' : '#8a97a6', borderRadius: 8, minWidth: 42, height: 40, padding: '0 8px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{label}</button>
-            )
-            const row = (val, setV, unc, setUnc, plusA, setPlusA, onDel) => (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-                <input value={val} onChange={e => setV(e.target.value)} inputMode="decimal" style={{ ...inS, flex: 1 }} />
-                {sqBtn(plusA, '+a', () => setPlusA(v => !v), '+a を付ける')}
-                {sqBtn(unc, '?', () => setUnc(v => !v), '不確定マーク')}
-                {onDel && sqBtn(false, '×', onDel, '2段目を削除')}
-              </div>
-            )
-            return (<>
-              {row(volume, setVolume, volumeUncertain, setVolumeUncertain, volumePlusA, setVolumePlusA, null)}
-              {hasVolume2 && row(volume2, setVolume2, volumeUncertain2, setVolumeUncertain2, volumePlusA2, setVolumePlusA2,
-                () => { setHasVolume2(false); setVolume2(''); setVolumeUncertain2(false); setVolumePlusA2(false) })}
-              {!hasVolume2 && (
-                <button type="button" onClick={() => setHasVolume2(true)}
-                  style={{ border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>＋ 量を追加</button>
-              )}
-            </>)
-          })()}
-        </div>
-
-        {/* 担当（最大4人・選択） */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>担当ドライバー（最大4人）</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: drivers.length ? 6 : 0 }}>
-            {drivers.map((d, i) => (
-              <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1.5px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 8, padding: '6px 10px', fontSize: 14, fontWeight: 600 }}>
-                {d.name}
-                <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
-              </span>
-            ))}
-          </div>
-          {drivers.length < 4 && (
-            <select onChange={addDriver} defaultValue="" style={{ ...inS, cursor: 'pointer' }}>
-              <option value="">＋ ドライバーを追加</option>
-              {driverOptions.filter(e => !drivers.some(d => d.id === e.id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          )}
-        </div>
-
-        {/* 荷下ろし（クレーン / F1 / ポンプ） */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>荷下ろし</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-            {PLACEMENT_TYPES.map(t => (
-              <div key={t} onClick={() => togglePlacement(t)} style={chip(placements.includes(t))}>{t}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* 特記（工TP / 領 / 増コン / 追） */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={lblS}>特記</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
-            {NOTE_TAGS.map(t => (
-              <div key={t} onClick={() => toggleNoteTag(t)} style={chip(noteTags.includes(t))}>{t}</div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 12 }}><label style={lblS}>備考（複数は改行）</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inS, resize: 'vertical' }} /></div>
-        <div style={{ marginBottom: 6 }}><label style={lblS}>現場連絡先</label><input value={siteContact} onChange={e => setSiteContact(e.target.value)} inputMode="tel" style={inS} /></div>
-
-        <button type="button" onClick={submit} disabled={saving}
-          style={{ width: '100%', marginTop: 8, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
-          {saving ? '更新中…' : '更新'}
-        </button>
       </div>
     </div>
   )
@@ -3139,14 +3165,15 @@ const WD = ['日', '月', '火', '水', '木', '金', '土']
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const mondayOf = (dateStr) => { const d = new Date(dateStr); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return d }
 const firstTimeOf = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
-// 時間文字列を分に変換（午前=11:59 / 午後=23:59 / 空欄や未解析は最後）
+// 時間文字列を分に変換（午前/AM=11:59 / 午後/PM=23:59 / 空欄や未解析は最後）。"08:30"と"8:30"は同一
 const timeToMin = (t) => {
   const str = String(t || '').trim()
   if (!str) return 100000
   const m = str.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/)
   if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
-  if (str.includes('午前')) return 11 * 60 + 59
-  if (str.includes('午後')) return 23 * 60 + 59
+  const up = str.toUpperCase()
+  if (str.includes('午前') || up.includes('AM')) return 11 * 60 + 59
+  if (str.includes('午後') || up.includes('PM')) return 23 * 60 + 59
   const h = str.match(/(\d{1,2})\s*時/)
   if (h) return parseInt(h[1], 10) * 60
   return 99999
@@ -3179,6 +3206,24 @@ function DashboardPage() {
   const weeks = all.filter(s => weekDates.includes(s.date))
   const vol = arr => arr.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
   const fmtVol = n => (Math.round(n * 100) / 100).toLocaleString('ja-JP')
+  // 月別合計（先月・今月・来月）。数量は1段目+2段目の合計m³
+  const baseNow = new Date(today)
+  const monKey = (off) => { const d = new Date(baseNow.getFullYear(), baseNow.getMonth() + off, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+  const monLabel = (off) => monKey(off).replace('-', '/')
+  const inMonth = (s, off) => String(s.date || '').startsWith(monKey(off))
+  const lastMonthShips = all.filter(s => inMonth(s, -1))
+  const thisMonthShips = all.filter(s => inMonth(s, 0))
+  const nextMonthShips = all.filter(s => inMonth(s, 1))
+  const volBoth = arr => arr.reduce((acc, s) => acc + (parseFloat(s.volume) || 0) + (parseFloat(s.volume2) || 0), 0)
+  // 今月分の「?」「+a」の数（1段目・2段目それぞれ数える）
+  const marks = (() => {
+    let q = 0, a = 0
+    thisMonthShips.forEach(s => {
+      if (s.volumeUncertain) q++; if (s.volumeUncertain2) q++
+      if (s.volumePlusA) a++; if (s.volumePlusA2) a++
+    })
+    return { q, a }
+  })()
   // 本日分を時間順に並べる（午前=11:59 / 午後=23:59 換算・空欄は最後）
   const timeMin = (s) => {
     const t = String(firstTimeOf(s) || '').trim()
@@ -3246,6 +3291,13 @@ function DashboardPage() {
             {card('登録総数', all.length, '件')}
           </div>
 
+          {/* 月別の合計m³（先月・今月・来月）。今月の?・+aは今月の合計の下に表示 */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+            {card('先月の合計', fmtVol(volBoth(lastMonthShips)), 'm³', monLabel(-1))}
+            {card('今月の合計', fmtVol(volBoth(thisMonthShips)), 'm³', `${monLabel(0)}　? ${marks.q}　+a ${marks.a}`, '#1a6a9f')}
+            {card('来月の合計', fmtVol(volBoth(nextMonthShips)), 'm³', monLabel(1))}
+          </div>
+
           {/* 内訳（車種別＝便別・担当別） */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 12, padding: '14px 16px', flex: '1 1 240px', minWidth: 0 }}>
@@ -3304,7 +3356,7 @@ function WeeklySchedulePage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, minmax(130px,1fr))', gap: 6, minWidth: 1300 }}>
           {days.map(d => {
             const ds = ymd(d), wd = WD[d.getDay()]
-            const list = all.filter(s => s.date === ds).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+            const list = all.filter(s => s.date === ds).sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
             // 便ごとの車種別合計台数を集計（数量があれば加算・無ければ1台）
             const vehStats = (rows) => {
               const c = {}
@@ -3317,8 +3369,7 @@ function WeeklySchedulePage() {
                 }
               })
               const total = VEHICLE_TYPES.reduce((a, v) => a + (c[v] || 0), 0)
-              const summary = VEHICLE_TYPES.filter(v => c[v] > 0).map(v => `${v}:${c[v]}台`).join(' ')
-              return { summary, total }
+              return { total, c }
             }
             // 便の区分：第一便=9時まで(<9:00)／第二便=9時以降の午前(9:00〜11:59)／午後=12:00以降
             const bin = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
@@ -3331,10 +3382,20 @@ function WeeklySchedulePage() {
                 {binList.map((bl, bi) => {
                   const st = vehStats(bl)
                   const lb = BIN_LABELS[bi]
+                  // 内訳：4t/7t を1行目、大型を2行目。常に2行ぶんの高さを確保して下の一覧の開始位置を揃える
+                  const small = ['4t', '7t'].filter(v => st.c[v] > 0).map(v => `${v}:${st.c[v]}台`).join('　')
+                  const big = st.c['大型'] > 0 ? `大型:${st.c['大型']}台` : ''
                   return (
-                    <div key={bi} style={{ padding: '4px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 10, color: '#3a4a5c', lineHeight: 1.5 }}>
-                      <div style={{ fontWeight: 700, color: '#0f3060' }}>{lb.main}{lb.sub && <br />}{lb.sub} 計{st.total}台</div>
-                      <div>{st.summary || '—'}</div>
+                    <div key={bi} style={{ padding: '6px 8px', borderBottom: '1px solid #eef0f4', background: '#f8fafc', fontSize: 13, color: '#3a4a5c', lineHeight: 1.4 }}>
+                      <div style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>{lb.main}</span>
+                        {lb.sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{lb.sub}</span>}
+                      </div>
+                      <div style={{ fontWeight: 700, color: '#0f3060', fontSize: 14 }}>計{st.total}台</div>
+                      <div style={{ fontSize: 13, marginTop: 1, lineHeight: 1.3 }}>
+                        <div style={{ whiteSpace: 'nowrap', minHeight: '1.3em' }}>{st.total === 0 ? '—' : small}</div>
+                        <div style={{ whiteSpace: 'nowrap', minHeight: '1.3em' }}>{big}</div>
+                      </div>
                     </div>
                   )
                 })}
@@ -3367,8 +3428,15 @@ function SeikonOutputPage({ isPopup }) {
   const rows = all.filter(s => s.date === date && inAmPm(s))
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
+  // 試験集計（その日の全出荷から：現TP=現場 / 工TP=工場）
+  const dayShips = all.filter(s => s.date === date)
+  const testGen = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('現TP')).length
+  const testKo = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('工TP')).length
+
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
+  // 帳票タイトル用の日付（曜日なし・スペース区切り）。例: 令和　8年　6月　6日
+  const titleDate = isNaN(d.getTime()) ? '' : `令和　${d.getFullYear() - 2018}年　${d.getMonth() + 1}月　${d.getDate()}日`
 
   // 印刷：別ウィンドウ（サイドバー無し）で開き、読み込み後に自動で印刷ダイアログ（A4縦）
   const openPrint = () => {
@@ -3385,9 +3453,12 @@ function SeikonOutputPage({ isPopup }) {
   const timesArr = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
   const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
+  const testOf = (s) => (Array.isArray(s.testTags) ? s.testTags : []).filter(Boolean).join('・')
   const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
 
   const placementsOf = (s) => (Array.isArray(s.placements) ? s.placements : []).filter(Boolean).join('・')
+  // 配合の数値が入っていない枠は半角2つ( )で埋めてダッシュ位置を揃える（例: 24-- → 24-□□-□□）
+  const padMix = (code) => { const c = String(code || ''); return c ? c.split('-').map(p => p === '' ? '  ' : p).join('-') : '' }
 
   // 配合/数量が2種ある行は、下に分割行（数値のみ・その他はコピーしない）を出す
   const lineRows = []
@@ -3424,33 +3495,42 @@ function SeikonOutputPage({ isPopup }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  // 1行を描画。分割行（!primary）は配合・数量のみ（その他はコピーしない）
+  // テーブル用の行: 配合は1つにつき1行に分ける。数量(2種)は先頭行の数量セル内で改行表示する
+  const tableRows = []
+  rows.forEach(s => {
+    const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
+    const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
+    const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
+    const vols = [v1, v2].filter(Boolean)
+    const n = Math.max(1, mixes.length)
+    for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k] || '', vols: k === 0 ? vols : [], primary: k === 0 })
+  })
+
+  // 1行を描画。配合の2行目以降（!primary）は配合のみ（その他は空）
   const renderRow = (r, key) => {
     const s = r.s
     if (!r.primary) {
       return (
         <tr key={key}>
           <td></td><td></td><td></td><td></td>
-          <td className="seikon-mix">{r.mix}</td>
-          <td></td>
-          <td style={{ textAlign: 'center' }}>{r.vol}</td>
-          <td></td><td></td><td></td>
+          <td className="seikon-mix">{padMix(r.mix)}</td>
+          <td></td><td></td><td></td><td></td><td></td>
         </tr>
       )
     }
     const ts = timesArr(s)
-    const tekiyo2 = [placementsOf(s), tagsOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記
+    const tekiyo2 = [placementsOf(s), tagsOf(s), testOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記 / 試験(現TP・工TP)
     return (
       <tr key={key}>
         <td>{s.companyName || ''}</td>
         <td>{s.siteName || ''}</td>
-        <td>{s.pourLocation || ''}</td>
+        <td className="seikon-datsu">{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
-        <td className="seikon-mix">{r.mix}</td>
+        <td className="seikon-mix">{padMix(r.mix)}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
-        <td style={{ textAlign: 'center' }}>{r.vol}</td>
+        <td style={{ textAlign: 'center' }}>{r.vols.length ? r.vols.map((v, i) => <div key={i}>{v}</div>) : ''}</td>
         <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
-        <td className="seikon-phone">{s.orderContact || ''}</td>
+        <td className="seikon-phone">{s.siteContact || ''}</td>
         <td className="seikon-tekiyo">
           <div>{notesOf(s)}</div>
           <div>{tekiyo2}</div>
@@ -3460,8 +3540,8 @@ function SeikonOutputPage({ isPopup }) {
   }
 
   const ROWS = 23
-  const blanks = Math.max(0, ROWS - lineRows.length)
-  const cols = ['業者名', '現場名', '打設', '車両', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
+  const blanks = Math.max(0, ROWS - tableRows.length)
+  const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '担当連絡先', '摘要']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
   return (
@@ -3479,20 +3559,21 @@ function SeikonOutputPage({ isPopup }) {
       <div className="seikon-sheet">
         <div className="seikon-title">
           <span className="st-name">生コン出荷予定表</span>
-          <span className="st-date">{reiwa}</span>
+          <span className="st-date">{titleDate}</span>
           <span className="st-ampm">
             <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
           </span>
+          <span className="st-test"><span className="st-test-label">試験</span>　現場：{testGen}件　工場：{testKo}件</span>
         </div>
         <table className="seikon-table">
           <colgroup>
-            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '4%' }} />
-            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '19%' }} />
+            <col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '5%' }} />
+            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '5%' }} />
+            <col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '11%' }} /><col style={{ width: '18%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
-            {lineRows.map((r, ri) => renderRow(r, r.s.id + '_' + ri + (r.primary ? '' : '_s')))}
+            {tableRows.map((r, i) => renderRow(r, r.s.id + '_' + i))}
             {Array.from({ length: blanks }).map((_, i) => (
               <tr key={'b' + i}>{cols.map((_, j) => <td key={j}>&nbsp;</td>)}</tr>
             ))}
@@ -3507,7 +3588,7 @@ function SeikonOutputPage({ isPopup }) {
 function ShipReportPage() {
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments()
-  const rows = all.filter(s => s.date === date).sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+  const rows = all.filter(s => s.date === date).sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
   const totalVol = rows.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
   return (
     <div style={RPT.wrap}>
@@ -3555,7 +3636,7 @@ function DriverReportPage() {
       </div>
       {loading ? <div>読み込み中...</div> : names.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日の出荷はありません</div> : (
         names.map(n => {
-          const list = groups[n].sort((a, b) => String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+          const list = groups[n].sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
           const vol = list.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
           return (
             <div key={n} style={{ marginBottom: 20 }}>
@@ -3577,13 +3658,400 @@ function DriverReportPage() {
   )
 }
 
-function AssignPage() {
+// 出荷の担当者だけを更新（ログイン不要の assign エンドポイント。担当者以外は保持）
+async function saveShipmentDrivers(shipment, newDrivers) {
+  const nd = newDrivers.map(d => ({ id: d.id, name: d.name }))
+  return api.put(`/api/shipments/${shipment.id}?assign=1`, { drivers: nd })
+}
+
+// 担当者を選ぶUI（チップ・最大4人）
+function DriverPicker({ value, options, onChange }) {
+  const has = (id) => value.some(d => d.id === id)
+  const toggle = (emp) => {
+    if (has(emp.id)) onChange(value.filter(d => d.id !== emp.id))
+    else onChange([...value, { id: emp.id, name: emp.name }])   // 上限なし
+  }
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {options.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
+        : options.map(emp => {
+          const on = has(emp.id)
+          return <button key={emp.id} type="button" onClick={() => toggle(emp)}
+            style={{ border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{emp.name}</button>
+        })}
+    </div>
+  )
+}
+
+// 担当者振替の本体（モーダル／別ウィンドウ共用）
+// 担当者を選び、「保存してLINE送信」で割り当て＋選択ドライバーへLINE通知を行う
+function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
+  const [sel, setSel] = useState([])   // 開いた時点では誰も選択しない（PC/モバイル共通）
+  const [busy, setBusy] = useState(false)
+  const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+  // 保存（担当割り当て）。withLine=true のとき選択ドライバーへLINEも送信する
+  const doSave = async (withLine) => {
+    setBusy(true)
+    try {
+      const u = await saveShipmentDrivers(shipment, sel)
+      notifyShipmentsChanged()
+      if (withLine) {
+        if (!sel.length) { alert('LINEを送る担当者が選択されていません。'); setBusy(false); return }
+        const resolved = sel.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanId(emp?.lineId) } })
+        const withId = resolved.filter(r => r.lineId)
+        const without = resolved.filter(r => !r.lineId)
+        if (!withId.length) {
+          alert('割り当ては保存しました。\nただし選択した担当者にLINEユーザーIDが紐づいていないため送信できませんでした。\n（従業員管理でLINE IDを設定してください）')
+        } else {
+          try {
+            const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: shipment.id, lineUserIds: withId.map(r => r.lineId) })
+            let m = `割り当てを保存し、${withId.map(r => r.name).join('、')} にLINEを送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`
+            if (without.length) m += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
+            alert(m)
+          } catch (e) { alert('割り当ては保存しましたが、LINE送信でエラー: ' + e.message) }
+        }
+      }
+      onSaved && onSaved(u)
+    } catch (e) { alert('エラー: ' + e.message); setBusy(false) }
+  }
+  return (
+    <>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
+      <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（タップで選択／解除）</div>
+      <DriverPicker value={sel} options={drivers} onChange={setSel} />
+      <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+        <button type="button" onClick={() => doSave(true)} disabled={busy}
+          style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '送信中…' : '💬 LINE送信'}</button>
+      </div>
+    </>
+  )
+}
+
+// 現場住所のジオコード余り（緯度経度メモ）を除いた表示用住所
+function cleanAddr(a) { return String(a || '').replace(/（緯度経度:[^）]*）/g, '').trim() }
+
+// 住所設定（モーダル共用）：住所入力＋地図反映で登録
+function AddressAssignBody({ shipment, onSaved, onClose }) {
+  const [address, setAddress] = useState(shipment.siteAddress || '')
+  const [mapView, setMapView] = useState(shipment.mapView || null)
+  const [arrows, setArrows] = useState(Array.isArray(shipment.mapArrows) ? shipment.mapArrows : [])
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
+    try {
+      const u = await api.put(`/api/shipments/${shipment.id}?assign=1`, { siteAddress: address, mapView, mapArrows: arrows })
+      notifyShipmentsChanged(); onSaved && onSaved(u)
+    } catch (e) { alert('エラー: ' + e.message); setSaving(false) }
+  }
+  return (
+    <>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>📍 住所設定</div>
+      <div style={{ fontSize: 14, color: '#3a4a5c' }}><b>{shipment.companyName}</b></div>
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 10 }}>{shipment.siteName || ''}</div>
+      <label style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', display: 'block', marginBottom: 4 }}>現場住所（入力すると地図に反映されます）</label>
+      <input value={address} onChange={e => setAddress(e.target.value)} placeholder={DEFAULT_SITE_ADDRESS}
+        style={{ width: '100%', fontSize: 15, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, boxSizing: 'border-box', marginBottom: 10 }} />
+      <SiteMap address={address} onAddressChange={setAddress} mapView={mapView} onMapViewChange={setMapView} arrows={arrows} onArrowsChange={setArrows} />
+      <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+        <button type="button" onClick={onClose} disabled={saving} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
+        <button type="button" onClick={save} disabled={saving} style={{ flex: 1, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? '保存中…' : '登録'}</button>
+      </div>
+    </>
+  )
+}
+
+// PC用：担当者振替の別ウィンドウページ
+function DriverAssignPopupPage({ id }) {
+  const [shipment, setShipment] = useState(null)
+  const [drivers, setDrivers] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
+      .then(([ss, es]) => { setShipment(ss.find(x => x.id === id) || null); setDrivers(es.filter(e => e.type === 'driver')) })
+      .catch(e => console.error(e)).finally(() => setLoading(false))
+  }, [id])
+  if (loading) return <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
+  if (!shipment) return <div style={{ padding: 20, color: '#6b7a8d' }}>対象の出荷が見つかりません。</div>
+  return <div style={{ padding: 18, maxWidth: 480, margin: '0 auto' }}><DriverAssignBody shipment={shipment} drivers={drivers} onSaved={() => window.close()} onClose={() => window.close()} /></div>
+}
+
+// 伝票キャンセル：伝票を選んでキャンセルすると全リストから非表示になり、ここに保管される
+// 出荷登録の伝票（denpyo）レイアウトを流用した読み取り専用ビュー
+function DenpyoView({ s }) {
+  const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const notes = (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
+  const orderDate = String(s.orderDate || (s.createdAt ? String(s.createdAt).slice(0, 10) : '') || '').replace(/-/g, '/')
+  const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)
+  const cell = (label, flex, content) => (
+    <div className="cell" style={{ flex }}>
+      <div className="lbl">{label}</div>
+      <div style={{ fontSize: 15, color: '#111', minHeight: 18, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>
+    </div>
+  )
+  return (
+    <div className="denpyo">
+      <div className="sheet" style={{ margin: 0 }}>
+        <div className="band">
+          {cell('受 注 日', '0 0 18%', orderDate || '—')}
+          {cell('日 付', '0 0 18%', s.date)}
+          {cell('業 者 名', '1 1 0', s.companyName || '—')}
+          {cell('商 社 名', '1 1 0', s.tradingCompany || '—')}
+        </div>
+        <div className="band">
+          {cell('時 間', '0 0 24%', times.join(' / ') || '—')}
+          {cell('現 場 名', '1 1 0', s.siteName || '—')}
+        </div>
+        <div className="band">
+          {cell('現 場 住 所', '1 1 0', cleanAddr(s.siteAddress) || '未入力')}
+        </div>
+        <div className="band">
+          {cell('車 種', '0 0 16%', vehicleLabel(s) || '—')}
+          {cell('打設箇所', '0 0 16%', s.pourLocation || '—')}
+          {cell('配 合', '1 1 0', mixes.length ? mixes.map((r, i) => <div key={i}>{r.code}{r.note ? `（${r.note}）` : ''}</div>) : '—')}
+          {cell('セメント種', '0 0 12%', s.cementType || '—')}
+          {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—')}
+        </div>
+        <div className="band">
+          {cell('数 量', '0 0 24%', shipVolStr(s) || '—')}
+          {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—')}
+          {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—')}
+        </div>
+        <div className="band">
+          {cell('連 絡 先', '1 1 0', s.orderContact || '—')}
+          {cell('現場連絡先', '1 1 0', s.siteContact || '—')}
+        </div>
+        <div className="band">
+          {cell('備 考', '1 1 0', notes.length ? notes.map((n, i) => <div key={i}>・{n}</div>) : '—')}
+        </div>
+        <div className="band">
+          {cell('担当ドライバー', '1 1 0', driversOf(s).join('・') || '—')}
+          {cell('PDF', '0 0 22%', s.hasPdf
+            ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000') }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
+            : '—')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// キャンセル伝票：削除（キャンセル）した伝票の保管庫。復元すると元に戻り一覧から消える
+function CancelPage() {
+  const [cancelled, setCancelled] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [busy, setBusy] = useState(null)        // 復元処理中の伝票id
+  const [detail, setDetail] = useState(null)    // フォーム表示中の伝票
+  const load = useCallback(async () => {
+    try { const c = await api.get('/api/shipments?cancelled=1'); setCancelled(Array.isArray(c) ? c : []) }
+    catch (e) { console.error(e) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+  useShipmentsChanged(load)
+
+  const restore = async (s) => {
+    setBusy(s.id)
+    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: false }); notifyShipmentsChanged(); setDetail(null); await load() }
+    catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
+  }
+
+  const q = search.trim().toLowerCase()
+  const matchS = (s) => !q || [s.date, s.companyName, s.tradingCompany, s.siteName, firstTimeOf(s)].some(v => String(v || '').toLowerCase().includes(q))
+  const rows = [...cancelled.filter(matchS)].sort((a, b) => String(b.cancelledAt || b.date || '').localeCompare(String(a.cancelledAt || a.date || '')))
+
   return (
     <div style={RPT.wrap}>
-      <h2 style={{ margin: '0 0 12px', color: '#1a2332' }}>🔁 配送臨時割り当て</h2>
-      <div style={{ color: '#6b7a8d', maxWidth: 580, lineHeight: 1.9, fontSize: 14 }}>
-        この画面の仕様を確認させてください。想定している操作・項目（例：当日の出荷一覧に対して担当ドライバーを素早く割り当て／変更する、急な代替ドライバーを割り当てる、車両の臨時手配など）を教えていただければ、それに合わせて実装します。
+      <h2 style={{ margin: '0 0 6px', color: '#1a2332' }}>🗑️ キャンセル伝票</h2>
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>削除（キャンセル）した伝票がここに保管されます。右の「復元」を押すと元に戻り、この一覧から消えます。</div>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 日付・業者名・現場名で絞り込み"
+        style={{ width: '100%', maxWidth: 420, padding: '9px 12px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 14 }} />
+      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
+        : rows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>キャンセル伝票はありません</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px', opacity: 0.92 }}>
+                  <span onClick={() => setDetail(s)} style={{ flex: '1 1 260px', minWidth: 0, cursor: 'pointer' }} title="クリックで伝票を表示">
+                    <span style={{ fontSize: 13, color: '#3a4a5c' }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b>　</span>
+                    <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
+                  </span>
+                  <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
+                  <button type="button" disabled={busy === s.id} onClick={() => restore(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.7 : 1 }}>{busy === s.id ? '復元中…' : '↩ 復元'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+      {detail && (
+        <div onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 780, borderRadius: 14, padding: 16, margin: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>🗑️ キャンセル伝票</div>
+              <button type="button" onClick={() => setDetail(null)} style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+            </div>
+            <FitToWidth width={720}><DenpyoView s={detail} /></FitToWidth>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button type="button" onClick={() => setDetail(null)} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>閉じる</button>
+              <button type="button" onClick={() => restore(detail)} disabled={busy} style={{ flex: 1, border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '復元中…' : '↩ 復元する'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 配送臨時割り当て：当日(既定)の出荷を時間順に表示し、担当者を素早く振り替える
+// isPopup: 別ウィンドウ（ログイン不要で誰でも振替可能）
+function AssignPage({ isPopup }) {
+  const stacked = useIsMobile(1101)   // スマホ/iPad
+  const narrow = useIsMobile(760)     // スマホ（狭い縦画面）。iPad以上は横並びカード
+  const useModal = isPopup || stacked   // 別ウィンドウ内 or スマホ/iPad は振替モーダル、PC(アプリ内)は別ウィンドウ
+  const urlDate = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search).get('date') : null
+  const [date, setDate] = useState(() => (isPopup && urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : localToday())
+  const [all, setAll] = useState([])
+  const [drivers, setDrivers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [assignTarget, setAssignTarget] = useState(null)
+  const [addrTarget, setAddrTarget] = useState(null)
+  const load = useCallback(async () => {
+    try {
+      const [s, e] = await Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
+      setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
+    } catch (err) { console.error(err) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+  useShipmentsChanged(load)   // 別ウィンドウで保存されたら再取得して反映
+
+  const rows = all.filter(s => s.date === date)
+    .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
+
+  const openBoard = () => {
+    const url = `${window.location.pathname}?view=assign&popup=1&date=${encodeURIComponent(date)}`
+    const w = window.open(url, '_blank', 'width=860,height=900,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+  const openAssign = (s) => {
+    if (useModal) { setAssignTarget(s); return }
+    const url = `${window.location.pathname}?view=assigndriver&id=${encodeURIComponent(s.id)}&popup=1`
+    const w = window.open(url, '_blank', 'width=520,height=640,scrollbars=yes,resizable=yes')
+    if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
+  }
+  const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null); setAddrTarget(null) }
+  const wd = (() => { const d = new Date(date); return isNaN(d.getTime()) ? '' : WD[d.getDay()] })()
+
+  return (
+    <div style={RPT.wrap}>
+      <div style={RPT.head}>
+        <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送割り当て{isPopup ? '（共有）' : ''}</h2>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）</span>
+        {!isPopup && (
+          <button type="button" onClick={openBoard}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く（ログイン不要・共有可）</button>
+        )}
+        {isPopup && (
+          <button type="button" onClick={() => window.close()}
+            style={{ marginLeft: 'auto', border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+        )}
       </div>
+      {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
+        : rows.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(s => {
+                const addr = cleanAddr(s.siteAddress)
+                const addrCell = addr ? <span style={{ color: '#3a4a5c' }}>{addr}</span> : <span style={{ color: '#c0392b' }}>未入力</span>
+                const mixStr = mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')   // 登録した配合
+                const volStr = shipVolStr(s)                                                   // 登録した量
+                const drv = driversOf(s)                                                       // 割り当て済みの担当者
+                const assigned = drv.length > 0
+                const cardBg = assigned ? '#e6f1fb' : '#fff'   // 割り当て済みは薄い水色
+                if (narrow) {
+                  // スマホ（狭い縦画面）：縦カード。操作ボタンは下に横並び
+                  return (
+                    <div key={s.id} style={{ background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 18 }}>{firstTimeOf(s) || '—'}</span>
+                        <span style={{ fontWeight: 700, fontSize: 18 }}>{s.companyName}</span>
+                        <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
+                      </div>
+                      <div style={{ fontSize: 16 }}><span style={{ color: '#6b7a8d', marginRight: 6 }}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
+                      <div style={{ fontSize: 16, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
+                      <div style={{ fontSize: 16, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
+                        <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                        <button type="button" onClick={() => openAssign(s)} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      </div>
+                    </div>
+                  )
+                }
+                // iPad/PC：左に情報（縦に積む）＋右に操作ボタン縦並び（住所設定の下にLINE送信）
+                const lbl = { color: '#6b7a8d', marginRight: 8, fontSize: 13 }
+                if (stacked) {
+                  // iPad：左に情報＋右に操作ボタン縦並び。縦の間隔を広めにとる
+                  return (
+                    <div key={s.id} style={{ display: 'flex', gap: 14, alignItems: 'stretch', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '18px 16px' }}>
+                      <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 19 }}>{firstTimeOf(s) || '—'}</span>
+                          <span style={{ fontWeight: 700, fontSize: 19 }}>{s.companyName}</span>
+                          <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '13px 18px', fontSize: 16 }}>
+                          <div style={{ minWidth: 0 }}><span style={lbl}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
+                          <div style={{ minWidth: 0 }}><span style={lbl}>配合</span><b style={{ color: '#111' }}>{mixStr || '—'}</b></div>
+                          <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={lbl}>住所</span><span style={{ color: '#3a4a5c' }}>{addrCell}</span></div>
+                          <div style={{ minWidth: 0 }}><span style={lbl}>量</span><b style={{ color: '#111' }}>{volStr || '—'}</b></div>
+                        </div>
+                      </div>
+                      <div style={{ flex: '0 0 190px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
+                        <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                        <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      </div>
+                    </div>
+                  )
+                }
+                // PC：コンパクトな2行カード（ボタン小さめ・縦並び）。1画面に多く表示できる
+                return (
+                  <div key={s.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 10, padding: '8px 14px' }}>
+                    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 16 }}>{firstTimeOf(s) || '—'}</span>
+                        <span style={{ fontWeight: 700, fontSize: 16 }}>{s.companyName}</span>
+                        <span style={{ color: '#6b7a8d', fontSize: 13 }}>{s.siteName || ''}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 14, color: '#3a4a5c', alignItems: 'baseline' }}>
+                        <span>担当 {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</span>
+                        <span>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b></span>
+                        <span>量 <b style={{ color: '#111' }}>{volStr || '—'}</b></span>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</span>
+                      </div>
+                    </div>
+                    <div style={{ flex: '0 0 140px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                      <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+      {assignTarget && (
+        <div onClick={() => setAssignTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
+            <DriverAssignBody shipment={assignTarget} drivers={drivers} onSaved={onModalSaved} onClose={() => setAssignTarget(null)} />
+          </div>
+        </div>
+      )}
+      {addrTarget && (
+        <div onClick={() => setAddrTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 560, borderRadius: 14, padding: 18, maxHeight: '92dvh', overflowY: 'auto' }}>
+            <AddressAssignBody shipment={addrTarget} onSaved={onModalSaved} onClose={() => setAddrTarget(null)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -3595,6 +4063,8 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [usersOpen, setUsersOpen] = useState(false)
+  const [unassignedOpen, setUnassignedOpen] = useState(true)
+  const [employees, setEmployees] = useState([])
   const [pdfDate, setPdfDate] = useState(() => localToday())
 
   // PDF出力：出荷予定表を A4横で別ウィンドウに開き、読み込み後に自動で印刷ダイアログを出す
@@ -3608,6 +4078,13 @@ function SettingsPage() {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+  // 従業員管理のLINE IDを参照して、登録済みLINEユーザーと突き合わせる
+  useEffect(() => { api.get('/api/employees').then(e => setEmployees(Array.isArray(e) ? e : [])).catch(() => {}) }, [])
+  const cleanLineId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+  const empOfUser = (u) => employees.find(e => cleanLineId(e.lineId) && cleanLineId(e.lineId) === cleanLineId(u.userId))
+  const allUsers = data.users || []
+  const assignedUsers = allUsers.filter(u => empOfUser(u))     // 従業員に紐付け済み
+  const unassignedUsers = allUsers.filter(u => !empOfUser(u))  // 未割り当て
 
   const webhookUrl = `${window.location.origin}/api/line`
 
@@ -3623,14 +4100,7 @@ function SettingsPage() {
     if (!window.confirm('このLINEユーザーを削除しますか？')) return
     try { await api.del(`/api/line?userId=${encodeURIComponent(userId)}`); load() } catch (e) { alert(e.message) }
   }
-  const delGroup = async (groupId) => {
-    if (!window.confirm('このグループを一覧から削除しますか？')) return
-    try { await api.del(`/api/line?groupId=${encodeURIComponent(groupId)}`); load() } catch (e) { alert(e.message) }
-  }
   const copy = () => { navigator.clipboard?.writeText(webhookUrl); alert('Webhook URLをコピーしました') }
-  const copyText = (t) => { navigator.clipboard?.writeText(t); alert('コピーしました\n' + t) }
-  const fmtDT = (s) => { const d = new Date(s); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
-  const VIA_LABELS = { join: '招待', message: 'メッセージ' }
 
   const inp = { padding: '9px 11px', border: '1.5px solid #dde3ed', borderRadius: 7, fontSize: 16, width: '100%', boxSizing: 'border-box' }
   const box = { background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: 18, maxWidth: 620, marginBottom: 18 }
@@ -3669,6 +4139,35 @@ function SettingsPage() {
         </div>
       </div>
 
+      {/* 未割り当て：従業員管理のLINE IDに紐付いていないLINEユーザー（折りたたみ・既定で開く） */}
+      <div style={{ ...box, maxWidth: 980 }}>
+        <button
+          onClick={() => setUnassignedOpen(o => !o)}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#1a2332', textAlign: 'left' }}
+        >
+          <span style={{ fontSize: 12, color: '#6b7a8d', width: 12, display: 'inline-block' }}>{unassignedOpen ? '▼' : '▶'}</span>
+          未割り当て（従業員に紐付いていないLINEユーザー）
+          <span style={{ fontSize: 12, fontWeight: 400, color: '#c0392b' }}>{unassignedUsers.length}件</span>
+        </button>
+        {unassignedOpen && (
+          <div style={{ marginTop: 12 }}>
+            {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+              : unassignedUsers.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>未割り当てのLINEユーザーはありません</div>
+                : unassignedUsers.map((u) => (
+                  <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
+                    <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
+                    <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                      <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました。\n従業員管理の「LINE ID」欄に貼り付けると割り当て済みになります。') }}
+                        style={{ border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 IDコピー</button>
+                      <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
+                    </span>
+                  </div>
+                ))}
+          </div>
+        )}
+      </div>
+
+      {/* 登録済みLINEユーザー（従業員管理のLINE IDと紐付け済み・従業員名を並べて表示） */}
       <div style={{ ...box, maxWidth: 980 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: usersOpen ? 12 : 0, gap: 8 }}>
           <button
@@ -3676,53 +4175,32 @@ function SettingsPage() {
             style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#1a2332', textAlign: 'left' }}
           >
             <span style={{ fontSize: 12, color: '#6b7a8d', width: 12, display: 'inline-block' }}>{usersOpen ? '▼' : '▶'}</span>
-            登録済みLINEユーザー・グループ（友だち追加・グループ招待時に自動登録）
-            <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7a8d' }}>ユーザー{(data.users || []).length}・グループ{data.activeGroupCount || 0}</span>
+            登録済みLINEユーザー（友だち追加時に自動登録・従業員に紐付け済み）
+            <span style={{ fontSize: 12, fontWeight: 400, color: '#6b7a8d' }}>{assignedUsers.length}件</span>
           </button>
           {usersOpen && <button onClick={load} style={S.editBtn}>🔄 更新</button>}
         </div>
         {usersOpen && (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18 }}>
-            {/* 左：登録済みユーザー */}
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 8 }}>👤 ユーザー <span style={{ fontWeight: 400, color: '#9aa7b5' }}>{(data.users || []).length}件</span></div>
-              {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
-                : (data.users || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ登録がありません（公式アカウントを友だち追加すると自動で登録されます）</div>
-                  : data.users.map((u) => (
+          <div>
+            {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
+              : assignedUsers.length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>従業員に紐付いたLINEユーザーはありません（従業員管理でLINE IDを設定してください）</div>
+                : assignedUsers.map((u) => {
+                  const emp = empOfUser(u)
+                  return (
                     <div key={u.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4' }}>
-                      <span style={{ fontSize: 13, minWidth: 0 }}><b>{u.name}</b> <span style={{ color: '#6b7a8d', fontSize: 11, wordBreak: 'break-all' }}>{u.userId}</span></span>
+                      <span style={{ fontSize: 13, minWidth: 0 }}>
+                        <b style={{ color: '#1a4d8f' }}>👤 {emp?.name}</b>
+                        <span style={{ color: '#1a8f5a', fontSize: 12, marginLeft: 6 }}>← LINE: {u.name}</span>
+                        <span style={{ display: 'block', color: '#9aa7b5', fontSize: 11, wordBreak: 'break-all', marginTop: 1 }}>{u.userId}</span>
+                      </span>
                       <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
-                        <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました。\n顧客管理の「LINEユーザーID」欄に貼り付けてください。') }}
+                        <button onClick={() => { navigator.clipboard?.writeText(u.userId); alert('LINEユーザーIDをコピーしました') }}
                           style={{ border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 IDコピー</button>
                         <button onClick={() => delUser(u.userId)} style={S.delBtn}>削除</button>
                       </span>
                     </div>
-                  ))}
-            </div>
-            {/* 右：登録済みグループ（グループID） */}
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 8 }}>👥 グループID <span style={{ fontWeight: 400, color: '#9aa7b5' }}>参加中{data.activeGroupCount || 0}件</span></div>
-              {loading ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>読み込み中...</div>
-                : (data.groups || []).length === 0 ? <div style={{ fontSize: 12, color: '#9aa7b5' }}>まだ取得がありません（公式アカウントをグループに招待すると自動で登録されます）</div>
-                  : data.groups.map((g) => {
-                    const left = g.status === 'left'
-                    return (
-                      <div key={g.groupId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid #eef0f4', opacity: left ? 0.5 : 1 }}>
-                        <span style={{ fontSize: 13, minWidth: 0 }}>
-                          <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: left ? '#9aa7b5' : '#1a8f5a', border: `1px solid ${left ? '#d8dee8' : '#a0dca0'}`, background: left ? '#f4f6f9' : '#f0f9f0', borderRadius: 4, padding: '1px 6px', marginRight: 6 }}>{left ? '退出済み' : '参加中'}</span>
-                          <span style={{ color: '#6b7a8d', fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>{g.groupId}</span>
-                          <span style={{ display: 'block', color: '#9aa7b5', fontSize: 10, marginTop: 2 }}>
-                            {g.sourceType === 'room' ? '複数人' : 'グループ'}・{VIA_LABELS[g.acquiredVia] || g.acquiredVia}取得・初回 {fmtDT(g.firstSeenAt)}・最終 {fmtDT(g.lastSeenAt)}
-                          </span>
-                        </span>
-                        <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          <button onClick={() => copyText(g.groupId)} style={S.editBtn}>コピー</button>
-                          <button onClick={() => delGroup(g.groupId)} style={S.delBtn}>削除</button>
-                        </span>
-                      </div>
-                    )
-                  })}
-            </div>
+                  )
+                })}
           </div>
         )}
       </div>
@@ -3739,9 +4217,8 @@ const TABS = [
   { id: 'schedule', label: '出荷予定表', icon: '📋' },
   { id: 'weekly', label: '週間出荷予定表', icon: '🗓️' },
   { id: 'seikon', label: '生コン出荷予定表出力', icon: '📝' },
-  { id: 'assign', label: '配送臨時割り当て', icon: '🔁' },
-  { id: 'shipreport', label: '出荷日報', icon: '📑' },
-  { id: 'driverreport', label: '運行日報', icon: '🚚' },
+  { id: 'assign', label: '配送割り当て', icon: '🔁' },
+  { id: 'cancel', label: 'キャンセル伝票', icon: '🗑️' },
   { id: 'settings', label: '設定', icon: '⚙️' },
   { id: 'customers', label: '顧客管理', icon: '👥' },
   { id: 'employees', label: '従業員管理', icon: '👷' },
@@ -3886,13 +4363,13 @@ function AppInner() {
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
-  // 掲示板形式の出荷予定表（別ウィンドウ・閲覧専用）はログイン不要で開けるようにする
-  const isBoard = isPopup && view === 'schedule' && !initialEditId
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : 'dashboard'))
+  // 別ウィンドウ（ログイン不要）：出荷予定表(掲示板)・配送臨時割り当て・担当者振替
+  const isBoard = isPopup && (view === 'schedule' || view === 'assign' || view === 'assigndriver') && !initialEditId
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : view === 'assign' ? 'assign' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
   // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
-  const LOCKED_TABS = ['assign', 'shipreport', 'driverreport']
+  const LOCKED_TABS = ['shipreport', 'driverreport']
   const [unlocked, setUnlocked] = useState({})
 
   // 別ウィンドウの自動更新は SchedulePage 内で差分更新（再取得して変更分のみ反映）する。
@@ -3906,6 +4383,11 @@ function AppInner() {
 
   if (!user && !isBoard) return <LoginPage />
 
+  // PC用：担当者振替の別ウィンドウ（?view=assigndriver&id=...&popup=1）
+  if (isPopup && view === 'assigndriver') {
+    return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff', boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top)' }}><DriverAssignPopupPage id={params.get('id') || ''} /></div>
+  }
+
   let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
     : activeTab === 'employees' ? <EmployeesPage />
@@ -3915,7 +4397,8 @@ function AppInner() {
     : activeTab === 'seikon' ? (isMobile && !isPopup
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
-    : activeTab === 'assign' ? <AssignPage />
+    : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />
+    : activeTab === 'cancel' ? <CancelPage />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
@@ -3926,7 +4409,7 @@ function AppInner() {
   }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff' }}>{page}</div>
+  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff', boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top)' }}>{page}</div>
 
   return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
 }
