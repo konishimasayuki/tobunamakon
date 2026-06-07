@@ -2550,6 +2550,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
       + (opts.xl ? ' xl' : '')
       + (opts.tokki ? ' tokki' : '')
       + (imp ? ' imp' : (opts.plain ? ' plain' : ''))
+    // 現場名など：1行で見切れる前に2行まで折り返し、3行目に行く前にフォントを縮小する
+    if (opts.wrap) {
+      const v = getVal(s, f)
+      return (
+        <div key={f + (isChanged(s, f) ? '_c' : '')} ref={fitRef} className={cls + ' sc-wrap2' + (v ? '' : ' sc-wrap2-ph')}>{v || ph || ''}</div>
+      )
+    }
     return (
       <input
         key={f + (isChanged(s, f) ? '_c' : '') + (imp ? '_i' : '')}
@@ -2875,7 +2882,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     </div>
                   </div>
                   {/* 現場名（中央・大きく） */}
-                  <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true })}</span></div>
+                  <div className="sc-row sc-site"><span className="sc-val">{cell(s, 'siteName', '現場名', { big: true, wrap: true })}</span></div>
                   {/* ブロック形式：担当 / 車種 ・ 配合 / 量 */}
                   <div className="sc-grid2">
                     <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
@@ -2945,7 +2952,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {rows.map(s => (
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
-                <td>{cell(s, 'siteName', '', { big: true })}</td>
+                <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 {!isPopup && (
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>
                   {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}

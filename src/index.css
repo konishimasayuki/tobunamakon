@@ -153,6 +153,9 @@ input, textarea, select { font-family: inherit; }
 .schedule .sc-in.big.center { font-size:clamp(15px,2.4cqi,30px); }
 /* 車種はさらに一回り大きく（自動リサイズで枠内に収まる） */
 .schedule .sc-in.xl { font-size:clamp(18px,3.1cqi,40px); }
+/* 現場名など：2行まで折り返し、3行を超える前にフォント自動縮小（fitOneがscrollHeight超過で縮める） */
+.schedule .sc-wrap2 { display:block; width:100%; white-space:normal; word-break:break-word; overflow-wrap:anywhere; line-height:1.18; max-height:2.36em; overflow:hidden; text-align:center; }
+.schedule .sc-wrap2-ph { color:#cbd2dc; font-weight:400; }
 .schedule .sc-in.changed { color:#c81e1e; }
 .schedule .sc-in.imp { color:#c81e1e; font-weight:700; }
 /* 配合（桁ごと赤）・備考（行ごと赤）はspanで分割描画。sc-in同等のサイズ・自動リサイズ対象 */
