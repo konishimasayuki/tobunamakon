@@ -2110,7 +2110,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={redIf('notes')}>備 考</div>
                 {/* 備考の並び順：手入力→荷下ろし→メッセージ追加（sortNotesで常に整列） */}
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={6} height={90} addLabel="＋ 段落を追加" />
+                {/* 段落追加は手入力3段まで（残り2段は荷下ろし・メッセージ追加の分）。手入力が3つになったら追加ボタンを消す */}
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" />
               </div>
               <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
