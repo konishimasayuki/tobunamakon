@@ -1004,8 +1004,13 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
+    // IME変換中も onChange を常に通す（親の set が composing 中は z2h せず生値を保持）。
+    // こうすると controlled value が DOM と一致し続け、外部要因（地図のidle等）で
+    // 変換中に再描画が起きても React に入力欄を巻き戻されず、変換が壊れない。
+    // 変換確定は onCompositionEnd でも onChange を呼んで z2h を反映する。
+    // composingRef はフォント自動調整(fit)を変換中だけ止めるためにのみ使う。
     <input ref={ref} className={className} type={type} value={value}
-      onChange={e => { if (composingRef.current) return; onChange(e); requestAnimationFrame(fit) }}
+      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
       onCompositionStart={() => { composingRef.current = true }}
       onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
@@ -1104,13 +1109,15 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
       <div className="memo-grid" style={{ '--memo-cols': cols, '--memo-h': height + 'px' }}>
         {items.map((it, i) => (
           <div className="memo-cell" key={i}>
+            {/* IME変換中も onChange で値を反映し controlled value を DOM と一致させる。
+                変換中の再描画で入力が巻き戻る/効かなくなるのを防ぐ。フォント調整(refit)だけ変換中は止める。 */}
             <textarea
               ref={el => { refs.current[i] = el }}
               className={it.important ? 'is-imp' : ''}
               value={it.text}
               onCompositionStart={() => { composingRef.current = true }}
               onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i])) }}
-              onChange={e => { if (!composingRef.current) update(i, { text: e.target.value }) }}
+              onChange={e => update(i, { text: e.target.value })}
             />
             <div className="ctl">
               <button type="button" className={'imp' + (it.important ? ' on' : '')} title="重要" onClick={() => update(i, { important: !it.important })}>!</button>
