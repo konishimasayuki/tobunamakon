@@ -3116,12 +3116,309 @@ function SchedulePage({ onEditShipment, isPopup }) {
 }
 
 // スマホ予定表の編集モーダル。更新で差分保存→閉じると予定表に戻り変更が赤文字反映される。
+// スマホ予定編集の縦並びフォーム本体（片手で見やすく打ち込めるレイアウト）。
+// 出荷登録と同じ操作ロジック(makeDenpyoHandlers)を共用しつつ、伝票風の横並びではなく
+// 1項目=1ブロックの縦積みで、入力欄・ボタンを指で押しやすい大きさにする。
+function MobileEditForm({ form, setForm, editing, employees = [], companyComboOptions = [], tradingComboOptions = [], onPdfImport, removePdf, previewPdf }) {
+  const H = makeDenpyoHandlers({ form, setForm, employees, companyComboOptions })
+  const { set, setVal, handleCompanyInput, setMixCell, setMixRowNote, addMixRow, delMixRow, mixRowsOf,
+    toggleVehItem, setVehQty, vehItems, toggleNoteTag, toggleTestTag, addNoteMessage, removeNoteMessage, unloadText, setUnload, addDriver, removeDriver } = H
+
+  // 時間（最大2）
+  const setTime = (i, v) => setForm(f => ({ ...f, times: f.times.map((t, idx) => idx === i ? { ...t, text: v } : t) }))
+  const addTime = () => setForm(f => f.times.length < 2 ? { ...f, times: [...f.times, { text: '', important: false }] } : f)
+  const delTime = (i) => setForm(f => ({ ...f, times: f.times.length > 1 ? f.times.filter((_, idx) => idx !== i) : [{ text: '', important: false }] }))
+  // 備考（手入力段落のみ。荷下ろし・メッセージは別UIで管理し保存時に結合）
+  const manualText = (form.notes || []).filter(n => n && !n.kind).map(n => n.text).join('\n')
+  const setManualText = (v) => setForm(f => {
+    const keep = (f.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg'))
+    const manual = v.split('\n').map(t => ({ text: t, important: false }))
+    return { ...f, notes: sortNotes([...manual, ...keep]) }
+  })
+  const msgNote = (form.notes || []).find(n => n && n.kind === 'msg')
+  const usedMsgs = msgNote ? String(msgNote.text || '').split(/\s+/).filter(Boolean) : []
+
+  // ---- styles（16px以上でiOSの自動ズームを防ぐ・タップ領域を大きく） ----
+  const block = { marginBottom: 18 }
+  const lbl = { display: 'block', fontSize: 13, fontWeight: 700, color: '#3a4a5c', marginBottom: 7 }
+  const inp = { width: '100%', boxSizing: 'border-box', fontSize: 16, padding: '13px 12px', border: '1.5px solid #cdd5e0', borderRadius: 10, fontFamily: 'inherit', color: '#111', background: '#fff', outline: 'none' }
+  const chip = (on) => ({ flex: '1 1 0', minWidth: 0, textAlign: 'center', padding: '13px 6px', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer', userSelect: 'none', border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c' })
+  const smallBtn = { border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 10, width: 46, minWidth: 46, height: 46, fontSize: 18, cursor: 'pointer', flex: '0 0 auto' }
+  const addBtn = { border: '1px dashed #9aa7b5', background: '#fafbfc', color: '#3a4a5c', borderRadius: 10, padding: '11px 14px', fontSize: 14, cursor: 'pointer', width: '100%' }
+  const rowGap = { display: 'flex', gap: 8 }
+
+  return (
+    <div>
+      {/* 日付・受注日 */}
+      <div style={{ ...block, ...rowGap }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <label style={lbl}>日付</label>
+          <input type="date" value={form.date} onChange={set('date')} style={inp} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <label style={lbl}>受注日</label>
+          <input type="date" value={form.orderDate} onChange={set('orderDate')} style={inp} />
+        </div>
+      </div>
+
+      {/* 時間 */}
+      <div style={block}>
+        <label style={lbl}>時間（最大2）</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {form.times.map((t, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input value={t.text} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inp, flex: 1 }} />
+              {form.times.length > 1 && <button type="button" onClick={() => delTime(i)} style={smallBtn}>×</button>}
+            </div>
+          ))}
+        </div>
+        {form.times.length < 2 && <button type="button" onClick={addTime} style={{ ...addBtn, marginTop: 8 }}>＋ 時間を追加</button>}
+      </div>
+
+      {/* 業者名・商社名 */}
+      <div style={block}>
+        <label style={lbl}>業者名</label>
+        <div className="denpyo">
+          <KanaCombo value={form.companyName} onChange={handleCompanyInput}
+            onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
+            options={companyComboOptions} placeholder="入力して検索（ひらがな可）" className="f-mobile" style={inp} />
+        </div>
+      </div>
+      <div style={block}>
+        <label style={lbl}>商社名</label>
+        <div className="denpyo">
+          <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
+            onPick={o => setVal('tradingCompany', o.label)}
+            options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" className="f-mobile" style={inp} />
+        </div>
+      </div>
+
+      {/* 現場名 */}
+      <div style={block}>
+        <label style={lbl}>現場名</label>
+        <input value={form.siteName} onChange={set('siteName')} style={inp} />
+      </div>
+
+      {/* 現場住所 ＋ 地図 */}
+      <div style={block}>
+        <label style={lbl}>現場住所</label>
+        <input value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} style={inp} />
+        <div style={{ marginTop: 10 }}>
+          <SiteMap
+            address={form.siteAddress}
+            onAddressChange={(a) => setVal('siteAddress', a)}
+            mapView={form.mapView}
+            onMapViewChange={(v) => setVal('mapView', v)}
+            arrows={form.mapArrows}
+            onArrowsChange={(a) => setVal('mapArrows', a)}
+          />
+        </div>
+      </div>
+
+      {/* 車種（行ごと・台数つき） */}
+      <div style={block}>
+        <label style={lbl}>車種（タップで選択・台数）</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {VEHICLE_TYPES.map(o => {
+            const it = vehItems().find(v => v.type === o)
+            const on = !!it
+            return (
+              <div key={o} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div onClick={() => toggleVehItem(o)} style={{ ...chip(on), flex: '0 0 96px' }}>{o}</div>
+                {on && (
+                  <>
+                    <input inputMode="numeric" value={it.qty || ''} placeholder="台数"
+                      onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)}
+                      style={{ ...inp, flex: 1, textAlign: 'center' }} />
+                    <span style={{ fontSize: 16, color: '#3a4a5c', flex: '0 0 auto' }}>台</span>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 配合 */}
+      <div style={block}>
+        <label style={lbl}>配合（中央のみ特記可）</label>
+        {mixRowsOf().map((r, ri) => (
+          <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 12 : 0 }}>
+            {[0, 1, 2].map(i => (
+              <Fragment key={i}>
+                {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#111', paddingBottom: 9 }}>-</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {i === 1
+                    ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記"
+                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
+                    : <div style={{ height: 16 }} />}
+                  <input value={r.parts[i] || ''} inputMode="numeric" placeholder="00"
+                    onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
+                    onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #cdd5e0', borderRadius: 10, padding: '11px 4px', fontFamily: 'inherit', color: '#111', marginTop: 4 }} />
+                </div>
+              </Fragment>
+            ))}
+            {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} style={{ ...smallBtn, height: 50 }}>×</button>}
+          </div>
+        ))}
+        {mixRowsOf().length < 2 && <button type="button" onClick={addMixRow} style={{ ...addBtn, marginTop: 10 }}>＋ 配合を追加</button>}
+      </div>
+
+      {/* 量（1段目・2段目） */}
+      <div style={block}>
+        <label style={lbl}>量（m³）</label>
+        {[0, 1].map(idx => {
+          if (idx === 1 && !form.hasVolume2) return null
+          const vKey = idx === 0 ? 'volume' : 'volume2'
+          const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
+          const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+          const sq = (on, label, onClick) => (
+            <button type="button" onClick={onClick} style={{ flex: '0 0 auto', minWidth: 50, height: 48, padding: '0 10px', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer', border: on ? '2px solid #c0392b' : '1.5px solid #cdd5e0', background: on ? '#c0392b' : '#fff', color: on ? '#fff' : '#8a97a6' }}>{label}</button>
+          )
+          return (
+            <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: idx ? 8 : 0 }}>
+              <input value={form[vKey]} inputMode="decimal" placeholder="0"
+                onChange={e => { const v = e.target.value; setVal(vKey, e.nativeEvent?.isComposing ? v : z2h(v).replace(/．/g, '.').replace(/[^0-9.]/g, '')) }}
+                onCompositionEnd={e => setVal(vKey, z2h(e.target.value).replace(/．/g, '.').replace(/[^0-9.]/g, ''))}
+                style={{ ...inp, flex: 1 }} />
+              <span style={{ fontSize: 16, color: '#3a4a5c' }}>m³</span>
+              {sq(form[aKey], '+a', () => setVal(aKey, !form[aKey]))}
+              {sq(form[uKey], '?', () => setVal(uKey, !form[uKey]))}
+              {idx === 1 && sq(false, '×', () => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false })))}
+            </div>
+          )
+        })}
+        {!form.hasVolume2 && <button type="button" onClick={() => setForm(f => ({ ...f, hasVolume2: true }))} style={{ ...addBtn, marginTop: 8 }}>＋ 量を追加</button>}
+      </div>
+
+      {/* 打設箇所 */}
+      <div style={block}>
+        <label style={lbl}>打設箇所</label>
+        {!form.pourFree ? (
+          <select value={form.pourLocation} style={{ ...inp, cursor: 'pointer' }}
+            onChange={e => { if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' })); else setVal('pourLocation', e.target.value) }}>
+            <option value=""></option>
+            {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={form.pourLocation} onChange={set('pourLocation')} placeholder="打設箇所を入力" style={{ ...inp, flex: 1 }} />
+            <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))} style={{ border: '1.5px solid #cdd5e0', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '0 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>一覧</button>
+          </div>
+        )}
+      </div>
+
+      {/* セメント種・試験・特記 */}
+      <div style={{ ...block, ...rowGap }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <label style={lbl}>セメント種</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {CEMENT_TYPES.map(o => <div key={o} onClick={() => setVal('cementType', form.cementType === o ? '' : o)} style={chip(form.cementType === o)}>{o}</div>)}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <label style={lbl}>試験</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {TEST_TAGS.map(t => <div key={t} onClick={() => toggleTestTag(t)} style={chip((form.testTags || []).includes(t))}>{t}</div>)}
+          </div>
+        </div>
+      </div>
+      <div style={block}>
+        <label style={lbl}>特記</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {NOTE_TAGS.map(t => <div key={t} onClick={() => toggleNoteTag(t)} style={chip((form.noteTags || []).includes(t))}>{t}</div>)}
+          <div style={{ flex: 2 }} />
+        </div>
+      </div>
+
+      {/* 荷下ろし */}
+      <div style={block}>
+        <label style={lbl}>荷下ろし</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {PLACEMENT_TYPES.map(t => {
+            const on = (form.placements || []).includes(t)
+            return <div key={t} onClick={() => setVal('placements', on ? form.placements.filter(x => x !== t) : [...(form.placements || []), t])} style={{ ...chip(on), flex: '1 1 calc(50% - 4px)' }}>{t}</div>
+          })}
+        </div>
+        <input value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" style={{ ...inp, marginTop: 8 }} />
+      </div>
+
+      {/* メッセージ追加 */}
+      <div style={block}>
+        <label style={lbl}>メッセージ追加（備考に出力）</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {NOTE_MESSAGES.map(m => {
+            const isUsed = usedMsgs.includes(m)
+            return (
+              <button key={m} type="button" onClick={() => isUsed ? removeNoteMessage(m) : addNoteMessage(m)}
+                style={{ flex: '1 1 calc(50% - 4px)', border: isUsed ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: isUsed ? '#eef4ff' : '#fff', color: '#1b4ea8', borderRadius: 10, padding: '12px 8px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                {isUsed ? '✓ ' : '＋ '}{m}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 備考 */}
+      <div style={block}>
+        <label style={lbl}>備考（改行で段落）</label>
+        <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={3} style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
+      </div>
+
+      {/* 連絡先・現場連絡先 */}
+      <div style={block}>
+        <label style={lbl}>連絡先</label>
+        <input value={form.orderContact} onChange={set('orderContact')} inputMode="tel" style={inp} />
+      </div>
+      <div style={block}>
+        <label style={lbl}>現場連絡先</label>
+        <input value={form.siteContact} onChange={set('siteContact')} inputMode="tel" style={inp} />
+      </div>
+
+      {/* 担当ドライバー */}
+      <div style={block}>
+        <label style={lbl}>担当ドライバー</label>
+        {form.drivers.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            {form.drivers.map((d, i) => (
+              <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1.5px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 10, padding: '9px 12px', fontSize: 15, fontWeight: 700 }}>
+                {d.name}
+                <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <select value="" onChange={addDriver} style={{ ...inp, cursor: 'pointer' }}>
+          <option value="">＋ ドライバーを追加</option>
+          {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+      </div>
+
+      {/* PDFインポート */}
+      <div style={block}>
+        <label style={lbl}>PDFインポート</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px dashed #999', background: '#fafafa', borderRadius: 10, padding: '12px 16px', fontSize: 15, cursor: 'pointer', color: '#333' }}>📄 ファイルを選択
+            <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
+          </label>
+          {(form.pdfData || (form.hasPdf && editing)) && (
+            <button type="button" onClick={previewPdf} style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 10, padding: '10px 14px', fontSize: 14, cursor: 'pointer' }}>👁 プレビュー</button>
+          )}
+          {(form.pdfData || form.hasPdf) && (
+            <button type="button" onClick={removePdf} style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 10, padding: '10px 14px', fontSize: 14, cursor: 'pointer' }}>🗑 削除</button>
+          )}
+          {(form.pdfName || form.hasPdf) && <span style={{ fontSize: 13, color: '#1a8f5a' }}>{form.pdfData ? '選択中' : '添付済'}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ScheduleEditModal({ shipment, driverOptions = [], companyComboOptions = [], tradingComboOptions = [], onClose, onSave }) {
-  // スマホ予定表の編集モーダル。出荷登録フォーム（DenpyoFields）をそのまま使って再構築する。
   const [form, setForm] = useState(() => shipmentToForm(shipment))
   const [saving, setSaving] = useState(false)
 
-  // PDFインポート（出荷登録と同じ。保存時にこの伝票へ添付される）
   const onPdfImport = (e) => {
     const file = e.target.files && e.target.files[0]
     if (!file) return
@@ -3149,42 +3446,30 @@ function ScheduleEditModal({ shipment, driverOptions = [], companyComboOptions =
     if (!String(form.companyName || '').trim() || !String(form.date || '').trim()) { alert('日付と業者名は必須です'); return }
     setSaving(true)
     const payload = buildShipmentPayload(form)
-    // 配合は桁ごと・備考は行ごとに変更を検出（予定表で赤字表示するため）
     const changed = diffChangedFields(shipment, payload)
     try { await onSave(payload, changed) } catch { setSaving(false) }
   }
 
   return (
     <div onClick={() => { if (!saving) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#f3f1ec', width: '100%', maxWidth: 760, maxHeight: '92dvh', display: 'flex', flexDirection: 'column', borderRadius: '16px 16px 0 0', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', paddingTop: 'env(safe-area-inset-top)' }}>
-        {/* ヘッダー：スクロールに付いてこない（固定しない）。閉じるボタンのみ常設 */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 11px', borderBottom: '1px solid #dde3ed', background: '#fff', borderRadius: '16px 16px 0 0', flex: '0 0 auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#f3f1ec', width: '100%', maxWidth: 560, maxHeight: '94dvh', display: 'flex', flexDirection: 'column', borderRadius: '16px 16px 0 0', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', paddingTop: 'env(safe-area-inset-top)' }}>
+        {/* ヘッダー（固定・スクロール追従しない） */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 12px', borderBottom: '1px solid #dde3ed', background: '#fff', borderRadius: '16px 16px 0 0', flex: '0 0 auto' }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
           <button type="button" onClick={onClose} disabled={saving}
-            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '7px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
-        {/* 本体：唯一のスクロール領域。出荷登録フォームをそのまま使う */}
-        <div style={{ flex: '1 1 auto', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px calc(16px + env(safe-area-inset-bottom))' }}>
-          <div className="denpyo">
-            <FitToWidth width={700}>
-              <DenpyoFields form={form} setForm={setForm} editing={shipment.id}
-                employees={driverOptions} companyComboOptions={companyComboOptions} tradingComboOptions={tradingComboOptions}
-                onPdfImport={onPdfImport} removePdf={removePdf} previewPdf={previewPdf} />
-            </FitToWidth>
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <SiteMap
-              address={form.siteAddress}
-              onAddressChange={(a) => setForm(f => ({ ...f, siteAddress: a }))}
-              mapView={form.mapView}
-              onMapViewChange={(v) => setForm(f => ({ ...f, mapView: v }))}
-              arrows={form.mapArrows}
-              onArrowsChange={(a) => setForm(f => ({ ...f, mapArrows: a }))}
-            />
-          </div>
+        {/* 本体：スクロール領域（縦並びフォーム） */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 16px 16px' }}>
+          <MobileEditForm form={form} setForm={setForm} editing={shipment.id}
+            employees={driverOptions} companyComboOptions={companyComboOptions} tradingComboOptions={tradingComboOptions}
+            onPdfImport={onPdfImport} removePdf={removePdf} previewPdf={previewPdf} />
+        </div>
+        {/* フッター（固定・親指で押せる位置に更新ボタン） */}
+        <div style={{ flex: '0 0 auto', borderTop: '1px solid #dde3ed', background: '#fff', padding: '10px 16px calc(10px + env(safe-area-inset-bottom))' }}>
           <button type="button" onClick={submit} disabled={saving}
-            style={{ width: '100%', marginTop: 14, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '15px', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
-            {saving ? '更新中…' : '更新'}
+            style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 12, padding: '16px', fontSize: 17, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? '更新中…' : '更新する'}
           </button>
         </div>
       </div>
