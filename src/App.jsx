@@ -3464,14 +3464,14 @@ function DashboardPage() {
             {card('今日の出荷', todays.length, '件', `${today}（${WD[new Date(today).getDay()]}）`, '#1a6a9f')}
             {card('今日の合計', fmtVol(vol(todays)), 'm³')}
             {card('今週の出荷', weeks.length, '件', `${weekDates[0].slice(5)}〜${weekDates[6].slice(5)}`)}
-            {card('今週の合計', fmtVol(vol(weeks)), 'm³', `今月　? ${marks.q}　+a ${marks.a}`)}
+            {card('今週の合計', fmtVol(vol(weeks)), 'm³')}
             {card('登録総数', all.length, '件')}
           </div>
 
-          {/* 月別の合計m³（先月・今月・来月） */}
+          {/* 月別の合計m³（先月・今月・来月）。今月の?・+aは今月の合計の下に表示 */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
             {card('先月の合計', fmtVol(volBoth(lastMonthShips)), 'm³', monLabel(-1))}
-            {card('今月の合計', fmtVol(volBoth(thisMonthShips)), 'm³', monLabel(0), '#1a6a9f')}
+            {card('今月の合計', fmtVol(volBoth(thisMonthShips)), 'm³', `${monLabel(0)}　? ${marks.q}　+a ${marks.a}`, '#1a6a9f')}
             {card('来月の合計', fmtVol(volBoth(nextMonthShips)), 'm³', monLabel(1))}
           </div>
 
@@ -4142,42 +4142,40 @@ function AssignPage({ isPopup }) {
                 const mixStr = mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')   // 登録した配合
                 const volStr = shipVolStr(s)                                                   // 登録した量
                 const drv = driversOf(s)                                                       // 割り当て済みの担当者
-                const assignedBadge = drv.length > 0 && (
-                  <div style={{ fontSize: 13 }}>
-                    <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: '#1a8f5a', border: '1px solid #a0dca0', background: '#f0f9f0', borderRadius: 4, padding: '1px 6px', marginRight: 6 }}>割り当て済み</span>
-                    <span style={{ color: '#1a4d8f', fontWeight: 600 }}>{drv.join('・')}</span>
+                const assigned = drv.length > 0
+                const cardBg = assigned ? '#e6f1fb' : '#fff'   // 割り当て済みは薄い水色
+                const driverLine = (
+                  <div style={{ fontSize: 14 }}>
+                    <span style={{ color: '#6b7a8d', marginRight: 6 }}>担当</span>
+                    {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b' }}>未割り当て</span>}
                   </div>
                 )
                 if (stacked) {
-                  // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.LINE送信 3.住所+住所設定）。ボタンは同じ幅で右端を揃える
-                  const cardBtnBase = { flex: '0 0 116px', borderRadius: 8, padding: '8px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' }
+                  // スマホ/iPad：縦カード。情報を上から並べ、操作ボタンは下に横並び（均等）で配置
                   return (
-                    <div key={s.id} style={{ background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div key={s.id} style={{ background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, color: '#c0392b' }}>{firstTimeOf(s) || '—'}</span>
-                        <span style={{ fontWeight: 700 }}>{s.companyName}</span>
+                        <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 16 }}>{firstTimeOf(s) || '—'}</span>
+                        <span style={{ fontWeight: 700, fontSize: 16 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d' }}>{s.siteName || ''}</span>
                       </div>
-                      {assignedBadge}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
-                        <button type="button" onClick={() => setAddrTarget(s)} style={{ ...cardBtnBase, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f' }}>📍 住所設定</button>
-                      </div>
-                      <div style={{ fontSize: 13, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ flex: 1, minWidth: 0 }} />
-                        <button type="button" onClick={() => openAssign(s)} style={{ ...cardBtnBase, border: '1.5px solid #06c755', background: '#06c755', color: '#fff' }}>💬 LINE送信</button>
+                      {driverLine}
+                      <div style={{ fontSize: 14, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
+                      <div style={{ fontSize: 14, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
+                        <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '11px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
+                        <button type="button" onClick={() => openAssign(s)} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '11px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                       </div>
                     </div>
                   )
                 }
                 return (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px' }}>
-                    <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
-                    <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 600 }}>{s.companyName}</span>
-                    <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
-                    {drv.length > 0 && <span style={{ flex: '1 1 120px', minWidth: 0, color: '#1a4d8f', fontWeight: 600 }}>✅ {drv.join('・')}</span>}
-                    <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 10, padding: '10px 14px' }}>
+                    <span style={{ flex: '0 0 auto', fontWeight: 800, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
+                    <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 700 }}>{s.companyName}</span>
+                    <span style={{ flex: '1 1 120px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
+                    <span style={{ flex: '1 1 110px', minWidth: 0 }}>担当 {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b' }}>未</span>}</span>
+                    <span style={{ flex: '1 1 130px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>配合 {mixStr || '—'} ／ 量 {volStr || '—'}</span>
                     <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
                     <button type="button" onClick={() => openAssign(s)} style={{ flex: '0 0 auto', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 LINE送信</button>
