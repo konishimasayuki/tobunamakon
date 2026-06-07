@@ -3460,17 +3460,15 @@ function DashboardPage() {
             {card('今日の出荷', todays.length, '件', `${today}（${WD[new Date(today).getDay()]}）`, '#1a6a9f')}
             {card('今日の合計', fmtVol(vol(todays)), 'm³')}
             {card('今週の出荷', weeks.length, '件', `${weekDates[0].slice(5)}〜${weekDates[6].slice(5)}`)}
-            {card('今週の合計', fmtVol(vol(weeks)), 'm³')}
+            {card('今週の合計', fmtVol(vol(weeks)), 'm³', `今月　? ${marks.q}　+a ${marks.a}`)}
             {card('登録総数', all.length, '件')}
           </div>
 
-          {/* 月別の合計m³（先月・今月・来月）と ?・+a の数 */}
+          {/* 月別の合計m³（先月・今月・来月） */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
             {card('先月の合計', fmtVol(volBoth(lastMonthShips)), 'm³', monLabel(-1))}
             {card('今月の合計', fmtVol(volBoth(thisMonthShips)), 'm³', monLabel(0), '#1a6a9f')}
             {card('来月の合計', fmtVol(volBoth(nextMonthShips)), 'm³', monLabel(1))}
-            {card('今月の「?」', marks.q, '件', '数量未確定の数')}
-            {card('今月の「+a」', marks.a, '件', '+aの数')}
           </div>
 
           {/* 内訳（車種別＝便別・担当別） */}
