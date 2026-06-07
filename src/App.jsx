@@ -2850,8 +2850,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
-          {ampmButtons}
+          {compact && ampmButtons}
         </div>
+        {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
+        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10 }}>{ampmButtons}</div>}
       </div>
       )}
       {compact ? (
@@ -2922,7 +2924,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <colgroup>
             <col style={{ width: '11%' }} />
             <col style={{ width: '15%' }} />
-            <col style={{ width: '7%' }} />
+            {!isPopup && <col style={{ width: '7%' }} />}
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '6%' }} />
@@ -2934,7 +2936,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <thead>
             <tr>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th><th>📄PDF</th><th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
+              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -2944,9 +2946,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <tr key={s.id}>
                 <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
                 <td>{cell(s, 'siteName', '', { big: true })}</td>
+                {!isPopup && (
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>
                   {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}
                 </td>
+                )}
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
@@ -3842,8 +3846,7 @@ function DriverPicker({ value, options, onChange }) {
   const has = (id) => value.some(d => d.id === id)
   const toggle = (emp) => {
     if (has(emp.id)) onChange(value.filter(d => d.id !== emp.id))
-    else if (value.length < 4) onChange([...value, { id: emp.id, name: emp.name }])
-    else alert('担当者は最大4人までです')
+    else onChange([...value, { id: emp.id, name: emp.name }])   // 上限なし
   }
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -3893,7 +3896,7 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
       <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
       <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
       <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（最大4人・タップで選択／解除）</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（タップで選択／解除）</div>
       <DriverPicker value={sel} options={drivers} onChange={setSel} />
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
@@ -4138,6 +4141,13 @@ function AssignPage({ isPopup }) {
                 const addrCell = addr ? <span style={{ color: '#3a4a5c' }}>{addr}</span> : <span style={{ color: '#c0392b' }}>未入力</span>
                 const mixStr = mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')   // 登録した配合
                 const volStr = shipVolStr(s)                                                   // 登録した量
+                const drv = driversOf(s)                                                       // 割り当て済みの担当者
+                const assignedBadge = drv.length > 0 && (
+                  <div style={{ fontSize: 13 }}>
+                    <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: '#1a8f5a', border: '1px solid #a0dca0', background: '#f0f9f0', borderRadius: 4, padding: '1px 6px', marginRight: 6 }}>割り当て済み</span>
+                    <span style={{ color: '#1a4d8f', fontWeight: 600 }}>{drv.join('・')}</span>
+                  </div>
+                )
                 if (stacked) {
                   // スマホ/iPad：縦カード（1.時刻/業者名/現場名 2.LINE送信 3.住所+住所設定）。ボタンは同じ幅で右端を揃える
                   const cardBtnBase = { flex: '0 0 116px', borderRadius: 8, padding: '8px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' }
@@ -4148,6 +4158,7 @@ function AssignPage({ isPopup }) {
                         <span style={{ fontWeight: 700 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d' }}>{s.siteName || ''}</span>
                       </div>
+                      {assignedBadge}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ ...cardBtnBase, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f' }}>📍 住所設定</button>
@@ -4165,6 +4176,7 @@ function AssignPage({ isPopup }) {
                     <span style={{ flex: '0 0 auto', fontWeight: 700, color: '#c0392b', minWidth: 56 }}>{firstTimeOf(s) || '—'}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, fontWeight: 600 }}>{s.companyName}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>{s.siteName || '—'}</span>
+                    {drv.length > 0 && <span style={{ flex: '1 1 120px', minWidth: 0, color: '#1a4d8f', fontWeight: 600 }}>✅ {drv.join('・')}</span>}
                     <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所: {addrCell}</span>
                     <span style={{ flex: '1 1 130px', minWidth: 0, color: '#3a4a5c' }}>配合 {mixStr || '—'} ／ 量 {volStr || '—'}</span>
                     <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📍 住所設定</button>
