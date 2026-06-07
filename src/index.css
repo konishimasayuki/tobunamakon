@@ -286,7 +286,7 @@ input, textarea, select { font-family: inherit; }
 /* 車両は文字を5pt大きく */
 .seikon-table td.seikon-veh { font-size:19px; font-weight:700; text-align:center; }
 /* 配合は本文より8pt大きく・中央揃え */
-.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; }
+.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:pre; }
 /* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
 .seikon-table td.seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; }
 /* 摘要：上=備考／下=荷下ろし・特記の2行 */

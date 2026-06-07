@@ -982,7 +982,9 @@ function fitText(ta) {
 // プレースホルダ（透かし）も実テキストと同じく縮小される（同じ要素の font-size を縮めるため）。
 function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style }) {
   const ref = useRef(null)
+  const composingRef = useRef(false)   // IME変換中フラグ
   const fit = () => {
+    if (composingRef.current) return   // 変換中はフォント自動調整しない（変換が壊れるため）
     const el = ref.current
     if (!el) return
     el.style.fontSize = baseSize + 'px'
@@ -1003,7 +1005,9 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
   }, [])
   return (
     <input ref={ref} className={className} type={type} value={value}
-      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
+      onChange={e => { onChange(e); if (!composingRef.current) requestAnimationFrame(fit) }}
+      onCompositionStart={() => { composingRef.current = true }}
+      onCompositionEnd={() => { composingRef.current = false; requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
   )
 }
@@ -1014,6 +1018,7 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)   // ▼で開いたら全件、入力中は絞り込み
   const wrapRef = useRef(null)
+  const blurTimer = useRef(null)
   const q = kanaToHira(value)
   const filtered = ((value && !showAll) ? options.filter(o => kanaToHira(o.label).includes(q) || kanaToHira(o.kana).includes(q)) : options).slice(0, 200)
   useEffect(() => {
@@ -1022,25 +1027,25 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
     document.addEventListener('touchstart', onDoc)
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('touchstart', onDoc) }
   }, [])
-  const pick = (o) => { onPick(o); setOpen(false); setShowAll(false) }
+  const pick = (o) => { if (blurTimer.current) clearTimeout(blurTimer.current); onPick(o); setOpen(false); setShowAll(false) }
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
       <input className={className} style={style} value={value} placeholder={placeholder} required={required}
         onChange={e => { onChange(e); setShowAll(false); setOpen(true) }}
-        onFocus={() => setOpen(true)} />
+        onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setOpen(true) }}
+        onBlur={() => { blurTimer.current = setTimeout(() => { setOpen(false); setShowAll(false) }, 200) }} />
       <button type="button" tabIndex={-1} title="一覧から選択"
         onMouseDown={(e) => { e.preventDefault(); setShowAll(true); setOpen(o => !o) }}
         style={{ flex: '0 0 auto', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a4d8f', fontSize: 16, padding: '0 6px', alignSelf: 'center' }}>▼</button>
-      {open && (
+      {/* 入力欄にフォーカスがある時かつ候補がある時だけ表示（該当なしのときは出さない） */}
+      {open && filtered.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, background: '#fff', border: '1px solid #cdd5e0', borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,.18)', maxHeight: 260, overflowY: 'auto' }}>
-          {filtered.length > 0 ? filtered.map((o, i) => (
-            <div key={(o.id || o.label) + '_' + i} onClick={() => pick(o)}
+          {filtered.map((o, i) => (
+            <div key={(o.id || o.label) + '_' + i} onMouseDown={(e) => { e.preventDefault(); pick(o) }} onClick={() => pick(o)}
               style={{ padding: '9px 10px', fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#111', borderBottom: '1px solid #f2f4f8' }}>
               {o.label}{o.kana ? <span style={{ color: '#9aa7b5', fontSize: 11, marginLeft: 6 }}>{o.kana}</span> : null}
             </div>
-          )) : (
-            <div style={{ padding: '9px 10px', fontSize: 12, color: '#9aa7b5', lineHeight: 1.5 }}>該当なし（顧客管理で会社名カナを登録してください）</div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -3623,6 +3628,8 @@ function SeikonOutputPage({ isPopup }) {
   const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
 
   const placementsOf = (s) => (Array.isArray(s.placements) ? s.placements : []).filter(Boolean).join('・')
+  // 配合の数値が入っていない枠は半角2つ( )で埋めてダッシュ位置を揃える（例: 24-- → 24-□□-□□）
+  const padMix = (code) => { const c = String(code || ''); return c ? c.split('-').map(p => p === '' ? '  ' : p).join('-') : '' }
 
   // 配合/数量が2種ある行は、下に分割行（数値のみ・その他はコピーしない）を出す
   const lineRows = []
@@ -3677,7 +3684,7 @@ function SeikonOutputPage({ isPopup }) {
       return (
         <tr key={key}>
           <td></td><td></td><td></td><td></td>
-          <td className="seikon-mix">{r.mix}</td>
+          <td className="seikon-mix">{padMix(r.mix)}</td>
           <td></td><td></td><td></td><td></td><td></td>
         </tr>
       )
@@ -3690,7 +3697,7 @@ function SeikonOutputPage({ isPopup }) {
         <td>{s.siteName || ''}</td>
         <td className="seikon-datsu">{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
-        <td className="seikon-mix">{r.mix}</td>
+        <td className="seikon-mix">{padMix(r.mix)}</td>
         <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center' }}>{r.vols.length ? r.vols.map((v, i) => <div key={i}>{v}</div>) : ''}</td>
         <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
