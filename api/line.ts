@@ -172,7 +172,7 @@ function volumeDisplay(s: any): string {
 // 配合行（複数）: mixRows があれば各行 {code,note}、無ければ mixCode/mixNotes 1行
 function mixRowsOf(s: any): Array<{ code: string; note: string }> {
   const rows = asArr(s.mixRows)
-  if (rows.length) return rows.map((r: any) => { const c = asArr(r.parts).slice(0, 3).join('-'); return { code: /[0-9]/.test(c) ? c : '', note: String(r.note || '') } })
+  if (rows.length) return rows.map((r: any) => ({ code: asArr(r.parts).slice(0, 3).join('-').replace(/-+$/, ''), note: String(r.note || '') }))
   const mn = asArr(s.mixNotes)
   return [{ code: String(s.mixCode || ''), note: String(mn[1] || '') }]
 }
@@ -410,7 +410,6 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
   const ships: any[] = []
   for (const s of allShips) {
     if (!s) continue
-    if (s.cancelled === true || s.cancelled === 'true' || s.cancelled === 1 || s.cancelled === '1') continue   // キャンセル済みは除外
     if (String(s.date) !== today) continue
     let hit = false
     if (employee) {
@@ -446,9 +445,10 @@ async function buildGenbaReply(lineUserId: string): Promise<any[]> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ===== アプリからの出荷カード送信。指定出荷の伝票カード＋地図画像を担当へ =====
-  // 配送割り当ての共有ウィンドウ（ログイン不要）からも送れるよう認証は必須にしない。
+  // ===== アプリからの出荷カード送信（認証必須）。指定出荷の伝票カード＋地図画像を担当へ =====
   if (req.method === 'POST' && (req.body as any)?.action === 'pushShipment') {
+    const user = requireAuth(req)
+    if (!user) return res.status(401).json({ error: '認証が必要です' })
     const { shipmentId, lineUserIds } = (req.body || {}) as any
     const cln = (v: any) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
     const ids: string[] = Array.isArray(lineUserIds) ? Array.from(new Set(lineUserIds.map(cln).filter(Boolean))) : []
