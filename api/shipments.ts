@@ -32,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
       const updated = { ...existing, ...patch, changedFields, updatedAt: new Date().toISOString() }
       await redis.hset(`shipment:${id}`, updated)
+      await indexShipment(id as string, (updated as any).date)
       return res.status(200).json(updated)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -55,18 +56,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 一覧取得（既定はキャンセル済みを除外。?cancelled=1 でキャンセル済みのみ）
+  // 単一伝票の取得（担当振替の別ウィンドウ等）。?id=... のGET（pdf指定なし）→ その1件だけ読む
+  if (req.method === 'GET' && hasId) {
+    try {
+      const s = await redis.hgetall(`shipment:${id}`)
+      if (!s || Object.keys(s).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
+      return res.status(200).json(s)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
+
+  // 一覧取得。
+  //  ・?date=YYYY-MM-DD / ?from=&to= … 日付索引で当日・期間のみ取得（読み取り削減）
+  //  ・指定なし / ?cancelled=1 … 従来どおり全件読み（検索・キャンセル一覧のフォールバック）
   if (req.method === 'GET' && !hasId) {
     try {
-      const ids = await redis.smembers('shipments')
-      if (!ids || ids.length === 0) return res.status(200).json([])
-      const p = redis.pipeline()
-      ids.forEach(sid => p.hgetall(`shipment:${sid}`))
-      const rows = await p.exec<Record<string, any>[]>()
-      let shipments = rows.filter(s => s && Object.keys(s).length > 0)
-      const showCancelled = req.query.cancelled === '1' || req.query.cancelled === 'true'
-      shipments = shipments.filter(s => showCancelled ? isCancelled(s) : !isCancelled(s))
+      const q = req.query
+      const showCancelled = q.cancelled === '1' || q.cancelled === 'true'
+      const dateParam = Array.isArray(q.date) ? q.date[0] : q.date
+      const fromParam = Array.isArray(q.from) ? q.from[0] : q.from
+      const toParam = Array.isArray(q.to) ? q.to[0] : q.to
       const ft = (s: any) => Array.isArray(s.times) ? (s.times[0] || '') : (s.time || '')
+      let shipments: Record<string, any>[]
+      if (!showCancelled && (dateParam || (fromParam && toParam))) {
+        // 索引経由：当日 or 期間ぶんの id だけ取得して読む
+        await ensureIndexed()
+        const min = dateScore(dateParam || fromParam)
+        const max = dateScore(dateParam || toParam)
+        if (!min || !max) return res.status(200).json([])
+        const ids = ((await redis.zrange(INDEX_KEY, min, max, { byScore: true })) || []) as string[]
+        if (!ids.length) return res.status(200).json([])
+        const p = redis.pipeline()
+        ids.forEach(sid => p.hgetall(`shipment:${sid}`))
+        const rows = (await p.exec<Record<string, any>[]>()) || []
+        shipments = rows.filter(s => s && Object.keys(s).length > 0 && !isCancelled(s))
+      } else {
+        // 全件読み（フォールバック）
+        const ids = await redis.smembers('shipments')
+        if (!ids || ids.length === 0) return res.status(200).json([])
+        const p = redis.pipeline()
+        ids.forEach((sid: string) => p.hgetall(`shipment:${sid}`))
+        const rows = await p.exec<Record<string, any>[]>()
+        shipments = rows.filter(s => s && Object.keys(s).length > 0)
+        shipments = shipments.filter(s => showCancelled ? isCancelled(s) : !isCancelled(s))
+      }
       shipments.sort((a, b) => (String(a.date) + ft(a)).localeCompare(String(b.date) + ft(b)))
       return res.status(200).json(shipments)
     } catch (e) {
@@ -84,7 +119,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const cancelled = !!((req.body as any)?.cancelled)
       const updated = { ...existing, cancelled, cancelledAt: cancelled ? now : '', updatedAt: now }
       await redis.hset(`shipment:${id}`, updated)
+      await indexShipment(id as string, (updated as any).date)
       return res.status(200).json(updated)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(500).json({ error: msg })
+    }
+  }
+
+  // 索引の再構築（管理用・ログイン必須）。?reindex=1 で既存データから shipments:bydate を作り直す
+  if (req.method === 'POST' && !hasId && (req.query.reindex === '1' || req.query.reindex === 'true')) {
+    try {
+      _indexedMem = false
+      await redis.del('shipments:indexed')
+      await ensureIndexed()
+      const n = await redis.zcard(INDEX_KEY)
+      return res.status(200).json({ reindexed: n })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(500).json({ error: msg })
@@ -142,6 +192,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       await redis.hset(`shipment:${newId}`, shipment)
       await redis.sadd('shipments', newId)
+      await indexShipment(newId, date)
       return res.status(201).json(shipment)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -201,6 +252,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: new Date().toISOString(),
       }
       await redis.hset(`shipment:${id}`, updated)
+      await indexShipment(id as string, (updated as any).date)
       return res.status(200).json(updated)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -218,6 +270,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         p.del('shipments')
         await p.exec()
       }
+      await redis.del(INDEX_KEY)
+      await redis.del('shipments:indexed')
+      _indexedMem = false
       return res.status(200).json({ deleted: ids.length })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -231,6 +286,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await redis.del(`shipment:${id}`)
       await redis.del(`shipmentpdf:${id}`)
       await redis.srem('shipments', id)
+      await redis.zrem(INDEX_KEY, id as string)
       return res.status(200).json({ message: '削除しました' })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -244,6 +300,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 // キャンセル済み判定（Redisの真偽値表現ゆれに対応）
 function isCancelled(s: any): boolean {
   return !!s && (s.cancelled === true || s.cancelled === 'true' || s.cancelled === 1 || s.cancelled === '1')
+}
+
+// ===== 日付インデックス（出荷予定表・配送割り当て等の「特定日」取得を高速化）=====
+// shipments:bydate は ZSET（score=YYYYMMDD, member=id）。全件読み(1+N)を当日/期間の件数ぶんに抑える。
+const INDEX_KEY = 'shipments:bydate'
+function dateScore(d: any): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''))
+  return m ? parseInt(m[1] + m[2] + m[3], 10) : 0
+}
+// 伝票1件を索引に登録（作成・更新時に呼ぶ。date変更時も同member再登録でscoreが更新される）
+async function indexShipment(id: string, date: any): Promise<void> {
+  const sc = dateScore(date)
+  if (sc) { try { await redis.zadd(INDEX_KEY, { score: sc, member: id }) } catch { /* 索引失敗は本処理を止めない */ } }
+}
+// 既存データの索引を一度だけ構築（インスタンス内メモ＋Redisフラグ）。初回の日付取得時に自動実行。
+let _indexedMem = false
+async function ensureIndexed(): Promise<void> {
+  if (_indexedMem) return
+  try {
+    if (await redis.get('shipments:indexed')) { _indexedMem = true; return }
+    const ids = (await redis.smembers('shipments')) || []
+    if (ids.length) {
+      const p = redis.pipeline()
+      ids.forEach((sid: string) => p.hgetall(`shipment:${sid}`))
+      const rows = (await p.exec<Record<string, any>[]>()) || []
+      const zp = redis.pipeline(); let any = false
+      rows.forEach((s, i) => { const sc = dateScore(s && (s as any).date); if (sc) { zp.zadd(INDEX_KEY, { score: sc, member: ids[i] }); any = true } })
+      if (any) await zp.exec()
+    }
+    await redis.set('shipments:indexed', '1')
+    _indexedMem = true
+  } catch { /* 失敗時は呼び出し側が全件フォールバックする */ }
 }
 
 // PDF（dataURL もしくは素のbase64）を別キーに保存する。空文字なら削除。undefined は呼ばない想定。
