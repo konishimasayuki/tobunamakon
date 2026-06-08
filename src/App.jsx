@@ -44,11 +44,32 @@ async function request(path, options = {}) {
   return data
 }
 
+// --- GETの短時間キャッシュ＆同時リクエストの重複排除（Upstashの読み取りコマンド削減）---
+// 5秒以内の同一GETはキャッシュを再利用し、同時に飛んだ同一GETは1本に束ねる。
+// 書き込み(post/put/del)・出荷変更通知のたびに破棄して鮮度を担保する（世代カウンタ方式）。
+const GET_TTL_MS = 5000
+let _cacheGen = 0
+const _getCache = new Map()   // path -> { ts, data, gen }
+const _inflight = new Map()   // path -> Promise
+function bumpGen() { _cacheGen++; _getCache.clear(); _inflight.clear() }
+function cachedGet(path) {
+  const gen = _cacheGen
+  const hit = _getCache.get(path)
+  if (hit && hit.gen === gen && Date.now() - hit.ts < GET_TTL_MS) return Promise.resolve(hit.data)
+  const flying = _inflight.get(path)
+  if (flying) return flying
+  const p = request(path)
+    .then(data => { if (_cacheGen === gen) _getCache.set(path, { ts: Date.now(), data, gen }); _inflight.delete(path); return data })
+    .catch(e => { _inflight.delete(path); throw e })
+  _inflight.set(path, p)
+  return p
+}
+
 const api = {
-  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
-  get:  (path)       => request(path),
-  put:  (path, body) => request(path, { method: 'PUT',  body: JSON.stringify(body) }),
-  del:  (path)       => request(path, { method: 'DELETE' }),
+  post: (path, body) => { bumpGen(); return request(path, { method: 'POST', body: JSON.stringify(body) }).finally(bumpGen) },
+  get:  (path)       => cachedGet(path),
+  put:  (path, body) => { bumpGen(); return request(path, { method: 'PUT',  body: JSON.stringify(body) }).finally(bumpGen) },
+  del:  (path)       => { bumpGen(); return request(path, { method: 'DELETE' }).finally(bumpGen) },
 }
 
 // 出荷データの変更を他タブ/他ウィンドウに通知する（localStorage の storage イベント経由）。
@@ -57,12 +78,25 @@ const SHIPMENTS_PING_KEY = 'shipments_updated_at'
 function notifyShipmentsChanged() {
   try { localStorage.setItem(SHIPMENTS_PING_KEY, String(Date.now())) } catch {}
 }
+// 別タブで出荷が変わったらGETキャッシュも破棄し、再取得が必ず最新になるようにする
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => { if (e && e.key === SHIPMENTS_PING_KEY) bumpGen() })
+}
 // 変更通知を購読する。コールバックは別タブでの更新時に呼ばれる。
+// 画面が非表示の間は再取得せず（Upstash読み取り節約）、表示に戻った時に1回だけ反映する。
 function useShipmentsChanged(onChange) {
   useEffect(() => {
-    const h = (e) => { if (e.key === SHIPMENTS_PING_KEY) onChange() }
+    let pending = false
+    const run = () => { pending = false; onChange() }
+    const h = (e) => {
+      if (e.key !== SHIPMENTS_PING_KEY) return
+      if (typeof document !== 'undefined' && document.hidden) pending = true
+      else run()
+    }
+    const onVis = () => { if (typeof document !== 'undefined' && !document.hidden && pending) run() }
     window.addEventListener('storage', h)
-    return () => window.removeEventListener('storage', h)
+    document.addEventListener('visibilitychange', onVis)
+    return () => { window.removeEventListener('storage', h); document.removeEventListener('visibilitychange', onVis) }
   }, [onChange])
 }
 
@@ -2499,10 +2533,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }, [])
   useEffect(() => {
     if (!isPopup) return
-    const t = setInterval(async () => {
+    // 共有ボードの自動更新。読み取り削減のため間隔を3分にし、非表示タブでは更新を止める。
+    // 表示に戻った時は即時更新。同一端末での保存は storage 通知で即反映されるため、
+    // このポーリングは「他端末からの変更」を拾う補助。
+    const tick = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return
       try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 一時的な失敗は無視 */ }
-    }, 60000)
-    return () => clearInterval(t)
+    }
+    const t = setInterval(tick, 180000)
+    const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) tick() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
   }, [isPopup, mergeDiff])
 
   // 別タブ（出荷登録の編集ウィンドウ等）で更新が入ったら即座に再取得して反映する
