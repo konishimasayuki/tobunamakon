@@ -2488,8 +2488,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
     catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [])
-  // 初回＋表示日が変わるたびに読み直す
-  useEffect(() => { setLoading(true); load() }, [date, load])
+  // 初回＋表示日が変わるたびに読み直す（日付変更時は「読み込み中」を出さず、取得完了時に差し替え＝チラつき防止）
+  useEffect(() => { load() }, [date, load])
   useEffect(() => {
     api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
   }, [])
@@ -2536,14 +2536,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }, [])
   useEffect(() => {
     if (!isPopup) return
-    // 共有ボードの自動更新。読み取り削減のため間隔を3分にし、非表示タブでは更新を止める。
-    // 表示に戻った時は即時更新。同一端末での保存は storage 通知で即反映されるため、
-    // このポーリングは「他端末からの変更」を拾う補助。
+    // 共有ボードの自動更新。1分ごとに「表示中の当日ぶんだけ」を取得（日付索引で軽量）。
+    // 非表示タブでは更新を止め、表示に戻った時は即時更新。同一端末の保存は storage 通知で即反映。
     const tick = async () => {
       if (typeof document !== 'undefined' && document.hidden) return
       try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch (e) { /* 一時的な失敗は無視 */ }
     }
-    const t = setInterval(tick, 180000)
+    const t = setInterval(tick, 60000)
     const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) tick() }
     document.addEventListener('visibilitychange', onVis)
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
@@ -2570,7 +2569,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return 99999   // 解析できない文字 → 空欄の手前
   }
   const inAmPm = (s) => { if (ampm === 'both') return true; const mm = timeToMin(firstT(s)); return ampm === 'AM' ? mm < 720 : mm >= 720 }
-  const rows = all.filter(s => s.date === date && inAmPm(s))
+  // all は日付索引で表示日ぶんのみ取得済み。日付変更中も前日の表示を残すため date 判定はしない（AM/PMのみ）
+  const rows = all.filter(s => inAmPm(s))
     .sort((a, b) => timeToMin(firstT(a)) - timeToMin(firstT(b)) || String(firstT(a)).localeCompare(String(firstT(b))))
 
   const isChanged = (s, f) => Array.isArray(s.changedFields) && s.changedFields.includes(f)
@@ -3513,11 +3513,12 @@ function SeikonOutputPage({ isPopup }) {
   useEffect(() => { api.get('/api/customers').then(setCustomers).catch(() => { /* noop */ }) }, [])
   const custCode = (s) => { const c = customers.find(c => c.id === s.companyId); return c ? (c.customerCode || '') : '' }
   const inAmPm = (s) => { if (ampm === 'both') return true; const m = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? m < 720 : m >= 720 }
-  const rows = all.filter(s => s.date === date && inAmPm(s))
+  // all は日付索引で表示日ぶんのみ取得済み。日付変更中も前日の表示を残すため date 判定はしない（AM/PMのみ）
+  const rows = all.filter(s => inAmPm(s))
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
   // 試験集計（その日の全出荷から：現TP=現場 / 工TP=工場）
-  const dayShips = all.filter(s => s.date === date)
+  const dayShips = all   // 表示日ぶんのみ取得済み
   const testGen = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('現TP')).length
   const testKo = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('工TP')).length
 
@@ -3675,7 +3676,7 @@ function SeikonOutputPage({ isPopup }) {
 
 function ShipReportPage() {
   const [date, setDate] = useState(() => localToday())
-  const { all, loading } = useShipments()
+  const { all, loading } = useShipments('?date=' + encodeURIComponent(date))
   const rows = all.filter(s => s.date === date).sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
   const totalVol = rows.reduce((a, s) => a + (parseFloat(s.volume) || 0), 0)
   return (
@@ -3711,7 +3712,7 @@ function ShipReportPage() {
 
 function DriverReportPage() {
   const [date, setDate] = useState(() => localToday())
-  const { all, loading } = useShipments()
+  const { all, loading } = useShipments('?date=' + encodeURIComponent(date))
   const rows = all.filter(s => s.date === date)
   const groups = {}
   rows.forEach(s => { const ds = driversOf(s); (ds.length ? ds : ['未割当']).forEach(n => { (groups[n] = groups[n] || []).push(s) }) })
@@ -4011,11 +4012,12 @@ function AssignPage({ isPopup }) {
       setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }, [])
-  // 初回＋表示日が変わるたびに読み直す
-  useEffect(() => { setLoading(true); load() }, [date, load])
+  // 初回＋表示日が変わるたびに読み直す（日付変更時は「読み込み中」を出さず、取得完了時に差し替え＝チラつき防止）
+  useEffect(() => { load() }, [date, load])
   useShipmentsChanged(load)   // 別ウィンドウで保存されたら再取得して反映
 
-  const rows = all.filter(s => s.date === date)
+  // all は日付索引で表示日ぶんのみ取得済み。日付変更中も前日の表示を残すため date 判定はしない
+  const rows = [...all]
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
   const openBoard = () => {
