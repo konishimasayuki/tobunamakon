@@ -2485,12 +2485,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [lineTarget, setLineTarget] = useState(null) // LINE送信モーダルで開いている伝票
   const [lineSel, setLineSel] = useState([])         // LINE送信の送り先（従業員id）
 
+  // 表示日だけを取得（日付索引で当日ぶんのみ＝読み取り削減）。ポーリング等から最新の日付を参照するためref併用
+  const dateRef = useRef(date); dateRef.current = date
   const load = useCallback(async () => {
-    try { setAll(await api.get('/api/shipments')) }
+    try { setAll(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) }
     catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [])
-  useEffect(() => { load() }, [load])
+  // 初回＋表示日が変わるたびに読み直す
+  useEffect(() => { setLoading(true); load() }, [date, load])
   useEffect(() => {
     api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
   }, [])
@@ -2542,7 +2545,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     // このポーリングは「他端末からの変更」を拾う補助。
     const tick = async () => {
       if (typeof document !== 'undefined' && document.hidden) return
-      try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 一時的な失敗は無視 */ }
+      try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch (e) { /* 一時的な失敗は無視 */ }
     }
     const t = setInterval(tick, 180000)
     const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) tick() }
@@ -2552,7 +2555,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // 別タブ（出荷登録の編集ウィンドウ等）で更新が入ったら即座に再取得して反映する
   const refetch = useCallback(async () => {
-    try { mergeDiff(await api.get('/api/shipments')) } catch (e) { /* 無視 */ }
+    try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch (e) { /* 無視 */ }
   }, [mergeDiff])
   useShipmentsChanged(refetch)
 
@@ -3522,10 +3525,11 @@ const timeToMin = (t) => {
 }
 const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
 
-function useShipments() {
+// query を渡すと日付索引で範囲取得（例 '?from=...&to=...'）。未指定は全件（フォールバック）。
+function useShipments(query = '') {
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
-  useEffect(() => { api.get('/api/shipments').then(setAll).catch(e => console.error(e)).finally(() => setLoading(false)) }, [])
+  useEffect(() => { api.get('/api/shipments' + (query || '')).then(setAll).catch(e => console.error(e)).finally(() => setLoading(false)) }, [query])
   return { all, loading }
 }
 
@@ -3539,7 +3543,15 @@ const RPT = {
 }
 
 function DashboardPage() {
-  const { all, loading } = useShipments()
+  // 先月〜来月（今日・今週も含む）の範囲だけを日付索引で取得（読み取り削減）
+  const dashRange = (() => {
+    const b = new Date(localToday())
+    const f = new Date(b.getFullYear(), b.getMonth() - 1, 1)
+    const t = new Date(b.getFullYear(), b.getMonth() + 2, 0)
+    const z = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return `?from=${z(f)}&to=${z(t)}`
+  })()
+  const { all, loading } = useShipments(dashRange)
   const isMobile = useIsMobile()
   const today = localToday()
   const ms = mondayOf(today)
@@ -3683,9 +3695,10 @@ function DashboardPage() {
 
 function WeeklySchedulePage() {
   const [date, setDate] = useState(() => localToday())
-  const { all, loading } = useShipments()
   const ms = new Date(date)   // 選択日（既定は本日）を左端に10日分表示
   const days = Array.from({ length: 10 }, (_, i) => { const d = new Date(ms); d.setDate(d.getDate() + i); return d })
+  // 表示中の10日ぶんだけ日付索引で取得（読み取り削減）。日付変更で自動再取得
+  const { all, loading } = useShipments(`?from=${ymd(days[0])}&to=${ymd(days[9])}`)
   const todayStr = localToday()
   return (
     <div style={RPT.wrap}>
@@ -3762,7 +3775,7 @@ function SeikonOutputPage({ isPopup }) {
   const urlAmpm = params.get('ampm') || 'both'
   const [date, setDate] = useState(urlDate || localToday())
   const [ampm, setAmpm] = useState(urlAmpm)   // 'both' | 'AM' | 'PM'
-  const { all, loading } = useShipments()
+  const { all, loading } = useShipments('?date=' + encodeURIComponent(date))   // その日だけ日付索引で取得
   const [customers, setCustomers] = useState([])
   useEffect(() => { api.get('/api/customers').then(setCustomers).catch(() => { /* noop */ }) }, [])
   const custCode = (s) => { const c = customers.find(c => c.id === s.companyId); return c ? (c.customerCode || '') : '' }
@@ -4111,8 +4124,8 @@ function DriverAssignPopupPage({ id }) {
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
-    Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
-      .then(([ss, es]) => { setShipment(ss.find(x => x.id === id) || null); setDrivers(es.filter(e => e.type === 'driver')) })
+    Promise.all([api.get('/api/shipments/' + encodeURIComponent(id)), api.get('/api/employees?drivers=1')])
+      .then(([s, es]) => { setShipment(s && s.id ? s : null); setDrivers(es.filter(e => e.type === 'driver')) })
       .catch(e => console.error(e)).finally(() => setLoading(false))
   }, [id])
   if (loading) return <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
@@ -4257,13 +4270,16 @@ function AssignPage({ isPopup }) {
   const [loading, setLoading] = useState(true)
   const [assignTarget, setAssignTarget] = useState(null)
   const [addrTarget, setAddrTarget] = useState(null)
+  // 表示日だけを取得（日付索引で当日ぶんのみ＝読み取り削減）。ポーリング/通知から最新日付を参照するためref併用
+  const dateRef = useRef(date); dateRef.current = date
   const load = useCallback(async () => {
     try {
-      const [s, e] = await Promise.all([api.get('/api/shipments'), api.get('/api/employees?drivers=1')])
+      const [s, e] = await Promise.all([api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current)), api.get('/api/employees?drivers=1')])
       setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }, [])
-  useEffect(() => { load() }, [load])
+  // 初回＋表示日が変わるたびに読み直す
+  useEffect(() => { setLoading(true); load() }, [date, load])
   useShipmentsChanged(load)   // 別ウィンドウで保存されたら再取得して反映
 
   const rows = all.filter(s => s.date === date)
