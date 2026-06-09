@@ -1749,8 +1749,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl" style={redIf('siteName')}>現 場 名</div>
-                    {/* 現場名：小さくする前にまず最大3行まで折り返し、超えたら段階縮小。IMEは全角かな（PC対応ブラウザのみ） */}
-                    <FitArea value={form.siteName} onChange={set('siteName')} lang="ja" maxLines={3} style={{ ...redIf('siteName'), imeMode: 'active' }} />
+                    {/* 現場名は従来どおり1行・自動縮小（FitField）。IMEは全角かな（PC対応ブラウザのみ） */}
+                    <FitField value={form.siteName} onChange={set('siteName')} lang="ja" style={{ ...redIf('siteName'), imeMode: 'active' }} />
                   </div>
                 </div>
                 <div className="subrow">
@@ -2779,7 +2779,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'vehicleType': return vehicleLabel(s)   // 数量付き（4t×2・7t）
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
       case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
-      case 'mixCode': return mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')
+      case 'mixCode': return mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ')
       case 'volume': {
         const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '  ?' : ''}` }
         return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
@@ -2803,8 +2803,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
       return { ...s, vehicleType: types.join('・'), vehicleItems: types.map(t => ({ type: t, qty: '' })) }
     }
     if (f === 'mixCode') {
+      // 表示の整形（"24　　" や "18-15-20"）を解析。区切りは「-」全角空白・半角空白いずれも1文字＝1セクション境界として位置を保持
       const rows = raw.split('/').map(x => x.trim()).filter(Boolean).slice(0, 2)
-        .map(r => { const p = r.split('-'); return { parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: '' } })
+        .map(r => { const p = r.split(/[-　 ]/); return { parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: '' } })
       const list = rows.length ? rows : [{ parts: ['', '', ''], note: '' }]
       return { ...s, mixRows: list, mixCode: list[0].parts.slice(0, 3).join('-') }
     }
@@ -2871,12 +2872,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
       + (opts.big ? ' big' : '')
       + (opts.xl ? ' xl' : '')
       + (opts.plain ? ' plain' : '')
+    // 数量は編集中も「2桁=黒 / 3桁=赤」の太字を保つ（変更扱いのときは赤優先）
+    const editStyle = (f === 'volume') ? { fontWeight: 700, color: isChanged(s, f) ? '#c81e1e' : volNumColor(v) } : undefined
     const common = {
       key: f + '_e' + (isChanged(s, f) ? '_c' : ''),
       ref: fitRef,
       defaultValue: v,
       placeholder: opts.ph || '',
       onBlur: (e) => saveField(s, f, e.target.value),
+      style: editStyle,
     }
     if (opts.multiline) {
       const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
@@ -2886,7 +2890,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   const cell = (s, f, ph, opts = {}) => {
-    if (inlineEdit && !opts.wrap) return editCell(s, f, { ...opts, ph })
+    if (inlineEdit) return editCell(s, f, { ...opts, ph })
     const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
     const cls = 'sc-in'
       + (isChanged(s, f) ? ' changed' : '')
@@ -2965,6 +2969,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 配合：複数行対応。各行は桁グループごとに分割描画。変更された桁(mix0/mix1/mix2)だけ赤くする（1行目のみ桁単位、追加行は行単位）
   // 空セクションは「-」を出さず全角空白で表示（例 24-- → 24　　）。数字が入った隣同士だけ「-」でつなぐ。
   const cellMix = (s, opts = {}) => {
+    if (inlineEdit) return editCell(s, 'mixCode', { ...opts })
     const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
     const rows = mixRowsOfShip(s).filter(r => r.code || r.note)
     if (!rows.length) {
@@ -3007,6 +3012,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）。
   // 表示色は「2桁=黒太字 / 3桁=赤太字」。変更（赤）扱いのときは赤を優先。整形表示のため直接編集はせず、編集はフォーム(✏️)で。
   const cellVolume = (s) => {
+    const has2 = s.volume2 != null && String(s.volume2).trim() !== ''
+    // PC直接編集：1段のみの量は直接書き換え可（色は editCell 側で桁により付与）。2段ある量は崩れ防止で表示専用
+    if (inlineEdit && !has2) return editCell(s, 'volume', { center: true, big: true })
     const segs = [[s.volume, s.volumePlusA, s.volumeUncertain], [s.volume2, s.volumePlusA2, s.volumeUncertain2]]
       .map(([v, a, u]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${a ? '+a' : ''}${u ? '?' : ''}` } })
       .filter(Boolean)
