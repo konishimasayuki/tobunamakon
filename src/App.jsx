@@ -1043,9 +1043,9 @@ const emptyShipForm = {
 }
 
 // テキストをマス内に収めるよう自動縮小
-function fitText(ta) {
+function fitText(ta, min = 7) {
   if (!ta) return
-  const max = 22, min = 7
+  const max = 22
   let size = max
   ta.style.fontSize = size + 'px'
   let guard = 0
@@ -1161,12 +1161,12 @@ function Chips({ options, value, multi, multiStr, onChange, big }) {
 }
 
 // 固定枠＋分割＋文字自動リサイズの動的マス群（時間 / 備考 / ドライバー連絡 共通）
-function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel }) {
+function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel, minSize = 7 }) {
   const refs = useRef([])
   const composingRef = useRef(false)   // IME変換中フラグ
   const refit = () => requestAnimationFrame(() => {
     if (composingRef.current) return   // 変換中はフォント自動調整を行わない（変換が壊れるため）
-    for (let i = 0; i < items.length; i++) fitText(refs.current[i])
+    for (let i = 0; i < items.length; i++) fitText(refs.current[i], minSize)
   })
   useLayoutEffect(() => { refit() })
   useEffect(() => {
@@ -1192,7 +1192,7 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
               className={it.important ? 'is-imp' : ''}
               value={it.text}
               onCompositionStart={() => { composingRef.current = true }}
-              onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i])) }}
+              onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i], minSize)) }}
               onChange={e => update(i, { text: e.target.value })}
             />
             <div className="ctl">
@@ -1684,7 +1684,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
                 <div className="lbl" style={redIf('times')}>時 間</div>
-                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
+                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" minSize={14} />
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <button type="button" onClick={() => setAmPm('AM')} style={ampmBtnStyle(ampmActive('AM'))}>AM</button>
                   <button type="button" onClick={() => setAmPm('PM')} style={ampmBtnStyle(ampmActive('PM'))}>PM</button>
