@@ -4198,8 +4198,11 @@ function CancelPage() {
   const [cancelled, setCancelled] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [busy, setBusy] = useState(null)        // 復元処理中の伝票id
+  const [busy, setBusy] = useState(null)        // 復元/削除処理中の伝票id
   const [detail, setDetail] = useState(null)    // フォーム表示中の伝票
+  const [selectMode, setSelectMode] = useState(false)   // 選択削除モード
+  const [selected, setSelected] = useState(() => new Set())  // 選択中の伝票id
+  const [deleting, setDeleting] = useState(false)       // 一括削除中
   const load = useCallback(async () => {
     try { const c = await api.get('/api/shipments?cancelled=1'); setCancelled(Array.isArray(c) ? c : []) }
     catch (e) { console.error(e) } finally { setLoading(false) }
@@ -4213,28 +4216,82 @@ function CancelPage() {
     catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
   }
 
+  // 1件を完全削除（元に戻せない）
+  const delOne = async (s) => {
+    if (!window.confirm(`「${s.companyName}」${s.date} の伝票を完全に削除します。\n元に戻せません。よろしいですか？`)) return
+    setBusy(s.id)
+    try {
+      await api.del(`/api/shipments/${s.id}`)
+      notifyShipmentsChanged(); setDetail(null)
+      setSelected(prev => { const n = new Set(prev); n.delete(s.id); return n })
+      await load()
+    } catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
+  }
+
   const q = search.trim().toLowerCase()
   const matchS = (s) => !q || [s.date, s.companyName, s.tradingCompany, s.siteName, firstTimeOf(s)].some(v => String(v || '').toLowerCase().includes(q))
   const rows = [...cancelled.filter(matchS)].sort((a, b) => String(b.cancelledAt || b.date || '').localeCompare(String(a.cancelledAt || a.date || '')))
 
+  const toggleSel = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const allChecked = rows.length > 0 && rows.every(s => selected.has(s.id))
+  const toggleAll = () => setSelected(() => allChecked ? new Set() : new Set(rows.map(s => s.id)))
+  const selCount = rows.filter(s => selected.has(s.id)).length
+  const exitSelect = () => { setSelectMode(false); setSelected(new Set()) }
+  // 選択した伝票をまとめて完全削除（1件ずつ削除APIを順に実行）
+  const delSelected = async () => {
+    const ids = rows.filter(s => selected.has(s.id)).map(s => s.id)
+    if (!ids.length) return
+    if (!window.confirm(`選択した ${ids.length}件 の伝票を完全に削除します。\n元に戻せません。よろしいですか？`)) return
+    setDeleting(true)
+    try {
+      for (const id of ids) { await api.del(`/api/shipments/${id}`) }
+      notifyShipmentsChanged(); exitSelect(); await load()
+    } catch (e) { alert('一部の削除に失敗しました: ' + e.message); await load() } finally { setDeleting(false) }
+  }
+
   return (
     <div style={RPT.wrap}>
       <h2 style={{ margin: '0 0 6px', color: '#1a2332' }}>🗑️ キャンセル伝票</h2>
-      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>削除（キャンセル）した伝票がここに保管されます。右の「復元」を押すと元に戻り、この一覧から消えます。</div>
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 日付・業者名・現場名で絞り込み"
-        style={{ width: '100%', maxWidth: 420, padding: '9px 12px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 14 }} />
+      <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>削除（キャンセル）した伝票がここに保管されます。「復元」で元に戻せます。「完全削除」は元に戻せません。</div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 日付・業者名・現場名で絞り込み"
+          style={{ flex: '1 1 280px', maxWidth: 420, padding: '9px 12px', border: '1.5px solid #dde3ed', borderRadius: 8, fontSize: 14, outline: 'none' }} />
+        {!selectMode
+          ? <button type="button" onClick={() => setSelectMode(true)} disabled={rows.length === 0}
+              style={{ flex: '0 0 auto', border: '1.5px solid #c0392b', background: '#fff', color: '#c0392b', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: rows.length ? 'pointer' : 'default', opacity: rows.length ? 1 : 0.5, whiteSpace: 'nowrap' }}>☑ 選択して削除</button>
+          : <button type="button" onClick={exitSelect} style={{ flex: '0 0 auto', border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>選択をやめる</button>}
+      </div>
+
+      {/* 選択削除モードの操作バー */}
+      {selectMode && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: '#fff5f5', border: '1px solid #f0c0c0', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#3a4a5c', cursor: 'pointer' }}>
+            <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 18, height: 18 }} />全て選択
+          </label>
+          <span style={{ fontSize: 13, color: '#c0392b', fontWeight: 700 }}>{selCount}件 選択中</span>
+          <button type="button" onClick={delSelected} disabled={selCount === 0 || deleting}
+            style={{ marginLeft: 'auto', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: (selCount && !deleting) ? 'pointer' : 'default', opacity: (selCount && !deleting) ? 1 : 0.5, whiteSpace: 'nowrap' }}>
+            {deleting ? '削除中…' : `🗑 選択した${selCount}件を削除`}
+          </button>
+        </div>
+      )}
+
       {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
         : rows.length === 0 ? <div style={{ color: '#9aa7b5', fontSize: 13 }}>キャンセル伝票はありません</div>
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {rows.map(s => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #e3e8ef', borderRadius: 10, padding: '10px 14px', opacity: 0.92 }}>
-                  <span onClick={() => setDetail(s)} style={{ flex: '1 1 260px', minWidth: 0, cursor: 'pointer' }} title="クリックで伝票を表示">
+                  {selectMode && (
+                    <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSel(s.id)} style={{ flex: '0 0 auto', width: 20, height: 20 }} />
+                  )}
+                  <span onClick={() => setDetail(s)} style={{ flex: '1 1 240px', minWidth: 0, cursor: 'pointer' }} title="クリックで伝票を表示">
                     <span style={{ fontSize: 13, color: '#3a4a5c' }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b>　</span>
                     <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
                   </span>
                   <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
                   <button type="button" disabled={busy === s.id} onClick={() => restore(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.7 : 1 }}>{busy === s.id ? '復元中…' : '↩ 復元'}</button>
+                  <button type="button" disabled={busy === s.id || deleting} onClick={() => delOne(s)} title="完全に削除（元に戻せません）" style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.6 : 1 }}>🗑 削除</button>
                 </div>
               ))}
             </div>
@@ -4247,9 +4304,10 @@ function CancelPage() {
               <button type="button" onClick={() => setDetail(null)} style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
             </div>
             <FitToWidth width={720}><DenpyoView s={detail} /></FitToWidth>
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button type="button" onClick={() => setDetail(null)} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>閉じる</button>
-              <button type="button" onClick={() => restore(detail)} disabled={busy} style={{ flex: 1, border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '復元中…' : '↩ 復元する'}</button>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setDetail(null)} disabled={busy} style={{ flex: '1 1 120px', border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>閉じる</button>
+              <button type="button" onClick={() => delOne(detail)} disabled={busy} style={{ flex: '1 1 120px', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>🗑 完全に削除</button>
+              <button type="button" onClick={() => restore(detail)} disabled={busy} style={{ flex: '1 1 120px', border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '↩ 復元する'}</button>
             </div>
           </div>
         </div>
