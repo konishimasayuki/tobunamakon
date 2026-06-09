@@ -173,6 +173,10 @@ input, textarea, select { font-family: inherit; }
 /* 数字が入る列（車種・配合・量・時間）は改行させず四角に収める（省略はしない） */
 .schedule td.sc-nowrap .sc-in { white-space:nowrap; text-overflow:clip; }
 .schedule td.sc-nowrap textarea.sc-ta { white-space:nowrap; }
+/* PC版予定表：直接書き換え可能なセル（マウスを乗せると枠が出て、入力中は黄色くハイライト） */
+.schedule .sc-in.sc-edit { cursor:text; border:1px solid transparent; border-radius:4px; }
+.schedule .sc-in.sc-edit:hover { border-color:#cdd5e0; background:#fbfcfe; }
+.schedule .sc-in.sc-edit:focus { border-color:#1a6a9f; background:#fffbe6; outline:none; box-shadow:0 0 0 2px rgba(26,106,159,0.18); }
 /* 配合の特記事項を配合の3フィールド（数字3つ）に合わせて3分割表示 */
 .schedule .sc-mixnote-line { display:block; width:100%; font-size:clamp(9px,1.1cqi,13px); color:#c81e1e; font-weight:700; text-align:center; line-height:1.25; white-space:nowrap; }
 .schedule .sc-mixnotes { display:flex; width:100%; }
