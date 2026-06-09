@@ -992,18 +992,12 @@ function mixCodeOf(parts) {
   const c = (parts || []).slice(0, 3).join('-')
   return /[0-9]/.test(c) ? c : ''
 }
-// 配合コードの一覧表示：空セクションは「-」を出さず全角空白にする（例 "20--" → "20　　"、"-20-" → "　20　"）。
-// 数字が入った隣り合うセクション同士のときだけ「-」でつなぐ。位置（先頭/中央/末尾）は保持。
+// 配合コードの表示：「-」は残したまま、空セクションを全角空白で表示（例 "24--" → "24-　-　"、"-20-" → "　-20-　"）。
+// 位置（先頭/中央/末尾）が分かり、桁構成も保てる。
 function mixDisplay(code) {
   const s = String(code || '')
   if (!s.includes('-')) return s
-  const parts = s.split('-').map(p => (p || '').trim())
-  let out = ''
-  for (let i = 0; i < 3; i++) {
-    if (i > 0 && parts[i - 1] && parts[i]) out += '-'
-    out += parts[i] || '　'
-  }
-  return out
+  return s.split('-').map(p => (p || '').trim() || '　').join('-')
 }
 function mixRowsOfShip(s) {
   if (Array.isArray(s.mixRows) && s.mixRows.length) {
@@ -2779,7 +2773,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'vehicleType': return vehicleLabel(s)   // 数量付き（4t×2・7t）
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
       case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
-      case 'mixCode': return mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')
+      case 'mixCode': return mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ')
       case 'volume': {
         const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '  ?' : ''}` }
         return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
@@ -3007,7 +3001,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   {parts.map((p, i) => (
                     <Fragment key={i}>
                       {i > 0 && <span>-</span>}
-                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
+                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p || '　'}</span>
                     </Fragment>
                   ))}
                 </span>
