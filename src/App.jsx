@@ -997,6 +997,7 @@ const emptyShipForm = {
   notes: [{ text: '', important: false }],
   driverMessages: [{ text: '', important: false }],
   mapView: null,        // 固定した地図の {lat,lng,zoom}（null=未固定）
+  mapPin: null,          // ピン（マーカー）の正確な位置 {lat,lng}（null=未設定）
   mapArrows: [],         // 矢印 [{x1,y1,x2,y2}]（相対座標0-1）
 }
 
@@ -1214,7 +1215,7 @@ function drawArrow(ctx, x1, y1, x2, y2, w) {
 // 地図のデフォルト縮尺（16からホイール4回ズームイン=20、そこから2回ズームアウト=18）
 const DEFAULT_MAP_ZOOM = 18
 
-function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange, actions }) {
+function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, onArrowsChange, pin, onPinChange, actions }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
@@ -1229,6 +1230,15 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
   // 最新値を非同期コールバック（OverlayView.draw / idle）から参照するための ref
   const arrowsRef = useRef(arrows); arrowsRef.current = arrows
   const onViewRef = useRef(onMapViewChange); onViewRef.current = onMapViewChange
+  // ピン（マーカー）の正確な位置を保存するためのコールバック。マーカーが動くたびに記録する
+  const onPinRef = useRef(onPinChange); onPinRef.current = onPinChange
+  const recordPin = (latLng) => {
+    try {
+      const lat = typeof latLng.lat === 'function' ? latLng.lat() : latLng.lat
+      const lng = typeof latLng.lng === 'function' ? latLng.lng() : latLng.lng
+      if (onPinRef.current && typeof lat === 'number' && typeof lng === 'number') onPinRef.current({ lat, lng })
+    } catch { /* noop */ }
+  }
 
   const doGeocode = (addr) => {
     const g = geocoderRef.current
@@ -1240,6 +1250,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       mapRef.current.setCenter(loc)
       mapRef.current.setZoom(DEFAULT_MAP_ZOOM)
       markerRef.current.setPosition(loc)
+      recordPin(loc)
       setStatus('')
       return
     }
@@ -1249,6 +1260,7 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
         mapRef.current.setCenter(loc)
         mapRef.current.setZoom(DEFAULT_MAP_ZOOM)
         markerRef.current.setPosition(loc)
+        recordPin(loc)
         setStatus('')
       } else {
         setStatus('notfound')
@@ -1370,15 +1382,18 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       geocoderRef.current = new maps.Geocoder()
       // 保存済みの地図ビューがあればその位置・ズームで開く（矢印を正しく重ねるため）
       const hasView = mapView && typeof mapView.lat === 'number'
-      const start = hasView ? { lat: mapView.lat, lng: mapView.lng } : { lat: 35.681236, lng: 139.767125 }
+      // 保存済みピン（ドラッグで決めた正確な位置）があれば最優先で復元する
+      const savedPin = (pin && typeof pin.lat === 'number' && typeof pin.lng === 'number') ? { lat: pin.lat, lng: pin.lng } : null
+      const start = hasView ? { lat: mapView.lat, lng: mapView.lng } : (savedPin || { lat: 35.681236, lng: 139.767125 })
       const map = new maps.Map(mapEl.current, {
         center: start, zoom: hasView ? mapView.zoom : DEFAULT_MAP_ZOOM, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
         gestureHandling: 'cooperative',
       })
       mapRef.current = map
-      markerRef.current = new maps.Marker({ map, position: start, draggable: true })
+      markerRef.current = new maps.Marker({ map, position: savedPin || start, draggable: true })
       markerRef.current.addListener('dragend', () => {
         const pos = markerRef.current.getPosition()
+        recordPin(pos)   // ドラッグした正確な位置を保存（保存後に元へ戻らないように）
         geocoderRef.current.geocode({ location: pos }, (res, st) => {
           const addr = (st === 'OK' && res[0]) ? cleanupJpAddress(res[0].formatted_address) : ''
           if (addr) { selfSetRef.current = addr; onAddressChange(addr) }
@@ -1401,7 +1416,8 @@ function SiteMap({ address, onAddressChange, mapView, onMapViewChange, arrows, o
       map.addListener('idle', saveView)
 
       setStatus('')
-      if (!hasView) {
+      // 保存済みビューもピンも無いときだけ、住所からジオコードしてピンを置く
+      if (!hasView && !savedPin) {
         doGeocode((address && address.trim()) ? address : DEFAULT_SITE_ADDRESS)
       }
       requestAnimationFrame(redraw)
@@ -1515,6 +1531,7 @@ function shipmentToForm(s) {
     notes: sortNotes((Array.isArray(s.notes) && s.notes.length ? s.notes : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important, kind: n.kind || '' }))),
     driverMessages: (Array.isArray(s.driverMessages) && s.driverMessages.length ? s.driverMessages : [{ text: '', important: false }]).map(n => ({ text: String(n.text ?? ''), important: !!n.important })),
     mapView: s.mapView || null,
+    mapPin: s.mapPin || null,
     mapArrows: Array.isArray(s.mapArrows) ? s.mapArrows : [],
   })
 }
@@ -2258,6 +2275,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               onAddressChange={(a) => setVal('siteAddress', a)}
               mapView={form.mapView}
               onMapViewChange={(v) => setVal('mapView', v)}
+              pin={form.mapPin}
+              onPinChange={(p) => setVal('mapPin', p)}
               arrows={form.mapArrows}
               onArrowsChange={(a) => setVal('mapArrows', a)}
               actions={
@@ -3222,6 +3241,8 @@ function ScheduleEditModal({ shipment, driverOptions = [], companyComboOptions =
               onAddressChange={(a) => setForm(f => ({ ...f, siteAddress: a }))}
               mapView={form.mapView}
               onMapViewChange={(v) => setForm(f => ({ ...f, mapView: v }))}
+              pin={form.mapPin}
+              onPinChange={(p) => setForm(f => ({ ...f, mapPin: p }))}
               arrows={form.mapArrows}
               onArrowsChange={(a) => setForm(f => ({ ...f, mapArrows: a }))}
             />
@@ -3826,12 +3847,13 @@ function cleanAddr(a) { return String(a || '').replace(/（緯度経度:[^）]*�
 function AddressAssignBody({ shipment, onSaved, onClose }) {
   const [address, setAddress] = useState(shipment.siteAddress || '')
   const [mapView, setMapView] = useState(shipment.mapView || null)
+  const [pin, setPin] = useState(shipment.mapPin || null)
   const [arrows, setArrows] = useState(Array.isArray(shipment.mapArrows) ? shipment.mapArrows : [])
   const [saving, setSaving] = useState(false)
   const save = async () => {
     setSaving(true)
     try {
-      const u = await api.put(`/api/shipments/${shipment.id}?assign=1`, { siteAddress: address, mapView, mapArrows: arrows })
+      const u = await api.put(`/api/shipments/${shipment.id}?assign=1`, { siteAddress: address, mapView, mapPin: pin, mapArrows: arrows })
       notifyShipmentsChanged(); onSaved && onSaved(u)
     } catch (e) { alert('エラー: ' + e.message); setSaving(false) }
   }
@@ -3843,7 +3865,7 @@ function AddressAssignBody({ shipment, onSaved, onClose }) {
       <label style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', display: 'block', marginBottom: 4 }}>現場住所（入力すると地図に反映されます）</label>
       <input value={address} onChange={e => setAddress(e.target.value)} placeholder={DEFAULT_SITE_ADDRESS}
         style={{ width: '100%', fontSize: 15, padding: '9px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8, boxSizing: 'border-box', marginBottom: 10 }} />
-      <SiteMap address={address} onAddressChange={setAddress} mapView={mapView} onMapViewChange={setMapView} arrows={arrows} onArrowsChange={setArrows} />
+      <SiteMap address={address} onAddressChange={setAddress} mapView={mapView} onMapViewChange={setMapView} pin={pin} onPinChange={setPin} arrows={arrows} onArrowsChange={setArrows} />
       <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
         <button type="button" onClick={onClose} disabled={saving} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
         <button type="button" onClick={save} disabled={saving} style={{ flex: 1, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? '保存中…' : '登録'}</button>

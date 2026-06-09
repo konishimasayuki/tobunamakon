@@ -27,6 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (Array.isArray(body.drivers)) { patch.drivers = body.drivers.map((d: any) => ({ id: d.id || '', name: d.name || '' })); changed.push('drivers') }
       if (body.siteAddress !== undefined) patch.siteAddress = String(body.siteAddress || '')
       if (body.mapView !== undefined) patch.mapView = body.mapView || null
+      if (body.mapPin !== undefined) patch.mapPin = body.mapPin || null
       if (Array.isArray(body.mapArrows)) patch.mapArrows = body.mapArrows
       const prevCf = Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []
       const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
@@ -143,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, orderContact, siteContact, drivers, notes, driverMessages, mapView, mapArrows, pdfData, pdfName } = req.body
+    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, orderContact, siteContact, drivers, notes, driverMessages, mapView, mapPin, mapArrows, pdfData, pdfName } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const newId = uuidv4()
@@ -182,6 +183,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         notes: Array.isArray(notes) ? notes : [],
         driverMessages: Array.isArray(driverMessages) ? driverMessages : [],
         mapView: mapView || null,
+        mapPin: mapPin || null,
         mapArrows: Array.isArray(mapArrows) ? mapArrows : [],
         hasPdf: pdf.hasPdf,
         pdfName: pdf.pdfName,
@@ -202,7 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, orderContact, siteContact, drivers, notes, driverMessages, changedFields, mapView, mapArrows, pdfData, pdfName } = req.body
+    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeUncertain, volumePlusA, volume2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, orderContact, siteContact, drivers, notes, driverMessages, changedFields, mapView, mapPin, mapArrows, pdfData, pdfName } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const existing = await redis.hgetall(`shipment:${id}`)
@@ -247,6 +249,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         notes: Array.isArray(notes) ? notes : [],
         driverMessages: Array.isArray(driverMessages) ? driverMessages : [],
         mapView: mapView !== undefined ? (mapView || null) : ((existing as any).mapView ?? null),
+        mapPin: mapPin !== undefined ? (mapPin || null) : ((existing as any).mapPin ?? null),
         mapArrows: Array.isArray(mapArrows) ? mapArrows : (Array.isArray((existing as any).mapArrows) ? (existing as any).mapArrows : []),
         changedFields: Array.isArray(changedFields) ? changedFields : (Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []),
         updatedAt: new Date().toISOString(),
