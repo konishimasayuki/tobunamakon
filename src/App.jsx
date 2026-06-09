@@ -1980,13 +1980,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <div className="lbl" style={redIf('notes')}>備 考</div>
                 <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" />
               </div>
-              <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
+              <div className="cell" style={{ flex: '0 0 auto', minWidth: 210 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
                 {(() => {
                   const msgNote = (form.notes || []).find(n => n && n.kind === 'msg')
                   const used = msgNote ? String(msgNote.text || '').split(/\s+/).filter(Boolean) : []
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 2 }}>
                       {NOTE_MESSAGES.map(m => {
                         const isUsed = used.includes(m)
                         return (
@@ -2886,7 +2886,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   const cell = (s, f, ph, opts = {}) => {
-    if (inlineEdit) return editCell(s, f, { ...opts, ph })
+    if (inlineEdit && !opts.wrap) return editCell(s, f, { ...opts, ph })
     const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
     const cls = 'sc-in'
       + (isChanged(s, f) ? ' changed' : '')
@@ -2963,8 +2963,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 配合：複数行対応。各行は桁グループごとに分割描画。変更された桁(mix0/mix1/mix2)だけ赤くする（1行目のみ桁単位、追加行は行単位）
+  // 空セクションは「-」を出さず全角空白で表示（例 24-- → 24　　）。数字が入った隣同士だけ「-」でつなぐ。
   const cellMix = (s, opts = {}) => {
-    if (inlineEdit) return editCell(s, 'mixCode', { ...opts })
     const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
     const rows = mixRowsOfShip(s).filter(r => r.code || r.note)
     if (!rows.length) {
@@ -2974,19 +2974,24 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return (
       <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '') + '_n' + rows.length} style={{ pointerEvents: 'none' }}>
         {rows.map((r, ri) => {
-          const parts = String(r.code || '').split('-')
+          const parts = String(r.code || '').split('-').map(p => (p || '').trim())
           // 各配合行の下にその行の特記を表示（配合→特記→配合→特記…）
           const noteRed = ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))
           return (
             <Fragment key={ri}>
               {r.code ? (
                 <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
-                  {parts.map((p, i) => (
-                    <Fragment key={i}>
-                      {i > 0 && <span>-</span>}
-                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
-                    </Fragment>
-                  ))}
+                  {[0, 1, 2].map(i => {
+                    const p = parts[i] || ''
+                    const showDash = i > 0 && parts[i - 1] && parts[i]   // 両側に数字があるときだけ「-」
+                    const red = wholeRed || (ri === 0 && isChanged(s, 'mix' + i))
+                    return (
+                      <Fragment key={i}>
+                        {showDash ? <span>-</span> : null}
+                        <span style={{ color: red ? '#c81e1e' : undefined }}>{p || '　'}</span>
+                      </Fragment>
+                    )
+                  })}
                 </span>
               ) : null}
               {(r.note && r.note.trim()) ? (
@@ -3000,11 +3005,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）。
-  // 表示色は「2桁=黒太字 / 3桁=赤太字」。変更（赤）扱いのときは赤を優先。
+  // 表示色は「2桁=黒太字 / 3桁=赤太字」。変更（赤）扱いのときは赤を優先。整形表示のため直接編集はせず、編集はフォーム(✏️)で。
   const cellVolume = (s) => {
-    const has2 = s.volume2 != null && String(s.volume2).trim() !== ''
-    // PC直接編集：1段のみの量はそのまま書き換え可。2段ある量は崩れ防止のため表示専用のまま
-    if (inlineEdit && !has2) return editCell(s, 'volume', { center: true, big: true })
     const segs = [[s.volume, s.volumePlusA, s.volumeUncertain], [s.volume2, s.volumePlusA2, s.volumeUncertain2]]
       .map(([v, a, u]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${a ? '+a' : ''}${u ? '?' : ''}` } })
       .filter(Boolean)
