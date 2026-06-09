@@ -2779,7 +2779,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'vehicleType': return vehicleLabel(s)   // 数量付き（4t×2・7t）
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
       case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
-      case 'mixCode': return mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ')
+      case 'mixCode': return mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ')
       case 'volume': {
         const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '  ?' : ''}` }
         return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
@@ -2997,24 +2997,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return (
       <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '') + '_n' + rows.length} style={{ pointerEvents: 'none' }}>
         {rows.map((r, ri) => {
-          const parts = String(r.code || '').split('-').map(p => (p || '').trim())
+          const parts = String(r.code || '').split('-')
           // 各配合行の下にその行の特記を表示（配合→特記→配合→特記…）
           const noteRed = ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))
           return (
             <Fragment key={ri}>
               {r.code ? (
                 <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
-                  {[0, 1, 2].map(i => {
-                    const p = parts[i] || ''
-                    const showDash = i > 0 && parts[i - 1] && parts[i]   // 両側に数字があるときだけ「-」
-                    const red = wholeRed || (ri === 0 && isChanged(s, 'mix' + i))
-                    return (
-                      <Fragment key={i}>
-                        {showDash ? <span>-</span> : null}
-                        <span style={{ color: red ? '#c81e1e' : undefined }}>{p || '　'}</span>
-                      </Fragment>
-                    )
-                  })}
+                  {parts.map((p, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <span>-</span>}
+                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
+                    </Fragment>
+                  ))}
                 </span>
               ) : null}
               {(r.note && r.note.trim()) ? (
