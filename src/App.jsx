@@ -983,10 +983,12 @@ const emptyShipForm = {
   volume: '',
   volumeUncertain: false,
   volumePlusA: false,        // 量に「+a」を付ける
+  volumeRange: false,        // 量を範囲（13〜14）で入力するか（UI用）
   hasVolume2: false,         // 2段目の量を使うか（UI用）
   volume2: '',
   volumeUncertain2: false,
   volumePlusA2: false,
+  volumeRange2: false,
   pdfName: '',               // 添付PDFのファイル名
   pdfData: '',               // 添付PDFの本体(dataURL)。保存時のみ送信、未変更は空
   hasPdf: false,             // 既存伝票にPDFが添付済みか
@@ -1515,6 +1517,8 @@ function shipmentToForm(s) {
     volume: (s.volume ?? '') === '' ? '' : String(s.volume),
     volumeUncertain: !!s.volumeUncertain,
     volumePlusA: !!s.volumePlusA,
+    volumeRange: String(s.volume ?? '').includes('〜'),
+    volumeRange2: String(s.volume2 ?? '').includes('〜'),
     volume2: (s.volume2 ?? '') === '' ? '' : String(s.volume2),
     volumeUncertain2: !!s.volumeUncertain2,
     volumePlusA2: !!s.volumePlusA2,
@@ -1794,21 +1798,44 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const vKey = idx === 0 ? 'volume' : 'volume2'
                       const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
                       const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+                      const rKey = idx === 0 ? 'volumeRange' : 'volumeRange2'
+                      const raw = String(form[vKey] || '')
+                      const sepI = raw.indexOf('〜')
+                      const vFrom = sepI >= 0 ? raw.slice(0, sepI) : raw
+                      const vTo = sepI >= 0 ? raw.slice(sepI + 1) : ''
+                      const isRange = !!form[rKey] || sepI >= 0
+                      const clean = (s) => z2h(s).replace(/．/g, '.').replace(/[^0-9.]/g, '')
+                      const combine = (from, to) => (String(to) !== '' ? `${from}〜${to}` : from)
+                      const setFrom = (val, composing) => { const f = composing ? val : clean(val); setVal(vKey, combine(f, vTo)) }
+                      const setTo = (val, composing) => { const t = composing ? val : clean(val); setVal(vKey, combine(vFrom, t)) }
+                      const toggleRange = () => setForm(f => { const cur = String(f[vKey] || ''); const i = cur.indexOf('〜'); const from = i >= 0 ? cur.slice(0, i) : cur; const on = !(f[rKey] || i >= 0); return { ...f, [rKey]: on, [vKey]: from } })
+                      // ㎥が3桁(整数部3桁以上)のとき文字を大きく
+                      const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
+                      const inStyle = (s) => ({ ...redIf('volume'), width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30) })
                       return (
-                        <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
-                          <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
+                        <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'center', marginTop: idx ? 4 : 0, gap: 2 }}>
+                          <span style={{ flex: '0 0 16px', display: 'flex', justifyContent: 'center' }}>
                             {idx === 1 ? (
                               <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
-                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
                             ) : null}
                           </span>
-                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]}
-                            onChange={e => { const v = e.target.value; setVal(vKey, e.nativeEvent?.isComposing ? v : z2h(v).replace(/．/g, '.').replace(/[^0-9.]/g, '')) }}
-                            onCompositionEnd={e => setVal(vKey, z2h(e.target.value).replace(/．/g, '.').replace(/[^0-9.]/g, ''))} />
+                          <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
+                            onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                            onCompositionEnd={e => setFrom(e.target.value, false)} />
+                          {isRange && (
+                            <>
+                              <span style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>〜</span>
+                              <input type="text" inputMode="decimal" style={inStyle(vTo)} value={vTo}
+                                onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
+                                onCompositionEnd={e => setTo(e.target.value, false)} />
+                            </>
+                          )}
                           <span className="unit" style={redIf('volume')}>m<sup>3</sup>
                             {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
                             <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
                           </span>
+                          <span className={'qlabel' + (isRange ? ' on' : '')} title="範囲入力（13〜14）" onClick={toggleRange}>〜</span>
                           <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
                           <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
                         </div>
@@ -3345,19 +3372,41 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
             const vKey = idx === 0 ? 'volume' : 'volume2'
             const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
             const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+            const rKey = idx === 0 ? 'volumeRange' : 'volumeRange2'
+            const raw = String(form[vKey] || '')
+            const sepI = raw.indexOf('〜')
+            const vFrom = sepI >= 0 ? raw.slice(0, sepI) : raw
+            const vTo = sepI >= 0 ? raw.slice(sepI + 1) : ''
+            const isRange = !!form[rKey] || sepI >= 0
+            const clean = (s) => z2h(s).replace(/．/g, '.').replace(/[^0-9.]/g, '')
+            const combine = (from, to) => (String(to) !== '' ? `${from}〜${to}` : from)
+            const setFrom = (val, c) => setVal(vKey, combine(c ? val : clean(val), vTo))
+            const setTo = (val, c) => setVal(vKey, combine(vFrom, c ? val : clean(val)))
+            const toggleRange = () => setForm(f => { const cur = String(f[vKey] || ''); const i = cur.indexOf('〜'); const from = i >= 0 ? cur.slice(0, i) : cur; return { ...f, [rKey]: !(f[rKey] || i >= 0), [vKey]: from } })
+            const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
             const sq = (on, label, onClick) => (
               <button type="button" onClick={onClick} style={{ flex: '0 0 auto', minWidth: 48, height: 50, padding: '0 10px', borderRadius: 11, fontSize: 16, fontWeight: 700, cursor: 'pointer', boxSizing: 'border-box', border: on ? '2px solid #c0392b' : '1.5px solid #d4dbe5', background: on ? '#c0392b' : '#fff', color: on ? '#fff' : '#98a2b3' }}>{label}</button>
             )
             return (
               <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: idx ? 8 : 0 }}>
-                <input value={form[vKey]} inputMode="decimal" placeholder="0"
-                  onChange={e => { const v = e.target.value; setVal(vKey, e.nativeEvent?.isComposing ? v : z2h(v).replace(/．/g, '.').replace(/[^0-9.]/g, '')) }}
-                  onCompositionEnd={e => setVal(vKey, z2h(e.target.value).replace(/．/g, '.').replace(/[^0-9.]/g, ''))}
-                  style={{ ...inp, flex: 1 }} />
+                <input value={vFrom} inputMode="decimal" placeholder="0"
+                  onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                  onCompositionEnd={e => setFrom(e.target.value, false)}
+                  style={{ ...inp, flex: 1, fontSize: big(vFrom) ? 22 : 16, fontWeight: big(vFrom) ? 700 : 400 }} />
+                {isRange && (
+                  <>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: '#101828', flex: '0 0 auto' }}>〜</span>
+                    <input value={vTo} inputMode="decimal" placeholder="0"
+                      onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
+                      onCompositionEnd={e => setTo(e.target.value, false)}
+                      style={{ ...inp, flex: 1, fontSize: big(vTo) ? 22 : 16, fontWeight: big(vTo) ? 700 : 400 }} />
+                  </>
+                )}
                 <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>m³</span>
+                {sq(isRange, '〜', toggleRange)}
                 {sq(form[aKey], '+a', () => setVal(aKey, !form[aKey]))}
                 {sq(form[uKey], '?', () => setVal(uKey, !form[uKey]))}
-                {idx === 1 && sq(false, '×', () => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false })))}
+                {idx === 1 && sq(false, '×', () => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false })))}
               </div>
             )
           })}
