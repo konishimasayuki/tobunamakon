@@ -924,7 +924,7 @@ const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
 const NOTE_TAGS = ['領', '追']
 const TEST_TAGS = ['現TP', '工TP']            // 試験（現TP=現場 / 工TP=工場）。生コン出荷予定表でのみ集計表示
-const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX', '住所TEL有']   // 備考に追加できる定型メッセージ
+const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX', '住所TEL有', '7t確認', '大型確認']   // 備考に追加できる定型メッセージ
 // 備考(notes)の並び順：手入力(manual)→荷下ろし(unload)→メッセージ追加(msg)。出力もこの順になる
 const NOTE_KIND_RANK = { unload: 1, msg: 2 }
 const noteRank = (n) => NOTE_KIND_RANK[n && n.kind] ?? 0
@@ -991,6 +991,19 @@ function vehicleLabel(s) {
 function mixCodeOf(parts) {
   const c = (parts || []).slice(0, 3).join('-')
   return /[0-9]/.test(c) ? c : ''
+}
+// 配合コードの一覧表示：空セクションは「-」を出さず全角空白にする（例 "20--" → "20　　"、"-20-" → "　20　"）。
+// 数字が入った隣り合うセクション同士のときだけ「-」でつなぐ。位置（先頭/中央/末尾）は保持。
+function mixDisplay(code) {
+  const s = String(code || '')
+  if (!s.includes('-')) return s
+  const parts = s.split('-').map(p => (p || '').trim())
+  let out = ''
+  for (let i = 0; i < 3; i++) {
+    if (i > 0 && parts[i - 1] && parts[i]) out += '-'
+    out += parts[i] || '　'
+  }
+  return out
 }
 function mixRowsOfShip(s) {
   if (Array.isArray(s.mixRows) && s.mixRows.length) {
@@ -1090,6 +1103,48 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
       onCompositionStart={() => { composingRef.current = true }}
       onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
+  )
+}
+
+// 折り返し対応の自動縮小フィールド（現場名用）。まず最大 maxLines 行まで折り返し、
+// それでも収まらない時だけフォントを段階的に縮小する（＝小さくする前に改行する）。
+function FitArea({ value, onChange, placeholder, lang, style, maxLines = 3, baseSize = 15, min = 11 }) {
+  const ref = useRef(null)
+  const composingRef = useRef(false)
+  const fit = () => {
+    if (composingRef.current) return
+    const el = ref.current
+    if (!el) return
+    let size = baseSize
+    el.style.fontSize = size + 'px'
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+    let guard = 0
+    // 内容が maxLines 行を超える間だけ、少しずつフォントを縮小する
+    while (el.scrollHeight > size * 1.3 * maxLines + 2 && size > min && guard < 60) {
+      size -= 0.5
+      el.style.fontSize = size + 'px'
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+      guard++
+    }
+  }
+  useLayoutEffect(() => { requestAnimationFrame(fit) })
+  useEffect(() => {
+    const on = () => requestAnimationFrame(fit)
+    window.addEventListener('resize', on)
+    window.addEventListener('orientationchange', on)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fit))
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <textarea ref={ref} className="f" rows={1} value={value} lang={lang}
+      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
+      onCompositionStart={() => { composingRef.current = true }}
+      onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
+      placeholder={placeholder}
+      style={{ resize: 'none', overflow: 'hidden', lineHeight: 1.3, whiteSpace: 'normal', wordBreak: 'break-word', flex: 'none', ...style }} />
   )
 }
 
@@ -1694,8 +1749,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl" style={redIf('siteName')}>現 場 名</div>
-                    {/* 現場名はIMEを全角かなで開く（PC/対応ブラウザ。iOSは端末キーボード依存） */}
-                    <FitField value={form.siteName} onChange={set('siteName')} lang="ja" style={{ ...redIf('siteName'), imeMode: 'active' }} />
+                    {/* 現場名：小さくする前にまず最大3行まで折り返し、超えたら段階縮小。IMEは全角かな（PC対応ブラウザのみ） */}
+                    <FitArea value={form.siteName} onChange={set('siteName')} lang="ja" maxLines={3} style={{ ...redIf('siteName'), imeMode: 'active' }} />
                   </div>
                 </div>
                 <div className="subrow">
@@ -1860,7 +1915,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const toggleRange = () => setForm(f => { const cur = String(f[vKey] || ''); const i = cur.indexOf('〜'); const from = i >= 0 ? cur.slice(0, i) : cur; const on = !(f[rKey] || i >= 0); return { ...f, [rKey]: on, [vKey]: from } })
                       // ㎥が3桁(整数部3桁以上)のとき文字を大きく
                       const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
-                      const inStyle = (s) => ({ ...redIf('volume'), width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30) })
+                      // 量の数値：整数2桁以下=黒太字／3桁以上=赤太字（編集で変更扱いのときは赤を優先）
+                      const inStyle = (s) => ({ width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30), fontWeight: 700, color: editChanged.includes('volume') ? '#c81e1e' : volNumColor(s) })
                       return (
                         <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'center', marginTop: idx ? 4 : 0, gap: 2 }}>
                           <span style={{ flex: '0 0 16px', display: 'flex', justifyContent: 'center' }}>
@@ -2481,9 +2537,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                             style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a>
                         : '—'}
                     </td>
-                    <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cleanAddr(s.siteAddress) || '—'}</td>
+                    <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{addrCity(s.siteAddress) || '—'}</td>
                     <td style={S.td}>{vehicleLabel(s) || '—'}</td>
-                    <td style={S.td}>{mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ') || '—'}</td>
+                    <td style={S.td}>{mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ') || '—'}</td>
                     <td style={S.td}>{s.cementType || '—'}</td>
                     <td style={S.td}><VolNum s={s} unit fallback="—" /></td>
                     <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
@@ -4293,6 +4349,12 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
 
 // 現場住所のジオコード余り（緯度経度メモ）を除いた表示用住所
 function cleanAddr(a) { return String(a || '').replace(/（緯度経度:[^）]*）/g, '').trim() }
+// 一覧の住所列：市区郡までを表示し、それ以降（町名・番地）は省く（例 "佐賀県神埼市神埼町志波屋2020" → "佐賀県神埼市"）
+function addrCity(a) {
+  const s = cleanAddr(a)
+  const m = s.match(/^(.*?[市区郡])/)
+  return m ? m[1] : s
+}
 
 // 住所設定（モーダル共用）：住所入力＋地図反映で登録
 function AddressAssignBody({ shipment, onSaved, onClose }) {
