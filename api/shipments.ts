@@ -32,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const prevCf = Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []
       const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
       const updated = { ...existing, ...patch, changedFields, updatedAt: new Date().toISOString() }
+      ;(updated as any).history = appendHistory(existing, updated)
       await redis.hset(`shipment:${id}`, updated)
       await indexShipment(id as string, (updated as any).date)
       return res.status(200).json(updated)
@@ -190,6 +191,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cancelled: false,
         cancelledAt: '',
         changedFields: [],
+        history: [],
         createdAt: now, updatedAt: now,
       }
       await redis.hset(`shipment:${newId}`, shipment)
@@ -254,6 +256,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         changedFields: Array.isArray(changedFields) ? changedFields : (Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []),
         updatedAt: new Date().toISOString(),
       }
+      ;(updated as any).history = appendHistory(existing, updated)
       await redis.hset(`shipment:${id}`, updated)
       await indexShipment(id as string, (updated as any).date)
       return res.status(200).json(updated)
@@ -303,6 +306,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 // キャンセル済み判定（Redisの真偽値表現ゆれに対応）
 function isCancelled(s: any): boolean {
   return !!s && (s.cancelled === true || s.cancelled === 'true' || s.cancelled === 1 || s.cancelled === '1')
+}
+
+// ===== 変更履歴（出荷登録の地図下に表示）=====
+// 編集のたびに「変更された項目・変更前→変更後の値」を記録し、新しい順に最大30件保持する。
+const HISTORY_FIELDS: [string, string][] = [
+  ['date', '日付'], ['companyName', '業者名'], ['tradingCompany', '商社名'], ['siteName', '現場名'],
+  ['siteAddress', '現場住所'], ['times', '時間'], ['vehicleType', '車種'], ['mixCode', '配合'],
+  ['cementType', 'セメント種'], ['volume', '数量'], ['pourLocation', '打設箇所'], ['placements', '荷下ろし'],
+  ['noteTags', '特記'], ['testTags', '試験'], ['orderContact', '連絡先'], ['siteContact', '現場連絡先'],
+  ['notes', '備考'], ['drivers', '担当'],
+]
+function histVal(f: string, s: any): string {
+  switch (f) {
+    case 'times': return (Array.isArray(s.times) ? s.times.map((t: any) => (t && t.text != null) ? t.text : t) : []).map((x: any) => String(x ?? '').trim()).filter(Boolean).join(' / ')
+    case 'drivers': return (Array.isArray(s.drivers) ? s.drivers.map((d: any) => d && d.name) : []).map((x: any) => String(x ?? '').trim()).filter(Boolean).join('・')
+    case 'notes': return (Array.isArray(s.notes) ? s.notes.map((n: any) => (n && n.text != null) ? n.text : n) : []).map((x: any) => String(x ?? '').trim()).filter(Boolean).join(' / ')
+    case 'placements': return (Array.isArray(s.placements) ? s.placements : []).join('・')
+    case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
+    case 'testTags': return (Array.isArray(s.testTags) ? s.testTags : []).join('・')
+    case 'vehicleType': {
+      if (Array.isArray(s.vehicleItems) && s.vehicleItems.length) return s.vehicleItems.map((v: any) => v && v.type).filter(Boolean).join('・')
+      return String(s.vehicleType || '')
+    }
+    case 'mixCode': {
+      if (Array.isArray(s.mixRows) && s.mixRows.length) {
+        return s.mixRows.map((r: any) => (Array.isArray(r?.parts) ? r.parts.slice(0, 3).join('-') : '')).filter((c: string) => /[0-9]/.test(c)).join(' / ')
+      }
+      return /[0-9]/.test(String(s.mixCode || '')) ? String(s.mixCode) : ''
+    }
+    case 'volume': {
+      const seg = (v: any, a: any, u: any) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '?' : ''}` }
+      return [seg(s.volume, s.volumePlusA, s.volumeUncertain), seg(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
+    }
+    default: return String(s[f] ?? '')
+  }
+}
+// existing(変更前)とupdated(変更後)を比べ、変わった項目だけ履歴へ1エントリ追加して返す
+function appendHistory(existing: any, updated: any): any[] {
+  const prev = Array.isArray(existing?.history) ? existing.history : []
+  const items: { f: string; from: string; to: string }[] = []
+  for (const [key, label] of HISTORY_FIELDS) {
+    const from = histVal(key, existing)
+    const to = histVal(key, updated)
+    if (from !== to) items.push({ f: label, from, to })
+  }
+  if (!items.length) return prev
+  return [{ t: new Date().toISOString(), items }, ...prev].slice(0, 30)
 }
 
 // ===== 日付インデックス（出荷予定表・配送割り当て等の「特定日」取得を高速化）=====

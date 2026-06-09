@@ -287,6 +287,10 @@ const S = {
 // レスポンシブ用フック（モバイル/タブレット判定）
 // ============================================================
 const MOBILE_BP = 768   // これ未満をモバイル扱い（iPhone / 縦持ちスマホ）
+// タッチ端末か（iPhone/iPad＝true、デスクトップPC＝false）。横向きiPadは幅だけでは
+// ノートPCと区別できないため、生コン出力の「PCのみ」判定に使う。
+const IS_TOUCH_DEVICE = typeof navigator !== 'undefined' &&
+  ((navigator.maxTouchPoints || 0) > 0 || (typeof window !== 'undefined' && 'ontouchstart' in window))
 
 function useIsMobile(bp = MOBILE_BP) {
   const [mobile, setMobile] = useState(
@@ -798,7 +802,7 @@ function CustomersPage() {
   useEffect(() => { load() }, [load])
 
   // カタカナ→ひらがなに正規化（ひらがなで検索してもカナ欄にヒットする）
-  const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+  const toHira = kanaToHira
   const filtered = customers.filter(c => {
     if (!search) return true
     const q = toHira(search)
@@ -920,7 +924,7 @@ const PLACEMENT_TYPES = ['クレーン', 'F1', 'ポンプ', '舟下し']
 const POUR_LOCATIONS = ['入力する', 'ステ', '増', '立上り', 'ベース', '土間', 'タタキ']
 const NOTE_TAGS = ['領', '追']
 const TEST_TAGS = ['現TP', '工TP']            // 試験（現TP=現場 / 工TP=工場）。生コン出荷予定表でのみ集計表示
-const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX', '住所TEL有']   // 備考に追加できる定型メッセージ
+const NOTE_MESSAGES = ['出荷前TEL', '出る時TEL', 'FAX', '住所TEL有', '7t確認', '大型確認']   // 備考に追加できる定型メッセージ
 // 備考(notes)の並び順：手入力(manual)→荷下ろし(unload)→メッセージ追加(msg)。出力もこの順になる
 const NOTE_KIND_RANK = { unload: 1, msg: 2 }
 const noteRank = (n) => NOTE_KIND_RANK[n && n.kind] ?? 0
@@ -928,8 +932,27 @@ const sortNotes = (arr) => (Array.isArray(arr) ? arr : [])
   .map((n, i) => [n, i])
   .sort((a, b) => (noteRank(a[0]) - noteRank(b[0])) || (a[1] - b[1]))
   .map(x => x[0])
-// カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる）
-const kanaToHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+// 半角カタカナ→全角カタカナ（濁点・半濁点を合成）。半角カナで入力・登録された文字も検索でヒットさせる
+const HK_BASE = 'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ'
+const ZK_BASE = 'ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン'
+const DAKUON = { 'カ': 'ガ', 'キ': 'ギ', 'ク': 'グ', 'ケ': 'ゲ', 'コ': 'ゴ', 'サ': 'ザ', 'シ': 'ジ', 'ス': 'ズ', 'セ': 'ゼ', 'ソ': 'ゾ', 'タ': 'ダ', 'チ': 'ヂ', 'ツ': 'ヅ', 'テ': 'デ', 'ト': 'ド', 'ハ': 'バ', 'ヒ': 'ビ', 'フ': 'ブ', 'ヘ': 'ベ', 'ホ': 'ボ', 'ウ': 'ヴ' }
+const HANDAKUON = { 'ハ': 'パ', 'ヒ': 'ピ', 'フ': 'プ', 'ヘ': 'ペ', 'ホ': 'ポ' }
+function han2zenKana(str) {
+  const s = String(str || '')
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    const idx = HK_BASE.indexOf(s[i])
+    if (idx < 0) { out += s[i]; continue }
+    let z = ZK_BASE[idx]
+    const next = s[i + 1]
+    if (next === 'ﾞ' && DAKUON[z]) { z = DAKUON[z]; i++ }
+    else if (next === 'ﾟ' && HANDAKUON[z]) { z = HANDAKUON[z]; i++ }
+    out += z
+  }
+  return out
+}
+// カタカナ→ひらがなに正規化（ひらがな検索でカナ欄にヒットさせる。半角カナも対象）
+const kanaToHira = (str) => han2zenKana(String(str || '').toLowerCase()).replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
 const DEFAULT_SITE_ADDRESS = '〒842-0121 佐賀県神埼市神埼町志波屋２０２０'
 // 全角数字→半角数字（出荷登録の入力用）。数字以外はそのまま
 const z2h = (str) => String(str ?? '').replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
@@ -938,6 +961,22 @@ const z2h = (str) => String(str ?? '').replace(/[０-９]/g, ch => String.fromCh
 function shipVolStr(s) {
   const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
   return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
+}
+
+// 量の数値表示色：整数部が3桁以上(100㎥〜)なら赤、2桁以下なら黒。常に太字（全画面共通ルール）。
+// 範囲入力（例 13〜14）は「〜」より前の数値の桁で判定する。
+function volNumColor(v) {
+  const first = String(v ?? '').split('〜')[0]
+  const intLen = first.trim().replace(/[^0-9.]/g, '').split('.')[0].replace(/^0+(?=\d)/, '').length
+  return intLen >= 3 ? '#c81e1e' : '#111'
+}
+// 量を「2桁=黒太字 / 3桁=赤太字」で表示する共通レンダラ。unit=true で m³ を付与。値が無ければ fallback を返す
+function VolNum({ s, unit = false, sep = ' / ', fallback = null }) {
+  const segs = [[s.volume, s.volumePlusA, s.volumeUncertain], [s.volume2, s.volumePlusA2, s.volumeUncertain2]]
+    .map(([v, a, u]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
+    .filter(Boolean)
+  if (!segs.length) return fallback
+  return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}<span style={{ fontWeight: 700, color: volNumColor(seg.num) }}>{seg.text}</span></Fragment>))}</>
 }
 
 // 車種表示: vehicleItems があれば車種名を「・」連結、無ければ vehicleType をそのまま（台数は表記しない）
@@ -952,6 +991,19 @@ function vehicleLabel(s) {
 function mixCodeOf(parts) {
   const c = (parts || []).slice(0, 3).join('-')
   return /[0-9]/.test(c) ? c : ''
+}
+// 配合コードの一覧表示：空セクションは「-」を出さず全角空白にする（例 "20--" → "20　　"、"-20-" → "　20　"）。
+// 数字が入った隣り合うセクション同士のときだけ「-」でつなぐ。位置（先頭/中央/末尾）は保持。
+function mixDisplay(code) {
+  const s = String(code || '')
+  if (!s.includes('-')) return s
+  const parts = s.split('-').map(p => (p || '').trim())
+  let out = ''
+  for (let i = 0; i < 3; i++) {
+    if (i > 0 && parts[i - 1] && parts[i]) out += '-'
+    out += parts[i] || '　'
+  }
+  return out
 }
 function mixRowsOfShip(s) {
   if (Array.isArray(s.mixRows) && s.mixRows.length) {
@@ -979,10 +1031,12 @@ const emptyShipForm = {
   volume: '',
   volumeUncertain: false,
   volumePlusA: false,        // 量に「+a」を付ける
+  volumeRange: false,        // 量を範囲（13〜14）で入力するか（UI用）
   hasVolume2: false,         // 2段目の量を使うか（UI用）
   volume2: '',
   volumeUncertain2: false,
   volumePlusA2: false,
+  volumeRange2: false,
   pdfName: '',               // 添付PDFのファイル名
   pdfData: '',               // 添付PDFの本体(dataURL)。保存時のみ送信、未変更は空
   hasPdf: false,             // 既存伝票にPDFが添付済みか
@@ -1002,9 +1056,9 @@ const emptyShipForm = {
 }
 
 // テキストをマス内に収めるよう自動縮小
-function fitText(ta) {
+function fitText(ta, min = 7) {
   if (!ta) return
-  const max = 22, min = 7
+  const max = 22
   let size = max
   ta.style.fontSize = size + 'px'
   let guard = 0
@@ -1015,7 +1069,7 @@ function fitText(ta) {
 
 // 横幅に収まるよう文字サイズを自動縮小する input（現場名・現場住所など）。
 // プレースホルダ（透かし）も実テキストと同じく縮小される（同じ要素の font-size を縮めるため）。
-function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style }) {
+function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style, lang }) {
   const ref = useRef(null)
   const composingRef = useRef(false)   // IME変換中フラグ
   const fit = () => {
@@ -1044,11 +1098,53 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
     // 変換中に再描画が起きても React に入力欄を巻き戻されず、変換が壊れない。
     // 変換確定は onCompositionEnd でも onChange を呼んで z2h を反映する。
     // composingRef はフォント自動調整(fit)を変換中だけ止めるためにのみ使う。
-    <input ref={ref} className={className} type={type} value={value}
+    <input ref={ref} className={className} type={type} value={value} lang={lang}
       onChange={e => { onChange(e); requestAnimationFrame(fit) }}
       onCompositionStart={() => { composingRef.current = true }}
       onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
       placeholder={placeholder} style={style} />
+  )
+}
+
+// 折り返し対応の自動縮小フィールド（現場名用）。まず最大 maxLines 行まで折り返し、
+// それでも収まらない時だけフォントを段階的に縮小する（＝小さくする前に改行する）。
+function FitArea({ value, onChange, placeholder, lang, style, maxLines = 3, baseSize = 15, min = 11 }) {
+  const ref = useRef(null)
+  const composingRef = useRef(false)
+  const fit = () => {
+    if (composingRef.current) return
+    const el = ref.current
+    if (!el) return
+    let size = baseSize
+    el.style.fontSize = size + 'px'
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+    let guard = 0
+    // 内容が maxLines 行を超える間だけ、少しずつフォントを縮小する
+    while (el.scrollHeight > size * 1.3 * maxLines + 2 && size > min && guard < 60) {
+      size -= 0.5
+      el.style.fontSize = size + 'px'
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+      guard++
+    }
+  }
+  useLayoutEffect(() => { requestAnimationFrame(fit) })
+  useEffect(() => {
+    const on = () => requestAnimationFrame(fit)
+    window.addEventListener('resize', on)
+    window.addEventListener('orientationchange', on)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fit))
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <textarea ref={ref} className="f" rows={1} value={value} lang={lang}
+      onChange={e => { onChange(e); requestAnimationFrame(fit) }}
+      onCompositionStart={() => { composingRef.current = true }}
+      onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
+      placeholder={placeholder}
+      style={{ resize: 'none', overflow: 'hidden', lineHeight: 1.3, whiteSpace: 'normal', wordBreak: 'break-word', flex: 'none', ...style }} />
   )
 }
 
@@ -1120,12 +1216,12 @@ function Chips({ options, value, multi, multiStr, onChange, big }) {
 }
 
 // 固定枠＋分割＋文字自動リサイズの動的マス群（時間 / 備考 / ドライバー連絡 共通）
-function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel }) {
+function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel, minSize = 7 }) {
   const refs = useRef([])
   const composingRef = useRef(false)   // IME変換中フラグ
   const refit = () => requestAnimationFrame(() => {
     if (composingRef.current) return   // 変換中はフォント自動調整を行わない（変換が壊れるため）
-    for (let i = 0; i < items.length; i++) fitText(refs.current[i])
+    for (let i = 0; i < items.length; i++) fitText(refs.current[i], minSize)
   })
   useLayoutEffect(() => { refit() })
   useEffect(() => {
@@ -1151,7 +1247,7 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
               className={it.important ? 'is-imp' : ''}
               value={it.text}
               onCompositionStart={() => { composingRef.current = true }}
-              onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i])) }}
+              onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i], minSize)) }}
               onChange={e => update(i, { text: e.target.value })}
             />
             <div className="ctl">
@@ -1499,8 +1595,8 @@ function shipmentToForm(s) {
     vehicleType: s.vehicleType || '',
     truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
     vehicleItems: (Array.isArray(s.vehicleItems) && s.vehicleItems.length)
-      ? s.vehicleItems.map(v => ({ type: v.type, qty: (v.qty ?? '') === '' ? '' : String(v.qty) }))
-      : String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).map(t => ({ type: t, qty: '' })),
+      ? s.vehicleItems.map(v => ({ type: v.type, qty: (v.qty ?? '') === '' ? '1' : String(v.qty) }))
+      : String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).map(t => ({ type: t, qty: '1' })),
     mixCode: s.mixCode || '',
     specialNote: s.specialNote || '',
     mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
@@ -1511,6 +1607,8 @@ function shipmentToForm(s) {
     volume: (s.volume ?? '') === '' ? '' : String(s.volume),
     volumeUncertain: !!s.volumeUncertain,
     volumePlusA: !!s.volumePlusA,
+    volumeRange: String(s.volume ?? '').includes('〜'),
+    volumeRange2: String(s.volume2 ?? '').includes('〜'),
     volume2: (s.volume2 ?? '') === '' ? '' : String(s.volume2),
     volumeUncertain2: !!s.volumeUncertain2,
     volumePlusA2: !!s.volumePlusA2,
@@ -1603,6 +1701,15 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
   const setUnload = (val) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload')); if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' }); return { ...f, notes: sortNotes(notes) } })
   const addDriver = (e) => { const emp = employees.find(emp => emp.id === e.target.value); if (!emp) return; setForm(f => f.drivers.some(d => d.id === emp.id) ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] })) }
   const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
+  // 時間欄に「AM」「PM」単体を入れる（1つ目の時間枠に設定。もう一度押すと解除）
+  const setAmPm = (val) => setForm(f => {
+    const times = (Array.isArray(f.times) && f.times.length) ? f.times.map(t => ({ ...t })) : [{ text: '', important: false }]
+    const cur = String(times[0].text || '').trim().toUpperCase()
+    times[0] = { ...times[0], text: cur === val ? '' : val }
+    return { ...f, times }
+  })
+  const ampmActive = (val) => String((Array.isArray(form.times) && form.times[0] ? form.times[0].text : '') || '').trim().toUpperCase() === val
+  const ampmBtnStyle = (on) => ({ flex: 1, border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' })
   return (
           <div className="sheet" ref={sheetRef} style={{ margin: 0 }}>
             {/* 1段: 受注日 / 日付 / 業者名 / 商社名 */}
@@ -1632,13 +1739,18 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
                 <div className="lbl" style={redIf('times')}>時 間</div>
-                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" />
+                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" minSize={14} />
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button type="button" onClick={() => setAmPm('AM')} style={ampmBtnStyle(ampmActive('AM'))}>AM</button>
+                  <button type="button" onClick={() => setAmPm('PM')} style={ampmBtnStyle(ampmActive('PM'))}>PM</button>
+                </div>
               </div>
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl" style={redIf('siteName')}>現 場 名</div>
-                    <FitField value={form.siteName} onChange={set('siteName')} style={redIf('siteName')} />
+                    {/* 現場名は従来どおり1行・自動縮小（FitField）。IMEは全角かな（PC対応ブラウザのみ） */}
+                    <FitField value={form.siteName} onChange={set('siteName')} lang="ja" style={{ ...redIf('siteName'), imeMode: 'active' }} />
                   </div>
                 </div>
                 <div className="subrow">
@@ -1790,21 +1902,45 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const vKey = idx === 0 ? 'volume' : 'volume2'
                       const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
                       const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+                      const rKey = idx === 0 ? 'volumeRange' : 'volumeRange2'
+                      const raw = String(form[vKey] || '')
+                      const sepI = raw.indexOf('〜')
+                      const vFrom = sepI >= 0 ? raw.slice(0, sepI) : raw
+                      const vTo = sepI >= 0 ? raw.slice(sepI + 1) : ''
+                      const isRange = !!form[rKey] || sepI >= 0
+                      const clean = (s) => z2h(s).replace(/．/g, '.').replace(/[^0-9.]/g, '')
+                      const combine = (from, to) => (String(to) !== '' ? `${from}〜${to}` : from)
+                      const setFrom = (val, composing) => { const f = composing ? val : clean(val); setVal(vKey, combine(f, vTo)) }
+                      const setTo = (val, composing) => { const t = composing ? val : clean(val); setVal(vKey, combine(vFrom, t)) }
+                      const toggleRange = () => setForm(f => { const cur = String(f[vKey] || ''); const i = cur.indexOf('〜'); const from = i >= 0 ? cur.slice(0, i) : cur; const on = !(f[rKey] || i >= 0); return { ...f, [rKey]: on, [vKey]: from } })
+                      // ㎥が3桁(整数部3桁以上)のとき文字を大きく
+                      const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
+                      // 量の数値：整数2桁以下=黒太字／3桁以上=赤太字（編集で変更扱いのときは赤を優先）
+                      const inStyle = (s) => ({ width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30), fontWeight: 700, color: editChanged.includes('volume') ? '#c81e1e' : volNumColor(s) })
                       return (
-                        <div className="inline" key={idx} style={{ justifyContent: 'center', alignItems: 'center', marginTop: idx ? 4 : 0 }}>
-                          <span style={{ flex: '0 0 22px', display: 'flex', justifyContent: 'center' }}>
+                        <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'center', marginTop: idx ? 4 : 0, gap: 2 }}>
+                          <span style={{ flex: '0 0 16px', display: 'flex', justifyContent: 'center' }}>
                             {idx === 1 ? (
                               <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
-                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
                             ) : null}
                           </span>
-                          <input type="text" inputMode="decimal" style={redIf('volume')} value={form[vKey]}
-                            onChange={e => { const v = e.target.value; setVal(vKey, e.nativeEvent?.isComposing ? v : z2h(v).replace(/．/g, '.').replace(/[^0-9.]/g, '')) }}
-                            onCompositionEnd={e => setVal(vKey, z2h(e.target.value).replace(/．/g, '.').replace(/[^0-9.]/g, ''))} />
+                          <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
+                            onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                            onCompositionEnd={e => setFrom(e.target.value, false)} />
+                          {isRange && (
+                            <>
+                              <span style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>〜</span>
+                              <input type="text" inputMode="decimal" style={inStyle(vTo)} value={vTo}
+                                onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
+                                onCompositionEnd={e => setTo(e.target.value, false)} />
+                            </>
+                          )}
                           <span className="unit" style={redIf('volume')}>m<sup>3</sup>
                             {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
                             <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
                           </span>
+                          <span className={'qlabel' + (isRange ? ' on' : '')} title="範囲入力（13〜14）" onClick={toggleRange}>〜</span>
                           <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
                           <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
                         </div>
@@ -1844,13 +1980,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <div className="lbl" style={redIf('notes')}>備 考</div>
                 <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" />
               </div>
-              <div className="cell" style={{ flex: '0 0 auto', minWidth: 130 }}>
+              <div className="cell" style={{ flex: '0 0 auto', minWidth: 210 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
                 {(() => {
                   const msgNote = (form.notes || []).find(n => n && n.kind === 'msg')
                   const used = msgNote ? String(msgNote.text || '').split(/\s+/).filter(Boolean) : []
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 2 }}>
                       {NOTE_MESSAGES.map(m => {
                         const isUsed = used.includes(m)
                         return (
@@ -1863,7 +1999,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 })()}
               </div>
             </div>
-            {/* 7段: 担当ドライバー */}
+            {/* 7段: 担当ドライバー（非表示。データ・割り当て機能は保持。false→true で再表示） */}
+            {false && (
             <div className="band">
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
@@ -1881,7 +2018,36 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
             </div>
+            )}
           </div>
+  )
+}
+
+// 変更履歴パネル（出荷登録の地図の下に表示）。サーバが保存した history（日時＋項目＋値の前後）を新しい順に表示
+function HistoryPanel({ history }) {
+  const list = Array.isArray(history) ? history : []
+  if (!list.length) return null
+  const fmtT = (t) => { const d = new Date(t); if (isNaN(d.getTime())) return ''; const p = (n) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}` }
+  return (
+    <div style={{ marginTop: 12, border: '1px solid #dde3ed', borderRadius: 8, background: '#fff', overflow: 'hidden' }}>
+      <div style={{ padding: '8px 12px', background: '#f4f6f9', fontSize: 13, fontWeight: 700, color: '#3a4a5c', borderBottom: '1px solid #dde3ed' }}>📝 変更履歴</div>
+      <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+        {list.map((h, i) => (
+          <div key={i} style={{ padding: '8px 12px', borderBottom: '1px solid #f2f4f8', fontSize: 12 }}>
+            <div style={{ color: '#6b7a8d', marginBottom: 3 }}>{fmtT(h.t)}</div>
+            {(Array.isArray(h.items) ? h.items : []).map((it, j) => (
+              <div key={j} style={{ color: '#1a2332', lineHeight: 1.55 }}>
+                <span style={{ fontWeight: 700 }}>{it.f}</span>
+                <span style={{ color: '#9aa7b5' }}>：</span>
+                <span style={{ color: '#c0392b', textDecoration: 'line-through' }}>{it.from || '（空）'}</span>
+                <span style={{ color: '#9aa7b5' }}> → </span>
+                <span style={{ color: '#0f7a3a', fontWeight: 700 }}>{it.to || '（空）'}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -1905,11 +2071,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const topRef = useRef(null)
   const formRef = useRef(null)   // Enter/桁送りでの次項目フォーカス移動に使う
   const PAGE_SIZE = 10
-  // 本日〜2週間先まで（日曜を除く）の日付配列。一覧の日付ボタン用
+  // 本日〜25日先まで（日曜を除く）の日付配列。一覧の日付ボタン用
   const weekDates = (() => {
     const base = new Date()
     const out = []
-    for (let i = 0; i <= 14; i++) {
+    for (let i = 0; i <= 25; i++) {
       const d = new Date(base); d.setDate(base.getDate() + i)
       if (d.getDay() === 0) continue   // 日曜は除外
       out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
@@ -2219,7 +2385,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   })()
 
   // カタカナ→ひらがな正規化。業者名・商社名は顧客マスタのカナ（companyNameKana）も検索対象にする
-  const toHira = (str) => String(str || '').toLowerCase().replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+  const toHira = kanaToHira
   const kanaOfCompany = (s) => { const c = customers.find(c => c.id === s.companyId) || customers.find(c => c.companyName === s.companyName); return c ? (c.companyNameKana || '') : '' }
   const kanaOfTrading = (s) => { if (!s.tradingCompany) return ''; const c = customers.find(c => c.companyName === s.tradingCompany); return c ? (c.companyNameKana || '') : '' }
   // 日付を色々な表記で検索できるように（例: 6/4・06/04・6月4日・6-4）
@@ -2300,6 +2466,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               return editing && labels.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {labels.join('・')}</div>
             })()}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
+            {/* 変更履歴（地図の下）。編集中の伝票に保存済みの履歴を表示 */}
+            {editing && <HistoryPanel history={(shipments.find(x => x.id === editing) || {}).history} />}
           </div>
           </div>
         </form>
@@ -2349,7 +2517,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', 'PDF', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -2358,6 +2526,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 {pageRows.map(s => (
                   <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => onRowClick(s)}>
                     <td style={S.td}>{s.date}</td>
+                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
+                    <td style={S.td}>{s.tradingCompany || '—'}</td>
+                    <td style={S.td}>{s.siteName || '—'}</td>
                     <td style={{ ...S.td, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {s.hasPdf
                         ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`}
@@ -2365,15 +2537,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                             style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a>
                         : '—'}
                     </td>
-                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
-                    <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
-                    <td style={S.td}>{s.tradingCompany || '—'}</td>
-                    <td style={S.td}>{s.siteName || '—'}</td>
-                    <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
+                    <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{addrCity(s.siteAddress) || '—'}</td>
                     <td style={S.td}>{vehicleLabel(s) || '—'}</td>
-                    <td style={S.td}>{mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ') || '—'}</td>
+                    <td style={S.td}>{mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ') || '—'}</td>
                     <td style={S.td}>{s.cementType || '—'}</td>
-                    <td style={S.td}>{shipVolStr(s) || '—'}</td>
+                    <td style={S.td}><VolNum s={s} unit fallback="—" /></td>
                     <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                       <button style={S.delBtn} onClick={(e) => { e.stopPropagation(); setDeleteConfirm(s.id) }}>削除</button>
@@ -2480,6 +2648,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 別ウィンドウ（isPopup）では幅に関わらず常にPC版テーブルを表示する。
   // → スマホで「別ウィンドウで開く」を押すと、横画面でPCレイアウトの予定表が出る。
   const compact = isMobile && !isPopup
+  // PC版の表（アプリ内・別ウィンドウでない・スマホカードでない）はセルを直接書き換え可能にする。
+  // 別ウィンドウ（共有ボード）は閲覧専用のまま（inlineEdit=false）。
+  const inlineEdit = !isPopup && !compact
   // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
   const popupNarrow = useIsMobile(880)
   // 別ウィンドウからは ?date= で表示日を引き継ぐ
@@ -2608,6 +2779,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'vehicleType': return vehicleLabel(s)   // 数量付き（4t×2・7t）
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
       case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
+      case 'mixCode': return mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ')
       case 'volume': {
         const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '  ?' : ''}` }
         return [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean).join(' / ')
@@ -2619,7 +2791,24 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (f === 'drivers') return { ...s, drivers: raw.split(/[・,、/\n]/).map(x => x.trim()).filter(Boolean).map(n => ({ id: '', name: n })) }
     if (f === 'times') return { ...s, times: raw.split(/[/\n]/).map(x => x.trim()).filter(Boolean) }
     if (f === 'notes') return { ...s, notes: raw.split('/').map(x => x.trim()).filter(Boolean).map(t => ({ text: t, important: false })) }
-    if (f === 'volume') { const uncertain = /[?？]/.test(raw); return { ...s, volume: raw.replace(/[?？]/g, '').trim(), volumeUncertain: uncertain } }
+    if (f === 'volume') {
+      // 範囲(13〜14)・+a・? を許容しつつ数値部を保持
+      const uncertain = /[?？]/.test(raw)
+      const plusA = /\+\s*a/i.test(raw)
+      const num = raw.replace(/[?？]/g, '').replace(/\+\s*a/i, '').replace(/[^0-9.〜]/g, '').trim()
+      return { ...s, volume: num, volumeUncertain: uncertain, volumePlusA: plusA }
+    }
+    if (f === 'vehicleType') {
+      const types = raw.split(/[・,、/\s]+/).map(x => x.trim()).filter(Boolean)
+      return { ...s, vehicleType: types.join('・'), vehicleItems: types.map(t => ({ type: t, qty: '' })) }
+    }
+    if (f === 'mixCode') {
+      // 表示の整形（"24　　" や "18-15-20"）を解析。区切りは「-」全角空白・半角空白いずれも1文字＝1セクション境界として位置を保持
+      const rows = raw.split('/').map(x => x.trim()).filter(Boolean).slice(0, 2)
+        .map(r => { const p = r.split(/[-　 ]/); return { parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: '' } })
+      const list = rows.length ? rows : [{ parts: ['', '', ''], note: '' }]
+      return { ...s, mixRows: list, mixCode: list[0].parts.slice(0, 3).join('-') }
+    }
     return { ...s, [f]: raw }
   }
   const saveField = async (s, f, raw) => {
@@ -2654,11 +2843,24 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const fitOne = (el) => {
     if (!el || !el.isConnected) return
     el.style.fontSize = ''                 // いったんCSSの基準サイズ（clamp）に戻す
+    // 編集できる現場名(sc-editwrap)：まず内容に合わせて最大3行まで高さを広げ、3行を超える時だけフォントを段階縮小（＝小さくする前に改行）
+    if (el.classList && el.classList.contains('sc-editwrap')) {
+      let size = parseFloat(getComputedStyle(el).fontSize) || 16
+      let guard = 0
+      const grow = () => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
+      grow()
+      while (el.scrollHeight > size * 1.3 * 3 + 2 && size > 11 && guard < 80) {
+        size -= 0.5; el.style.fontSize = size + 'px'; grow(); guard++
+      }
+      return
+    }
     const base = parseFloat(getComputedStyle(el).fontSize) || 16
     let size = base, guard = 0
-    // 横（および textarea の縦）がはみ出す間、収まるまで縮める
+    // 横（および textarea の縦）がはみ出す間、収まるまで縮める。
+    // 現場名(sc-wrap2)は3行まで使うので下限を高め(12px)にして、長い名前でも読める大きさを保つ
+    const minSize = (el.classList && el.classList.contains('sc-wrap2')) ? 12 : 8
     const over = () => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
-    while (over() && size > 8 && guard < 80) { size -= 0.5; el.style.fontSize = size + 'px'; guard++ }
+    while (over() && size > minSize && guard < 80) { size -= 0.5; el.style.fontSize = size + 'px'; guard++ }
   }
   const fitAll = () => fitEls.current.forEach(el => { if (el && el.isConnected) fitOne(el); else fitEls.current.delete(el) })
   const fitRef = (el) => { if (el) { fitEls.current.add(el); requestAnimationFrame(() => fitOne(el)) } }
@@ -2672,7 +2874,41 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on) }
   }, [])
 
+  // PC版の直接編集セル（inlineEdit時のみ）。フォーカスを外す（onBlur）と保存→予定表・出荷登録に反映
+  const editCell = (s, f, opts = {}) => {
+    const v = getVal(s, f)
+    // 数量は編集中も「2桁=黒 / 3桁=赤」の太字を保つ（変更扱いのときは赤優先）。印刷でも赤を保つため sc-vol3 クラスも付与
+    const vol3 = f === 'volume' && (isChanged(s, f) || volNumColor(v) === '#c81e1e')
+    const cls = 'sc-in sc-edit'
+      + (isChanged(s, f) ? ' changed' : '')
+      + (opts.center ? ' center' : '')
+      + (opts.big ? ' big' : '')
+      + (opts.xl ? ' xl' : '')
+      + (opts.plain ? ' plain' : '')
+      + (vol3 ? ' sc-vol3' : '')
+    const editStyle = (f === 'volume') ? { fontWeight: 700, color: vol3 ? '#c81e1e' : '#111' } : undefined
+    const common = {
+      key: f + '_e' + (isChanged(s, f) ? '_c' : ''),
+      ref: fitRef,
+      defaultValue: v,
+      placeholder: opts.ph || '',
+      onBlur: (e) => saveField(s, f, e.target.value),
+      style: editStyle,
+    }
+    if (opts.wrap) {
+      // 現場名など：編集できるが、小さくする前に最大3行まで折り返す（sc-editwrap を fitOne が処理）
+      return <textarea {...common} className={cls + ' sc-ta sc-editwrap'} rows={1}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); e.currentTarget.blur() } }} />
+    }
+    if (opts.multiline) {
+      const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
+      return <textarea {...common} className={cls + ' sc-ta'} rows={rows} />
+    }
+    return <input {...common} className={cls} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); e.currentTarget.blur() } }} />
+  }
+
   const cell = (s, f, ph, opts = {}) => {
+    if (inlineEdit) return editCell(s, f, { ...opts, ph })
     const imp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n.important)
     const cls = 'sc-in'
       + (isChanged(s, f) ? ' changed' : '')
@@ -2703,6 +2939,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   const cellMulti = (s, f, ph, opts = {}) => {
+    if (inlineEdit) return editCell(s, f, { ...opts, ph, multiline: true })
     const v = getVal(s, f)
     const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
     const cls = 'sc-in sc-ta'
@@ -2748,7 +2985,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 配合：複数行対応。各行は桁グループごとに分割描画。変更された桁(mix0/mix1/mix2)だけ赤くする（1行目のみ桁単位、追加行は行単位）
+  // 空セクションは「-」を出さず全角空白で表示（例 24-- → 24　　）。数字が入った隣同士だけ「-」でつなぐ。
   const cellMix = (s, opts = {}) => {
+    if (inlineEdit) return editCell(s, 'mixCode', { ...opts })
     const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
     const rows = mixRowsOfShip(s).filter(r => r.code || r.note)
     if (!rows.length) {
@@ -2758,19 +2997,24 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return (
       <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '') + '_n' + rows.length} style={{ pointerEvents: 'none' }}>
         {rows.map((r, ri) => {
-          const parts = String(r.code || '').split('-')
+          const parts = String(r.code || '').split('-').map(p => (p || '').trim())
           // 各配合行の下にその行の特記を表示（配合→特記→配合→特記…）
           const noteRed = ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))
           return (
             <Fragment key={ri}>
               {r.code ? (
                 <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
-                  {parts.map((p, i) => (
-                    <Fragment key={i}>
-                      {i > 0 && <span>-</span>}
-                      <span style={{ color: (wholeRed || (ri === 0 && isChanged(s, 'mix' + i))) ? '#c81e1e' : undefined }}>{p}</span>
-                    </Fragment>
-                  ))}
+                  {[0, 1, 2].map(i => {
+                    const p = parts[i] || ''
+                    const showDash = i > 0 && parts[i - 1] && parts[i]   // 両側に数字があるときだけ「-」
+                    const red = wholeRed || (ri === 0 && isChanged(s, 'mix' + i))
+                    return (
+                      <Fragment key={i}>
+                        {showDash ? <span>-</span> : null}
+                        <span style={{ color: red ? '#c81e1e' : undefined }}>{p || '　'}</span>
+                      </Fragment>
+                    )
+                  })}
                 </span>
               ) : null}
               {(r.note && r.note.trim()) ? (
@@ -2783,21 +3027,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
-  // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）
+  // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）。
+  // 表示色は「2桁=黒太字 / 3桁=赤太字」。変更（赤）扱いのときは赤を優先。整形表示のため直接編集はせず、編集はフォーム(✏️)で。
   const cellVolume = (s) => {
-    const one = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${a ? '+a' : ''}${u ? '?' : ''}` }
-    const lines = [one(s.volume, s.volumePlusA, s.volumeUncertain), one(s.volume2, s.volumePlusA2, s.volumeUncertain2)].filter(Boolean)
-    if (lines.length <= 1) return cell(s, 'volume', '', { center: true, big: true })
+    const has2 = s.volume2 != null && String(s.volume2).trim() !== ''
+    // PC直接編集：1段のみの量は直接書き換え可（色は editCell 側で桁により付与）。2段ある量は崩れ防止で表示専用
+    if (inlineEdit && !has2) return editCell(s, 'volume', { center: true, big: true })
+    const segs = [[s.volume, s.volumePlusA, s.volumeUncertain], [s.volume2, s.volumePlusA2, s.volumeUncertain2]]
+      .map(([v, a, u]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${a ? '+a' : ''}${u ? '?' : ''}` } })
+      .filter(Boolean)
     const red = isChanged(s, 'volume')
+    if (!segs.length) return <span ref={fitRef} className="sc-mixcode big center" style={{ pointerEvents: 'none' }} />
     return (
-      <span ref={fitRef} className="sc-mixcode big center" style={{ pointerEvents: 'none', color: red ? '#c81e1e' : undefined }}>
-        {lines.map((l, i) => <span key={i} style={{ display: 'block', whiteSpace: 'nowrap' }}>{l}</span>)}
+      <span ref={fitRef} className="sc-mixcode big center" key={'vol' + (red ? '_c' : '') + '_n' + segs.length} style={{ pointerEvents: 'none' }}>
+        {segs.map((seg, i) => { const r3 = red || volNumColor(seg.num) === '#c81e1e'; return <span key={i} className={r3 ? 'sc-vol3' : undefined} style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 700, color: r3 ? '#c81e1e' : '#111' }}>{seg.text}</span> })}
       </span>
     )
   }
 
   // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
   const cellNotes = (s, opts = {}) => {
+    if (inlineEdit) return editCell(s, 'notes', { ...opts, multiline: true })
     const arr = Array.isArray(s.notes) ? s.notes : []
     const cls = 'sc-in sc-notes' + (opts.plain ? ' plain' : '')
     const wholeRed = isChanged(s, 'notes') && !arr.some((_, i) => isChanged(s, 'note' + i))
@@ -2822,6 +3072,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
   // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
   const cellDrivers = (s, opts = {}) => {
+    if (inlineEdit) return editCell(s, 'drivers', { ...opts, multiline: true })
     const v = getVal(s, 'drivers')               // 2人ごとに改行された文字列
     let lines = v ? v.split('\n') : ['']
     if (opts.oneEach) {                           // 各行をさらに分解して1人=1行に
@@ -3082,7 +3333,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <tbody>
             {rows.map(s => (
               <tr key={s.id}>
-                <td>{cell(s, 'companyName', '業者名')}{cell(s, 'tradingCompany', '商社')}</td>
+                <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 {!isPopup && (
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>
@@ -3179,12 +3430,309 @@ function SchedulePage({ onEditShipment, isPopup }) {
 }
 
 // スマホ予定表の編集モーダル。更新で差分保存→閉じると予定表に戻り変更が赤文字反映される。
+// スマホ予定編集の縦並びフォーム本体（片手で見やすく打ち込めるレイアウト）。
+// 出荷登録と同じ操作ロジック(makeDenpyoHandlers)を共用しつつ、伝票風の横並びではなく
+// 1項目=1ブロックの縦積みで、入力欄・ボタンを指で押しやすい大きさにする。
+function MobileEditForm({ form, setForm, editing, employees = [], companyComboOptions = [], tradingComboOptions = [], onPdfImport, removePdf, previewPdf }) {
+  const H = makeDenpyoHandlers({ form, setForm, employees, companyComboOptions })
+  const { set, setVal, handleCompanyInput, setMixCell, setMixRowNote, addMixRow, delMixRow, mixRowsOf,
+    toggleVehItem, setVehQty, vehItems, toggleNoteTag, toggleTestTag, addNoteMessage, removeNoteMessage, unloadText, setUnload, addDriver, removeDriver } = H
+
+  // 時間（最大2）
+  const setTime = (i, v) => setForm(f => ({ ...f, times: f.times.map((t, idx) => idx === i ? { ...t, text: v } : t) }))
+  const addTime = () => setForm(f => f.times.length < 2 ? { ...f, times: [...f.times, { text: '', important: false }] } : f)
+  const delTime = (i) => setForm(f => ({ ...f, times: f.times.length > 1 ? f.times.filter((_, idx) => idx !== i) : [{ text: '', important: false }] }))
+  // 備考（手入力段落のみ。荷下ろし・メッセージは別UIで管理し保存時に結合）
+  const manualText = (form.notes || []).filter(n => n && !n.kind).map(n => n.text).join('\n')
+  const setManualText = (v) => setForm(f => {
+    const keep = (f.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg'))
+    const manual = v.split('\n').map(t => ({ text: t, important: false }))
+    return { ...f, notes: sortNotes([...manual, ...keep]) }
+  })
+  const msgNote = (form.notes || []).find(n => n && n.kind === 'msg')
+  const usedMsgs = msgNote ? String(msgNote.text || '').split(/\s+/).filter(Boolean) : []
+
+  // ---- styles（16px以上でiOS自動ズーム回避・タップ領域大・横はみ出し防止） ----
+  const card = { background: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, border: '1px solid #eceff3', boxShadow: '0 1px 2px rgba(16,24,40,.04)', display: 'flex', flexDirection: 'column', gap: 15, boxSizing: 'border-box' }
+  const lbl = { display: 'block', fontSize: 12.5, fontWeight: 700, color: '#667085', marginBottom: 6, letterSpacing: '.02em' }
+  const inp = { width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 16, padding: '13px 13px', border: '1.5px solid #d4dbe5', borderRadius: 11, fontFamily: 'inherit', color: '#101828', background: '#fff', outline: 'none' }
+  const chip = (on) => ({ flex: '1 1 0', minWidth: 0, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 11, fontSize: 16, fontWeight: 700, cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box', border: on ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#475467' })
+  const smallBtn = { border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 11, width: 48, minWidth: 48, height: 50, fontSize: 18, cursor: 'pointer', flex: '0 0 auto' }
+  const addBtn = { border: '1px dashed #b6c0cf', background: '#f8fafc', color: '#475467', borderRadius: 11, padding: '12px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%', boxSizing: 'border-box' }
+  const chipRow = (opts, isOn, onTap) => (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {opts.map(o => <div key={o} onClick={() => onTap(o)} style={chip(isOn(o))}>{o}</div>)}
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: '100%' }}>
+      {/* 基本：受注日/日付・時間 */}
+      <div style={card}>
+        {/* 受注日・日付は日付が収まる幅に固定し、間隔をあけて隣接させない */}
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 0 auto' }}>
+            <label style={lbl}>受注日</label>
+            <input type="date" value={form.orderDate} onChange={set('orderDate')} style={{ ...inp, width: 150, padding: '13px 10px', textAlign: 'left' }} />
+          </div>
+          <div style={{ flex: '0 0 auto' }}>
+            <label style={lbl}>日付</label>
+            <input type="date" value={form.date} onChange={set('date')} style={{ ...inp, width: 150, padding: '13px 10px', textAlign: 'left' }} />
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>時間（最大2）</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {form.times.map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input value={t.text} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inp, flex: 1 }} />
+                {form.times.length > 1 && <button type="button" onClick={() => delTime(i)} style={smallBtn}>×</button>}
+              </div>
+            ))}
+          </div>
+          {form.times.length < 2 && <button type="button" onClick={addTime} style={{ ...addBtn, marginTop: 8 }}>＋ 時間を追加</button>}
+        </div>
+      </div>
+
+      {/* 取引先・現場 */}
+      <div style={card}>
+        <div>
+          <label style={lbl}>業者名</label>
+          <div className="denpyo">
+            <KanaCombo value={form.companyName} onChange={handleCompanyInput}
+              onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
+              options={companyComboOptions} placeholder="入力して検索（ひらがな可）" className="f-mobile" style={inp} />
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>商社名</label>
+          <div className="denpyo">
+            <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
+              onPick={o => setVal('tradingCompany', o.label)}
+              options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" className="f-mobile" style={inp} />
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>現場名</label>
+          <input value={form.siteName} onChange={set('siteName')} style={inp} />
+        </div>
+        <div>
+          <label style={lbl}>現場住所</label>
+          <input value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} style={inp} />
+          <div style={{ marginTop: 10 }}>
+            <SiteMap
+              address={form.siteAddress}
+              onAddressChange={(a) => setVal('siteAddress', a)}
+              mapView={form.mapView}
+              onMapViewChange={(v) => setVal('mapView', v)}
+              pin={form.mapPin}
+              onPinChange={(p) => setVal('mapPin', p)}
+              arrows={form.mapArrows}
+              onArrowsChange={(a) => setVal('mapArrows', a)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 出荷内容：車種・配合・量 */}
+      <div style={card}>
+        <div>
+          <label style={lbl}>車種（タップで選択・台数）</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {VEHICLE_TYPES.map(o => {
+              const it = vehItems().find(v => v.type === o)
+              const on = !!it
+              return (
+                <div key={o} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div onClick={() => toggleVehItem(o)} style={{ ...chip(on), flex: '0 0 96px' }}>{o}</div>
+                  {on && (
+                    <>
+                      <input inputMode="numeric" value={it.qty || ''} placeholder="台数"
+                        onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)}
+                        style={{ ...inp, flex: 1, textAlign: 'center' }} />
+                      <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>台</span>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>配合（中央のみ特記可）</label>
+          {mixRowsOf().map((r, ri) => (
+            <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 12 : 0 }}>
+              {[0, 1, 2].map(i => (
+                <Fragment key={i}>
+                  {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#101828', paddingBottom: 11 }}>-</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {i === 1
+                      ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記"
+                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
+                      : <div style={{ height: 16 }} />}
+                    <input value={r.parts[i] || ''} inputMode="numeric" placeholder="00"
+                      onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
+                      onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
+                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #d4dbe5', borderRadius: 11, padding: '12px 4px', fontFamily: 'inherit', color: '#101828', marginTop: 4 }} />
+                  </div>
+                </Fragment>
+              ))}
+              {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} style={{ ...smallBtn, height: 52 }}>×</button>}
+            </div>
+          ))}
+          {mixRowsOf().length < 2 && <button type="button" onClick={addMixRow} style={{ ...addBtn, marginTop: 10 }}>＋ 配合を追加</button>}
+        </div>
+        <div>
+          <label style={lbl}>量（m³）</label>
+          {[0, 1].map(idx => {
+            if (idx === 1 && !form.hasVolume2) return null
+            const vKey = idx === 0 ? 'volume' : 'volume2'
+            const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
+            const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
+            const rKey = idx === 0 ? 'volumeRange' : 'volumeRange2'
+            const raw = String(form[vKey] || '')
+            const sepI = raw.indexOf('〜')
+            const vFrom = sepI >= 0 ? raw.slice(0, sepI) : raw
+            const vTo = sepI >= 0 ? raw.slice(sepI + 1) : ''
+            const isRange = !!form[rKey] || sepI >= 0
+            const clean = (s) => z2h(s).replace(/．/g, '.').replace(/[^0-9.]/g, '')
+            const combine = (from, to) => (String(to) !== '' ? `${from}〜${to}` : from)
+            const setFrom = (val, c) => setVal(vKey, combine(c ? val : clean(val), vTo))
+            const setTo = (val, c) => setVal(vKey, combine(vFrom, c ? val : clean(val)))
+            const toggleRange = () => setForm(f => { const cur = String(f[vKey] || ''); const i = cur.indexOf('〜'); const from = i >= 0 ? cur.slice(0, i) : cur; return { ...f, [rKey]: !(f[rKey] || i >= 0), [vKey]: from } })
+            const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
+            const sq = (on, label, onClick) => (
+              <button type="button" onClick={onClick} style={{ flex: '0 0 auto', minWidth: 48, height: 50, padding: '0 10px', borderRadius: 11, fontSize: 16, fontWeight: 700, cursor: 'pointer', boxSizing: 'border-box', border: on ? '2px solid #c0392b' : '1.5px solid #d4dbe5', background: on ? '#c0392b' : '#fff', color: on ? '#fff' : '#98a2b3' }}>{label}</button>
+            )
+            return (
+              <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: idx ? 8 : 0 }}>
+                <input value={vFrom} inputMode="decimal" placeholder="0"
+                  onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                  onCompositionEnd={e => setFrom(e.target.value, false)}
+                  style={{ ...inp, flex: 1, fontSize: big(vFrom) ? 22 : 16, fontWeight: big(vFrom) ? 700 : 400 }} />
+                {isRange && (
+                  <>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: '#101828', flex: '0 0 auto' }}>〜</span>
+                    <input value={vTo} inputMode="decimal" placeholder="0"
+                      onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
+                      onCompositionEnd={e => setTo(e.target.value, false)}
+                      style={{ ...inp, flex: 1, fontSize: big(vTo) ? 22 : 16, fontWeight: big(vTo) ? 700 : 400 }} />
+                  </>
+                )}
+                <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>m³</span>
+                {sq(isRange, '〜', toggleRange)}
+                {sq(form[aKey], '+a', () => setVal(aKey, !form[aKey]))}
+                {sq(form[uKey], '?', () => setVal(uKey, !form[uKey]))}
+                {idx === 1 && sq(false, '×', () => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false })))}
+              </div>
+            )
+          })}
+          {!form.hasVolume2 && <button type="button" onClick={() => setForm(f => ({ ...f, hasVolume2: true }))} style={{ ...addBtn, marginTop: 8 }}>＋ 量を追加</button>}
+        </div>
+      </div>
+
+      {/* 仕様：打設箇所・セメント種・試験・特記・荷下ろし・メッセージ */}
+      <div style={card}>
+        <div>
+          <label style={lbl}>打設箇所</label>
+          {!form.pourFree ? (
+            <select value={form.pourLocation} style={{ ...inp, cursor: 'pointer' }}
+              onChange={e => { if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' })); else setVal('pourLocation', e.target.value) }}>
+              <option value=""></option>
+              {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={form.pourLocation} onChange={set('pourLocation')} placeholder="打設箇所を入力" style={{ ...inp, flex: 1 }} />
+              <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))} style={{ border: '1.5px solid #d4dbe5', background: '#fff', color: '#475467', borderRadius: 11, padding: '0 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', flex: '0 0 auto' }}>一覧</button>
+            </div>
+          )}
+        </div>
+        {/* セメント種・試験・特記：3グループとも同じ大きさのボタンに統一 */}
+        <div><label style={lbl}>セメント種</label>{chipRow(CEMENT_TYPES, o => form.cementType === o, o => setVal('cementType', form.cementType === o ? '' : o))}</div>
+        <div><label style={lbl}>試験</label>{chipRow(TEST_TAGS, o => (form.testTags || []).includes(o), toggleTestTag)}</div>
+        <div><label style={lbl}>特記</label>{chipRow(NOTE_TAGS, o => (form.noteTags || []).includes(o), toggleNoteTag)}</div>
+        <div>
+          <label style={lbl}>荷下ろし</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {PLACEMENT_TYPES.map(t => {
+              const on = (form.placements || []).includes(t)
+              return <div key={t} onClick={() => setVal('placements', on ? form.placements.filter(x => x !== t) : [...(form.placements || []), t])} style={{ ...chip(on), flex: '1 1 calc(50% - 4px)' }}>{t}</div>
+            })}
+          </div>
+          <input value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" style={{ ...inp, marginTop: 8 }} />
+        </div>
+        <div>
+          <label style={lbl}>メッセージ追加（備考に出力）</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {NOTE_MESSAGES.map(m => {
+              const isUsed = usedMsgs.includes(m)
+              return (
+                <button key={m} type="button" onClick={() => isUsed ? removeNoteMessage(m) : addNoteMessage(m)}
+                  style={{ flex: '1 1 calc(50% - 4px)', boxSizing: 'border-box', height: 50, border: isUsed ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: isUsed ? '#eef4ff' : '#fff', color: '#1b4ea8', borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                  {isUsed ? '✓ ' : '＋ '}{m}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 備考・連絡・担当・PDF */}
+      <div style={card}>
+        <div>
+          <label style={lbl}>備考（改行で段落）</label>
+          <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={3} style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
+        </div>
+        <div>
+          <label style={lbl}>連絡先</label>
+          <input value={form.orderContact} onChange={set('orderContact')} inputMode="tel" style={inp} />
+        </div>
+        <div>
+          <label style={lbl}>現場連絡先</label>
+          <input value={form.siteContact} onChange={set('siteContact')} inputMode="tel" style={inp} />
+        </div>
+        <div>
+          <label style={lbl}>担当ドライバー</label>
+          {form.drivers.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {form.drivers.map((d, i) => (
+                <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1.5px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 11, padding: '9px 12px', fontSize: 15, fontWeight: 700 }}>
+                  {d.name}
+                  <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <select value="" onChange={addDriver} style={{ ...inp, cursor: 'pointer' }}>
+            <option value="">＋ ドライバーを追加</option>
+            {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>PDFインポート</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px dashed #b6c0cf', background: '#f8fafc', borderRadius: 11, padding: '12px 16px', fontSize: 15, cursor: 'pointer', color: '#475467' }}>📄 ファイルを選択
+              <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
+            </label>
+            {(form.pdfData || (form.hasPdf && editing)) && (
+              <button type="button" onClick={previewPdf} style={{ border: '1px solid #1a4d8f', background: '#eef5ff', color: '#1a4d8f', borderRadius: 11, padding: '11px 14px', fontSize: 14, cursor: 'pointer' }}>👁 プレビュー</button>
+            )}
+            {(form.pdfData || form.hasPdf) && (
+              <button type="button" onClick={removePdf} style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 11, padding: '11px 14px', fontSize: 14, cursor: 'pointer' }}>🗑 削除</button>
+            )}
+            {(form.pdfName || form.hasPdf) && <span style={{ fontSize: 13, color: '#1a8f5a' }}>{form.pdfData ? '選択中' : '添付済'}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ScheduleEditModal({ shipment, driverOptions = [], companyComboOptions = [], tradingComboOptions = [], onClose, onSave }) {
-  // スマホ予定表の編集モーダル。出荷登録フォーム（DenpyoFields）をそのまま使って再構築する。
   const [form, setForm] = useState(() => shipmentToForm(shipment))
   const [saving, setSaving] = useState(false)
 
-  // PDFインポート（出荷登録と同じ。保存時にこの伝票へ添付される）
   const onPdfImport = (e) => {
     const file = e.target.files && e.target.files[0]
     if (!file) return
@@ -3212,44 +3760,30 @@ function ScheduleEditModal({ shipment, driverOptions = [], companyComboOptions =
     if (!String(form.companyName || '').trim() || !String(form.date || '').trim()) { alert('日付と業者名は必須です'); return }
     setSaving(true)
     const payload = buildShipmentPayload(form)
-    // 配合は桁ごと・備考は行ごとに変更を検出（予定表で赤字表示するため）
     const changed = diffChangedFields(shipment, payload)
     try { await onSave(payload, changed) } catch { setSaving(false) }
   }
 
   return (
     <div onClick={() => { if (!saving) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#f3f1ec', width: '100%', maxWidth: 760, maxHeight: '92dvh', display: 'flex', flexDirection: 'column', borderRadius: '16px 16px 0 0', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', paddingTop: 'env(safe-area-inset-top)' }}>
-        {/* ヘッダー：スクロールに付いてこない（固定しない）。閉じるボタンのみ常設 */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 11px', borderBottom: '1px solid #dde3ed', background: '#fff', borderRadius: '16px 16px 0 0', flex: '0 0 auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#eef1f6', width: '100%', maxWidth: 560, maxHeight: '94dvh', overflowX: 'hidden', display: 'flex', flexDirection: 'column', borderRadius: '16px 16px 0 0', boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', paddingTop: 'env(safe-area-inset-top)' }}>
+        {/* ヘッダー（固定・スクロール追従しない） */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 12px', borderBottom: '1px solid #dde3ed', background: '#fff', borderRadius: '16px 16px 0 0', flex: '0 0 auto' }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>✏️ 予定を編集</div>
           <button type="button" onClick={onClose} disabled={saving}
-            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '7px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
+            style={{ border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✕ 閉じる</button>
         </div>
-        {/* 本体：唯一のスクロール領域。出荷登録フォームをそのまま使う */}
-        <div style={{ flex: '1 1 auto', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px calc(16px + env(safe-area-inset-bottom))' }}>
-          <div className="denpyo">
-            <FitToWidth width={700}>
-              <DenpyoFields form={form} setForm={setForm} editing={shipment.id}
-                employees={driverOptions} companyComboOptions={companyComboOptions} tradingComboOptions={tradingComboOptions}
-                onPdfImport={onPdfImport} removePdf={removePdf} previewPdf={previewPdf} />
-            </FitToWidth>
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <SiteMap
-              address={form.siteAddress}
-              onAddressChange={(a) => setForm(f => ({ ...f, siteAddress: a }))}
-              mapView={form.mapView}
-              onMapViewChange={(v) => setForm(f => ({ ...f, mapView: v }))}
-              pin={form.mapPin}
-              onPinChange={(p) => setForm(f => ({ ...f, mapPin: p }))}
-              arrows={form.mapArrows}
-              onArrowsChange={(a) => setForm(f => ({ ...f, mapArrows: a }))}
-            />
-          </div>
+        {/* 本体：スクロール領域（縦並びフォーム）。横スクロールは禁止して横ブレを防ぐ */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '14px 14px 16px' }}>
+          <MobileEditForm form={form} setForm={setForm} editing={shipment.id}
+            employees={driverOptions} companyComboOptions={companyComboOptions} tradingComboOptions={tradingComboOptions}
+            onPdfImport={onPdfImport} removePdf={removePdf} previewPdf={previewPdf} />
+        </div>
+        {/* フッター（固定・親指で押せる位置に更新ボタン） */}
+        <div style={{ flex: '0 0 auto', borderTop: '1px solid #dde3ed', background: '#fff', padding: '10px 16px calc(10px + env(safe-area-inset-bottom))' }}>
           <button type="button" onClick={submit} disabled={saving}
-            style={{ width: '100%', marginTop: 14, border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 10, padding: '15px', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
-            {saving ? '更新中…' : '更新'}
+            style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', borderRadius: 12, padding: '16px', fontSize: 17, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? '更新中…' : '更新する'}
           </button>
         </div>
       </div>
@@ -3424,7 +3958,8 @@ function DashboardPage() {
                   )
                 })}
             </div>
-            {breakdown('今日の担当別', drvEntries, '本日の出荷はありません')}
+            {/* 「今日の担当別」は非表示（担当者表示を画面から省く方針）。再表示する場合は下行を有効化
+            {breakdown('今日の担当別', drvEntries, '本日の出荷はありません')} */}
           </div>
 
           {/* 本日の予定（時間順） */}
@@ -3437,7 +3972,7 @@ function DashboardPage() {
                   <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
                   </span>
-                  <span style={{ flex: '0 0 auto', color: '#3a4a5c' }}>{s.vehicleType || ''}{s.volume ? ` ${s.volume}m³` : ''}</span>
+                  <span style={{ flex: '0 0 auto', color: '#3a4a5c' }}>{s.vehicleType || ''}{s.volume ? <span style={{ fontWeight: 700, color: volNumColor(s.volume) }}> {s.volume}m³</span> : ''}</span>
                 </div>
               ))}
           </div>
@@ -3510,7 +4045,7 @@ function WeeklySchedulePage() {
                 })}
                 <div style={{ padding: 6 }}>
                   {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
-                    : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? ` /${s.volume}m³` : ''}</span></div>)}
+                    : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? <span style={{ fontWeight: 700, color: volNumColor(s.volume) }}> /{s.volume}m³</span> : ''}</span></div>)}
                 </div>
               </div>
             )
@@ -3719,7 +4254,7 @@ function ShipReportPage() {
                 <td style={RPT.td}>{s.siteName || ''}</td>
                 <td style={RPT.td}>{s.vehicleType || ''}</td>
                 <td style={RPT.td}>{s.mixCode || ''}</td>
-                <td style={RPT.td}>{shipVolStr(s)}</td>
+                <td style={RPT.td}><VolNum s={s} unit /></td>
                 <td style={RPT.td}>{driversOf(s).join('・')}</td>
               </tr>
             ))}
@@ -3756,7 +4291,7 @@ function DriverReportPage() {
                 <tbody>{list.map(s => (
                   <tr key={s.id}>
                     <td style={RPT.td}>{firstTimeOf(s)}</td><td style={RPT.td}>{s.companyName}</td><td style={RPT.td}>{s.siteName || ''}</td>
-                    <td style={RPT.td}>{s.vehicleType || ''}</td><td style={RPT.td}>{s.mixCode || ''}</td><td style={RPT.td}>{shipVolStr(s)}</td>
+                    <td style={RPT.td}>{s.vehicleType || ''}</td><td style={RPT.td}>{s.mixCode || ''}</td><td style={RPT.td}><VolNum s={s} unit /></td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -3842,6 +4377,12 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
 
 // 現場住所のジオコード余り（緯度経度メモ）を除いた表示用住所
 function cleanAddr(a) { return String(a || '').replace(/（緯度経度:[^）]*）/g, '').trim() }
+// 一覧の住所列：市区郡までを表示し、それ以降（町名・番地）は省く（例 "佐賀県神埼市神埼町志波屋2020" → "佐賀県神埼市"）
+function addrCity(a) {
+  const s = cleanAddr(a)
+  const m = s.match(/^(.*?[市区郡])/)
+  return m ? m[1] : s
+}
 
 // 住所設定（モーダル共用）：住所入力＋地図反映で登録
 function AddressAssignBody({ shipment, onSaved, onClose }) {
@@ -3926,7 +4467,7 @@ function DenpyoView({ s }) {
           {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—')}
         </div>
         <div className="band">
-          {cell('数 量', '0 0 24%', shipVolStr(s) || '—')}
+          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" />)}
           {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—')}
           {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—')}
         </div>
@@ -4118,11 +4659,14 @@ function AssignPage({ isPopup }) {
     <div style={RPT.wrap}>
       <div style={RPT.head}>
         <h2 style={{ margin: 0, color: '#1a2332' }}>🔁 配送割り当て{isPopup ? '（共有）' : ''}</h2>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
-        <span style={{ fontSize: 13, color: '#6b7a8d' }}>（{wd}）</span>
+        {/* 日付と曜日は必ず隣接（日付が左・曜日が右）。スマホでもこの2つは離れない */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
+          <span style={{ fontSize: 13, color: '#6b7a8d', whiteSpace: 'nowrap' }}>（{wd}）</span>
+        </span>
         {!isPopup && (
           <button type="button" onClick={openBoard}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⛶ 別ウィンドウで開く（ログイン不要・共有可）</button>
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{narrow ? '⛶ 共有（別ウィンドウ）' : '⛶ 別ウィンドウで開く（ログイン不要・共有可）'}</button>
         )}
         {isPopup && (
           <button type="button" onClick={() => window.close()}
@@ -4150,8 +4694,7 @@ function AssignPage({ isPopup }) {
                         <span style={{ fontWeight: 700, fontSize: 18 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
                       </div>
-                      <div style={{ fontSize: 16 }}><span style={{ color: '#6b7a8d', marginRight: 6 }}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
-                      <div style={{ fontSize: 16, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <b style={{ color: '#111' }}>{volStr || '—'}</b></div>
+                      <div style={{ fontSize: 16, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <VolNum s={s} unit fallback="—" /></div>
                       <div style={{ fontSize: 16, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
@@ -4173,10 +4716,9 @@ function AssignPage({ isPopup }) {
                           <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '13px 18px', fontSize: 16 }}>
-                          <div style={{ minWidth: 0 }}><span style={lbl}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
                           <div style={{ minWidth: 0 }}><span style={lbl}>配合</span><b style={{ color: '#111' }}>{mixStr || '—'}</b></div>
+                          <div style={{ minWidth: 0 }}><span style={lbl}>量</span><VolNum s={s} unit fallback="—" /></div>
                           <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={lbl}>住所</span><span style={{ color: '#3a4a5c' }}>{addrCell}</span></div>
-                          <div style={{ minWidth: 0 }}><span style={lbl}>量</span><b style={{ color: '#111' }}>{volStr || '—'}</b></div>
                         </div>
                       </div>
                       <div style={{ flex: '0 0 190px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
@@ -4196,9 +4738,8 @@ function AssignPage({ isPopup }) {
                         <span style={{ color: '#6b7a8d', fontSize: 13 }}>{s.siteName || ''}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 14, color: '#3a4a5c', alignItems: 'baseline' }}>
-                        <span>担当 {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</span>
                         <span>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b></span>
-                        <span>量 <b style={{ color: '#111' }}>{volStr || '—'}</b></span>
+                        <span>量 <VolNum s={s} unit fallback="—" /></span>
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</span>
                       </div>
                     </div>
@@ -4402,8 +4943,9 @@ function Layout({ children, activeTab, onTabChange }) {
   const [open, setOpen]   = useState(false)
   const isMobile = useIsMobile()
   const isPC = !isMobile
-  // スマホでは生コン出荷予定表出力タブを表示しない
-  const navTabs = TABS.filter(t => !(isMobile && t.id === 'seikon'))
+  // 生コン出荷予定表出力はPCのみ。タッチ端末(iPhone/iPad)＝横向きで幅が広くても非表示
+  const notPC = IS_TOUCH_DEVICE || useIsMobile(1025)
+  const navTabs = TABS.filter(t => !(notPC && t.id === 'seikon'))
 
   // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
@@ -4532,6 +5074,7 @@ function LockedPage({ onUnlock }) {
 function AppInner() {
   const { user, loading } = useAuth()
   const isMobile = useIsMobile()
+  const notPC = IS_TOUCH_DEVICE || useIsMobile(1025)   // 生コン出荷予定表出力はPCのみ（スマホ・iPadは案内表示）
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
@@ -4567,7 +5110,7 @@ function AppInner() {
     : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
-    : activeTab === 'seikon' ? (isMobile && !isPopup
+    : activeTab === 'seikon' ? (notPC && !isPopup
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />

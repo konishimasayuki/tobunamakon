@@ -154,7 +154,8 @@ input, textarea, select { font-family: inherit; }
 /* 車種はさらに一回り大きく（自動リサイズで枠内に収まる） */
 .schedule .sc-in.xl { font-size:clamp(18px,3.1cqi,40px); }
 /* 現場名など：2行まで折り返し、3行を超える前にフォント自動縮小（fitOneがscrollHeight超過で縮める） */
-.schedule .sc-wrap2 { display:block; width:100%; white-space:normal; word-break:break-word; overflow-wrap:anywhere; line-height:1.18; max-height:2.36em; overflow:hidden; text-align:center; }
+/* 現場名など：文字が多い時は3行まで折り返してから縮小（iPad等の狭い列でも読めるように） */
+.schedule .sc-wrap2 { display:block; width:100%; white-space:normal; word-break:break-word; overflow-wrap:anywhere; line-height:1.2; max-height:3.6em; overflow:hidden; text-align:center; }
 .schedule .sc-wrap2-ph { color:#cbd2dc; font-weight:400; }
 .schedule .sc-in.changed { color:#c81e1e; }
 .schedule .sc-in.imp { color:#c81e1e; font-weight:700; }
@@ -172,6 +173,10 @@ input, textarea, select { font-family: inherit; }
 /* 数字が入る列（車種・配合・量・時間）は改行させず四角に収める（省略はしない） */
 .schedule td.sc-nowrap .sc-in { white-space:nowrap; text-overflow:clip; }
 .schedule td.sc-nowrap textarea.sc-ta { white-space:nowrap; }
+/* PC版予定表：直接書き換え可能なセル（マウスを乗せると枠が出て、入力中は黄色くハイライト） */
+.schedule .sc-in.sc-edit { cursor:text; border:1px solid transparent; border-radius:4px; }
+.schedule .sc-in.sc-edit:hover { border-color:#cdd5e0; background:#fbfcfe; }
+.schedule .sc-in.sc-edit:focus { border-color:#1a6a9f; background:#fffbe6; outline:none; box-shadow:0 0 0 2px rgba(26,106,159,0.18); }
 /* 配合の特記事項を配合の3フィールド（数字3つ）に合わせて3分割表示 */
 .schedule .sc-mixnote-line { display:block; width:100%; font-size:clamp(9px,1.1cqi,13px); color:#c81e1e; font-weight:700; text-align:center; line-height:1.25; white-space:nowrap; }
 .schedule .sc-mixnotes { display:flex; width:100%; }
@@ -264,7 +269,7 @@ input, textarea, select { font-family: inherit; }
   .schedule.popup-view .sc-in.xl { font-size:14px !important; }
   /* 色は黒基調、変更箇所のみ赤を保持 */
   .schedule .sc-in, .schedule .sc-mixcode, .schedule .sc-notes { color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .schedule .sc-in.changed, .schedule .sc-in.imp { color:#c81e1e !important; }
+  .schedule .sc-in.changed, .schedule .sc-in.imp, .schedule .sc-vol3 { color:#c81e1e !important; }
   /* ページ分割を防ぐ */
   .schedule.popup-view table, .schedule.popup-view tr, .schedule.popup-view td { page-break-inside:avoid; }
 }
