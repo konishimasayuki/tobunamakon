@@ -269,7 +269,7 @@ input, textarea, select { font-family: inherit; }
   .schedule.popup-view .sc-in.xl { font-size:14px !important; }
   /* 色は黒基調、変更箇所のみ赤を保持 */
   .schedule .sc-in, .schedule .sc-mixcode, .schedule .sc-notes { color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .schedule .sc-in.changed, .schedule .sc-in.imp { color:#c81e1e !important; }
+  .schedule .sc-in.changed, .schedule .sc-in.imp, .schedule .sc-vol3 { color:#c81e1e !important; }
   /* ページ分割を防ぐ */
   .schedule.popup-view table, .schedule.popup-view tr, .schedule.popup-view td { page-break-inside:avoid; }
 }

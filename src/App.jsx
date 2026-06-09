@@ -2866,14 +2866,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // PC版の直接編集セル（inlineEdit時のみ）。フォーカスを外す（onBlur）と保存→予定表・出荷登録に反映
   const editCell = (s, f, opts = {}) => {
     const v = getVal(s, f)
+    // 数量は編集中も「2桁=黒 / 3桁=赤」の太字を保つ（変更扱いのときは赤優先）。印刷でも赤を保つため sc-vol3 クラスも付与
+    const vol3 = f === 'volume' && (isChanged(s, f) || volNumColor(v) === '#c81e1e')
     const cls = 'sc-in sc-edit'
       + (isChanged(s, f) ? ' changed' : '')
       + (opts.center ? ' center' : '')
       + (opts.big ? ' big' : '')
       + (opts.xl ? ' xl' : '')
       + (opts.plain ? ' plain' : '')
-    // 数量は編集中も「2桁=黒 / 3桁=赤」の太字を保つ（変更扱いのときは赤優先）
-    const editStyle = (f === 'volume') ? { fontWeight: 700, color: isChanged(s, f) ? '#c81e1e' : volNumColor(v) } : undefined
+      + (vol3 ? ' sc-vol3' : '')
+    const editStyle = (f === 'volume') ? { fontWeight: 700, color: vol3 ? '#c81e1e' : '#111' } : undefined
     const common = {
       key: f + '_e' + (isChanged(s, f) ? '_c' : ''),
       ref: fitRef,
@@ -3022,7 +3024,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!segs.length) return <span ref={fitRef} className="sc-mixcode big center" style={{ pointerEvents: 'none' }} />
     return (
       <span ref={fitRef} className="sc-mixcode big center" key={'vol' + (red ? '_c' : '') + '_n' + segs.length} style={{ pointerEvents: 'none' }}>
-        {segs.map((seg, i) => <span key={i} style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 700, color: red ? '#c81e1e' : volNumColor(seg.num) }}>{seg.text}</span>)}
+        {segs.map((seg, i) => { const r3 = red || volNumColor(seg.num) === '#c81e1e'; return <span key={i} className={r3 ? 'sc-vol3' : undefined} style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 700, color: r3 ? '#c81e1e' : '#111' }}>{seg.text}</span> })}
       </span>
     )
   }
