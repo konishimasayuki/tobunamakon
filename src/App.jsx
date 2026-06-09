@@ -2843,6 +2843,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const fitOne = (el) => {
     if (!el || !el.isConnected) return
     el.style.fontSize = ''                 // いったんCSSの基準サイズ（clamp）に戻す
+    // 編集できる現場名(sc-editwrap)：まず内容に合わせて最大3行まで高さを広げ、3行を超える時だけフォントを段階縮小（＝小さくする前に改行）
+    if (el.classList && el.classList.contains('sc-editwrap')) {
+      let size = parseFloat(getComputedStyle(el).fontSize) || 16
+      let guard = 0
+      const grow = () => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
+      grow()
+      while (el.scrollHeight > size * 1.3 * 3 + 2 && size > 11 && guard < 80) {
+        size -= 0.5; el.style.fontSize = size + 'px'; grow(); guard++
+      }
+      return
+    }
     const base = parseFloat(getComputedStyle(el).fontSize) || 16
     let size = base, guard = 0
     // 横（および textarea の縦）がはみ出す間、収まるまで縮める。
@@ -2883,6 +2894,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
       placeholder: opts.ph || '',
       onBlur: (e) => saveField(s, f, e.target.value),
       style: editStyle,
+    }
+    if (opts.wrap) {
+      // 現場名など：編集できるが、小さくする前に最大3行まで折り返す（sc-editwrap を fitOne が処理）
+      return <textarea {...common} className={cls + ' sc-ta sc-editwrap'} rows={1}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); e.currentTarget.blur() } }} />
     }
     if (opts.multiline) {
       const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
