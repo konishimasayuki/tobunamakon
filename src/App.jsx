@@ -1909,11 +1909,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const topRef = useRef(null)
   const formRef = useRef(null)   // Enter/桁送りでの次項目フォーカス移動に使う
   const PAGE_SIZE = 10
-  // 本日〜2週間先まで（日曜を除く）の日付配列。一覧の日付ボタン用
+  // 本日〜25日先まで（日曜を除く）の日付配列。一覧の日付ボタン用
   const weekDates = (() => {
     const base = new Date()
     const out = []
-    for (let i = 0; i <= 14; i++) {
+    for (let i = 0; i <= 25; i++) {
       const d = new Date(base); d.setDate(base.getDate() + i)
       if (d.getDay() === 0) continue   // 日曜は除外
       out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
@@ -2353,7 +2353,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', 'PDF', '時間', '業者名', '商社名', '現場名', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -2362,6 +2362,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 {pageRows.map(s => (
                   <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => onRowClick(s)}>
                     <td style={S.td}>{s.date}</td>
+                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
+                    <td style={S.td}>{s.tradingCompany || '—'}</td>
+                    <td style={S.td}>{s.siteName || '—'}</td>
                     <td style={{ ...S.td, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {s.hasPdf
                         ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`}
@@ -2369,10 +2373,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                             style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a>
                         : '—'}
                     </td>
-                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
-                    <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
-                    <td style={S.td}>{s.tradingCompany || '—'}</td>
-                    <td style={S.td}>{s.siteName || '—'}</td>
+                    <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cleanAddr(s.siteAddress) || '—'}</td>
                     <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
                     <td style={S.td}>{vehicleLabel(s) || '—'}</td>
                     <td style={S.td}>{mixRowsOfShip(s).map(r => r.code).filter(Boolean).join(' / ') || '—'}</td>
