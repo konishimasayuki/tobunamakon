@@ -2025,12 +2025,12 @@ function HistoryPanel({ history }) {
   return (
     <div style={{ marginTop: 12, border: '1px solid #dde3ed', borderRadius: 8, background: '#fff', overflow: 'hidden' }}>
       <div style={{ padding: '8px 12px', background: '#f4f6f9', fontSize: 13, fontWeight: 700, color: '#3a4a5c', borderBottom: '1px solid #dde3ed' }}>📝 変更履歴</div>
-      <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 300, overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 8 }}>
         {list.map((h, i) => (
-          <div key={i} style={{ padding: '8px 12px', borderBottom: '1px solid #f2f4f8', fontSize: 12 }}>
+          <div key={i} style={{ border: '1px solid #eef1f5', borderRadius: 6, background: '#fafbfc', padding: '6px 8px', fontSize: 12, minWidth: 0 }}>
             <div style={{ color: '#6b7a8d', marginBottom: 3 }}>{fmtT(h.t)}</div>
             {(Array.isArray(h.items) ? h.items : []).map((it, j) => (
-              <div key={j} style={{ color: '#1a2332', lineHeight: 1.55 }}>
+              <div key={j} style={{ color: '#1a2332', lineHeight: 1.55, wordBreak: 'break-word' }}>
                 <span style={{ fontWeight: 700 }}>{it.f}</span>
                 <span style={{ color: '#9aa7b5' }}>：</span>
                 <span style={{ color: '#c0392b', textDecoration: 'line-through' }}>{it.from || '（空）'}</span>
@@ -2511,7 +2511,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -2532,6 +2532,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                         : '—'}
                     </td>
                     <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{addrCity(s.siteAddress) || '—'}</td>
+                    <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
                     <td style={S.td}>{vehicleLabel(s) || '—'}</td>
                     <td style={S.td}>{mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ') || '—'}</td>
                     <td style={S.td}>{s.cementType || '—'}</td>
@@ -4683,6 +4684,7 @@ function AssignPage({ isPopup }) {
                         <span style={{ fontWeight: 700, fontSize: 18 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
                       </div>
+                      <div style={{ fontSize: 16 }}><span style={{ color: '#6b7a8d', marginRight: 6 }}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
                       <div style={{ fontSize: 16, color: '#3a4a5c' }}>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b>　量 <VolNum s={s} unit fallback="—" /></div>
                       <div style={{ fontSize: 16, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
@@ -4705,6 +4707,7 @@ function AssignPage({ isPopup }) {
                           <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '13px 18px', fontSize: 16 }}>
+                          <div style={{ minWidth: 0 }}><span style={lbl}>担当</span>{assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</div>
                           <div style={{ minWidth: 0 }}><span style={lbl}>配合</span><b style={{ color: '#111' }}>{mixStr || '—'}</b></div>
                           <div style={{ minWidth: 0 }}><span style={lbl}>量</span><VolNum s={s} unit fallback="—" /></div>
                           <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={lbl}>住所</span><span style={{ color: '#3a4a5c' }}>{addrCell}</span></div>
@@ -4727,6 +4730,7 @@ function AssignPage({ isPopup }) {
                         <span style={{ color: '#6b7a8d', fontSize: 13 }}>{s.siteName || ''}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 14, color: '#3a4a5c', alignItems: 'baseline' }}>
+                        <span>担当 {assigned ? <b style={{ color: '#0f3060' }}>{drv.join('・')}</b> : <span style={{ color: '#c0392b', fontWeight: 700 }}>未割り当て</span>}</span>
                         <span>配合 <b style={{ color: '#111' }}>{mixStr || '—'}</b></span>
                         <span>量 <VolNum s={s} unit fallback="—" /></span>
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</span>
