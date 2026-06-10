@@ -2019,18 +2019,21 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
 
 // 変更履歴パネル（出荷登録の地図の下に表示）。サーバが保存した history（日時＋項目＋値の前後）を新しい順に表示
 function HistoryPanel({ history }) {
+  const isMobile = useIsMobile()
   const list = Array.isArray(history) ? history : []
   if (!list.length) return null
   const fmtT = (t) => { const d = new Date(t); if (isNaN(d.getTime())) return ''; const p = (n) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}` }
+  // スマホは2列、PCは4列。minmax(0,1fr)で枠内に縮めて長い住所も折り返す（横はみ出し防止）
+  const cols = isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))'
   return (
     <div style={{ marginTop: 12, border: '1px solid #dde3ed', borderRadius: 8, background: '#fff', overflow: 'hidden' }}>
       <div style={{ padding: '8px 12px', background: '#f4f6f9', fontSize: 13, fontWeight: 700, color: '#3a4a5c', borderBottom: '1px solid #dde3ed' }}>📝 変更履歴</div>
-      <div style={{ maxHeight: 320, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: 8 }}>
+      <div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'hidden', display: 'grid', gridTemplateColumns: cols, gap: 8, padding: 8 }}>
         {list.map((h, i) => (
           <div key={i} style={{ border: '1px solid #eef1f5', borderRadius: 6, background: '#fafbfc', padding: '6px 8px', fontSize: 12, minWidth: 0 }}>
             <div style={{ color: '#6b7a8d', marginBottom: 3 }}>{fmtT(h.t)}</div>
             {(Array.isArray(h.items) ? h.items : []).map((it, j) => (
-              <div key={j} style={{ color: '#1a2332', lineHeight: 1.55, wordBreak: 'break-word' }}>
+              <div key={j} style={{ color: '#1a2332', lineHeight: 1.55, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                 <span style={{ fontWeight: 700 }}>{it.f}</span>
                 <span style={{ color: '#9aa7b5' }}>：</span>
                 <span style={{ color: '#c0392b', textDecoration: 'line-through' }}>{it.from || '（空）'}</span>
