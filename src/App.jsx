@@ -2025,7 +2025,7 @@ function HistoryPanel({ history }) {
   return (
     <div style={{ marginTop: 12, border: '1px solid #dde3ed', borderRadius: 8, background: '#fff', overflow: 'hidden' }}>
       <div style={{ padding: '8px 12px', background: '#f4f6f9', fontSize: 13, fontWeight: 700, color: '#3a4a5c', borderBottom: '1px solid #dde3ed' }}>📝 変更履歴</div>
-      <div style={{ maxHeight: 300, overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 8 }}>
+      <div style={{ maxHeight: 320, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: 8 }}>
         {list.map((h, i) => (
           <div key={i} style={{ border: '1px solid #eef1f5', borderRadius: 6, background: '#fafbfc', padding: '6px 8px', fontSize: 12, minWidth: 0 }}>
             <div style={{ color: '#6b7a8d', marginBottom: 3 }}>{fmtT(h.t)}</div>
@@ -2460,10 +2460,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               return editing && labels.length > 0 && <div style={{ marginTop: 8, padding: '6px 12px', background: '#fdecec', border: '1px solid #f0b0b0', borderRadius: 6, fontSize: 13, color: '#c81e1e', fontWeight: 600 }}>予定表で変更された項目: {labels.join('・')}</div>
             })()}
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
-            {/* 変更履歴（地図の下）。編集中の伝票に保存済みの履歴を表示 */}
-            {editing && <HistoryPanel history={(shipments.find(x => x.id === editing) || {}).history} />}
           </div>
           </div>
+          {/* 変更履歴：フォームの下に左端から全幅・4列で表示 */}
+          {editing && <HistoryPanel history={(shipments.find(x => x.id === editing) || {}).history} />}
         </form>
       </div>
 
