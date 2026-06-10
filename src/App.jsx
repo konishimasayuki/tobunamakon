@@ -2465,8 +2465,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             {error && <div style={{ ...S.error, marginTop: 10 }}>{error}</div>}
           </div>
           </div>
-          {/* 変更履歴：フォームの下に左端から全幅・4列で表示 */}
-          {editing && <HistoryPanel history={(shipments.find(x => x.id === editing) || {}).history} />}
+          {/* 変更履歴：フォーム＋地図と同じ幅（最大1360px）で中央寄せして表示 */}
+          {editing && (
+            <div style={{ maxWidth: 1360, margin: '0 auto', width: '100%', minWidth: 0 }}>
+              <HistoryPanel history={(shipments.find(x => x.id === editing) || {}).history} />
+            </div>
+          )}
         </form>
       </div>
 
