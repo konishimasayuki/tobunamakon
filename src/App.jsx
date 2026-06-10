@@ -4769,6 +4769,48 @@ function SettingsPage() {
   const [unassignedOpen, setUnassignedOpen] = useState(true)
   const [employees, setEmployees] = useState([])
   const [pdfDate, setPdfDate] = useState(() => localToday())
+  const [backupBusy, setBackupBusy] = useState(false)
+  const fileRef = useRef(null)
+
+  // 全データ（伝票・顧客・従業員）を1ファイル(JSON)でダウンロード
+  const downloadBackup = async () => {
+    setBackupBusy(true)
+    try {
+      const data = await api.get('/api/backup')
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const d = new Date(); const p = n => String(n).padStart(2, '0')
+      a.href = url
+      a.download = `tobunamakon-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      const c = data.counts || {}
+      alert(`バックアップを保存しました\n伝票 ${c.shipments ?? 0} 件 / 顧客 ${c.customers ?? 0} 件 / 従業員 ${c.employees ?? 0} 件`)
+    } catch (e) { alert('バックアップに失敗しました: ' + e.message) }
+    finally { setBackupBusy(false) }
+  }
+  // バックアップファイルから復元（追加・上書き。今あるデータは消えない）
+  const onRestoreFile = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    let data
+    try { data = JSON.parse(await file.text()) }
+    catch { alert('ファイルを読み込めませんでした（JSON形式のバックアップを選んでください）'); return }
+    if (!data || data.type !== 'backup') { alert('これは当システムのバックアップファイルではありません'); return }
+    const c = data.counts || {}
+    if (!window.confirm(`このバックアップから復元します。\n伝票 ${c.shipments ?? 0} / 顧客 ${c.customers ?? 0} / 従業員 ${c.employees ?? 0} 件\n\n同じデータは上書きされます（今あるデータは消えません）。よろしいですか？`)) return
+    setBackupBusy(true)
+    try {
+      const r = await api.post('/api/backup', data)
+      const rr = r.restored || {}
+      alert(`復元しました\n伝票 ${rr.shipments ?? 0} / 顧客 ${rr.customers ?? 0} / 従業員 ${rr.employees ?? 0} 件\n\n画面を更新します。`)
+      notifyShipmentsChanged()
+      window.location.reload()
+    } catch (e) { alert('復元に失敗しました: ' + e.message) }
+    finally { setBackupBusy(false) }
+  }
 
   // PDF出力：出荷予定表を A4横で別ウィンドウに開き、読み込み後に自動で印刷ダイアログを出す
   const openSchedulePdf = () => {
@@ -4830,6 +4872,25 @@ function SettingsPage() {
             style={{ ...inp, width: 'auto', fontSize: 14, padding: '8px 10px' }} />
           <button onClick={openSchedulePdf}
             style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>🖨 PDF出力</button>
+        </div>
+      </div>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>💾 データのバックアップ</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          伝票・顧客・従業員の全データを1ファイル（JSON）で保存できます。<br />
+          定期的にダウンロードして、パソコンやハードディスクに保管してください。
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={downloadBackup} disabled={backupBusy}
+            style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, opacity: backupBusy ? 0.7 : 1 }}>📥 バックアップをダウンロード</button>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={backupBusy}
+            style={{ ...S.editBtn, padding: '10px 16px', fontSize: 13, opacity: backupBusy ? 0.7 : 1 }}>📤 バックアップから復元</button>
+          <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={onRestoreFile} />
+        </div>
+        <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
+          ※復元は「追加・上書き」です（同じデータは置き換え、今あるデータは消しません）。<br />
+          ※添付PDFはバックアップに含まれません（データ本体のみ）。
         </div>
       </div>
 
