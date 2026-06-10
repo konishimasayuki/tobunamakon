@@ -1993,8 +1993,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 })()}
               </div>
             </div>
-            {/* 7段: 担当ドライバー（非表示。データ・割り当て機能は保持。false→true で再表示） */}
-            {false && (
+            {/* 7段: 担当ドライバー */}
             <div className="band">
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
@@ -2012,7 +2011,6 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
             </div>
-            )}
           </div>
   )
 }
