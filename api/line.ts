@@ -242,7 +242,6 @@ function staticMapUrl(ship: any): string | null {
 // 出荷情報を読みやすいテキストに整形（フォールバック用）
 function formatShipment(s: any): string {
   const times = Array.isArray(s.times) ? s.times.map((t: any) => (t && t.text != null ? t.text : t)).filter(Boolean) : []
-  const drivers = Array.isArray(s.drivers) ? s.drivers.map((d: any) => d.name).filter(Boolean) : []
   const lines: string[] = []
   lines.push(`■ ${s.companyName || ''}${s.tradingCompany ? `（${s.tradingCompany}）` : ''}`)
   if (s.siteName) lines.push(`現場: ${s.siteName}`)
@@ -250,7 +249,6 @@ function formatShipment(s: any): string {
   if (vehicleLabelOf(s)) lines.push(`車種: ${vehicleLabelOf(s)}`)
   { const mr = mixRowsOf(s).filter(r => r.code); if (mr.length) lines.push(`配合: ${mr.map(r => r.code).join(' / ')}`) }
   { const vd = volumeDisplay(s); if (vd) lines.push(`数量: ${vd}`) }
-  if (drivers.length) lines.push(`担当: ${drivers.join('、')}`)
   if (s.siteContact) lines.push(`現場連絡先: ${s.siteContact}`)
   return lines.join('\n')
 }
@@ -273,7 +271,6 @@ function mapsUrlOf(s: any): string {
 // 出荷1件を「伝票風」の Flex バブルにする（出荷登録フォームの全項目を反映）
 function shipmentBubble(s: any): any {
   const times = Array.isArray(s.times) ? s.times.map((t: any) => (t && t.text != null ? t.text : t)).filter(Boolean) : []
-  const drivers = Array.isArray(s.drivers) ? s.drivers.map((d: any) => d.name).filter(Boolean) : []
   const placements = asArr(s.placements).filter(Boolean)
   const mixNotes = asArr(s.mixNotes).map((x: any) => String(x || '').trim())
   const notesArr = asArr(s.notes).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
@@ -322,8 +319,7 @@ function shipmentBubble(s: any): any {
     { type: 'text', text: s.siteName || '（現場名なし）', weight: 'bold', size: 'xl', color: '#111111', align: 'center', wrap: true },
     ...(s.pourLocation ? [{ type: 'text', text: `打設箇所: ${s.pourLocation}`, size: 'sm', color: '#3a4a5c', align: 'center', wrap: true }] : []),
     sep(),
-    // 主要項目
-    row('担当', drivers.join('、'), { big: true }),
+    // 主要項目（担当は非表示）
     row('車種', vehicleLabelOf(s) || '—'),
   ]
   // 配合（複数行）。各行 code＋（特記）を表示
