@@ -4133,7 +4133,7 @@ function WeeklySchedulePage() {
                 </div>
                 <div style={{ padding: 6 }}>
                   {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
-                    : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? <span style={volNumStyle(s.volume)}> /{s.volume}m³</span> : ''}</span></div>)}
+                    : list.map(s => { const pls = Array.isArray(s.placements) ? s.placements.filter(Boolean) : []; return <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? <span style={volNumStyle(s.volume)}> /{s.volume}m³</span> : ''}</span>{pls.length ? <><br /><span style={{ color: '#1a6a9f' }}>荷下ろし：{pls.join('・')}</span></> : ''}</div> })}
                 </div>
               </div>
             )
