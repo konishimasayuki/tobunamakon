@@ -1104,6 +1104,7 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
     // 変換確定は onCompositionEnd でも onChange を呼んで z2h を反映する。
     // composingRef はフォント自動調整(fit)を変換中だけ止めるためにのみ使う。
     <input ref={ref} className={className} type={type} value={value} lang={lang}
+      autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
       onChange={e => { onChange(e); requestAnimationFrame(fit) }}
       onCompositionStart={() => { composingRef.current = true }}
       onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
