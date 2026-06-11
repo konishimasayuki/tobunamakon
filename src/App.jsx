@@ -4705,6 +4705,23 @@ function AssignPage({ isPopup }) {
     if (!w) { alert('別ウィンドウを開けませんでした。ポップアップを許可してください。'); window.open(url, '_blank') }
   }
   const onModalSaved = (updated) => { setAll(prev => prev.map(x => x.id === updated.id ? updated : x)); setAssignTarget(null); setAddrTarget(null) }
+  // LINE送信（担当変更なし）：割り当て済みの担当者へそのままpush送信する
+  const sendLineDirect = async (s) => {
+    const cleanLineId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
+    const assigned = Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : [])
+    if (!assigned.length) { alert('担当者が割り当てられていません。\n先に「担当割当」で担当者を割り当ててください。'); return }
+    const resolved = assigned.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanLineId(emp?.lineId || d.lineId) } })
+    const withId = resolved.filter(r => r.lineId)
+    const without = resolved.filter(r => !r.lineId)
+    if (!withId.length) { alert('担当者にLINEユーザーIDが設定されていません。\n（従業員管理でLINE IDを設定してください）'); return }
+    if (!window.confirm(`${withId.map(r => r.name).join('、')} にLINEを送信しますか？`)) return
+    try {
+      const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: s.id, lineUserIds: withId.map(r => r.lineId) })
+      let m = `送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`
+      if (without.length) m += `\n（LINE未設定でスキップ: ${without.map(r => r.name).join('、')}）`
+      alert(m)
+    } catch (e) { alert('送信に失敗しました: ' + e.message) }
+  }
   const wd = (() => { const d = new Date(date); return isNaN(d.getTime()) ? '' : WD[d.getDay()] })()
 
   return (
@@ -4757,7 +4774,7 @@ function AssignPage({ isPopup }) {
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
                         <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                       </div>
-                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      <button type="button" onClick={() => sendLineDirect(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   )
                 }
@@ -4788,7 +4805,7 @@ function AssignPage({ isPopup }) {
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
                         <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                       </div>
-                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ flex: '0 0 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      <button type="button" onClick={() => sendLineDirect(s)} style={{ flex: '0 0 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   )
                 }
@@ -4816,7 +4833,7 @@ function AssignPage({ isPopup }) {
                       <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
                       <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                     </div>
-                    <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ flex: '0 0 110px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                    <button type="button" onClick={() => sendLineDirect(s)} style={{ flex: '0 0 110px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                   </div>
                 )
               })}
