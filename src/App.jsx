@@ -1923,10 +1923,10 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
                       // 量の数値：2桁=黒太字／3桁=赤太字／それ以外は太字なし（編集で変更扱いのときは赤を優先）
                       const inStyle = (s) => ({ width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30), ...(editChanged.includes('volume') ? { fontWeight: 700, color: '#c81e1e' } : volNumStyle(s)) })
-                      // 量の特記入力（数値の真上に小さく。配合の特記と同じ要領）
+                      // 量の特記入力（配合の特記=hgnote と同じ見た目：数値の真上に赤い破線の小さなラベル）
                       const noteInput = (w) => (
                         <input className="vol-note" value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
-                          style={{ width: w, fontSize: 10, textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, padding: '1px 0', color: '#0f3060', background: '#f4f8ff', marginBottom: 2 }} />
+                          style={{ width: w, fontSize: 10, fontWeight: 700, textAlign: 'center', color: '#c81e1e', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', background: 'transparent', fontFamily: 'inherit', padding: '0 0 1px', marginBottom: 2 }} />
                       )
                       return (
                         <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'flex-end', marginTop: idx ? 4 : 0, gap: 2 }}>
@@ -1936,8 +1936,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                                 onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeNote2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
                             ) : null}
                           </span>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                            {noteInput(isRange ? 56 : 84)}
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            {noteInput(isRange ? 56 : 78)}
                             <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
                               onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
                               onCompositionEnd={e => setFrom(e.target.value, false)} />
@@ -4085,6 +4085,7 @@ function WeeklySchedulePage() {
                 {binList.map((bl, bi) => {
                   const st = vehStats(bl)
                   const lb = BIN_LABELS[bi]
+                  const binVol = bl.reduce((a, s) => a + volUpper(s.volume) + volUpper(s.volume2), 0)   // この便の量合計（m³）
                   // 内訳：4t/7t を1行目、大型を2行目。常に2行ぶんの高さを確保して下の一覧の開始位置を揃える
                   const small = ['4t', '7t'].filter(v => st.c[v] > 0).map(v => `${v}:${st.c[v]}台`).join('　')
                   const big = st.c['大型'] > 0 ? `大型:${st.c['大型']}台` : ''
@@ -4094,7 +4095,10 @@ function WeeklySchedulePage() {
                         <span style={{ whiteSpace: 'nowrap' }}>{lb.main}</span>
                         {lb.sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{lb.sub}</span>}
                       </div>
-                      <div style={{ fontWeight: 700, color: '#0f3060', fontSize: 14 }}>計{st.total}台</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontWeight: 700, color: '#0f3060', fontSize: 14 }}>
+                        <span>計{st.total}台</span>
+                        <span style={{ color: '#c0392b' }}>{fmtV(binVol)}m³</span>
+                      </div>
                       <div style={{ fontSize: 13, marginTop: 1, lineHeight: 1.3 }}>
                         <div style={{ whiteSpace: 'nowrap', minHeight: '1.3em' }}>{st.total === 0 ? '—' : small}</div>
                         <div style={{ whiteSpace: 'nowrap', minHeight: '1.3em' }}>{big}</div>
