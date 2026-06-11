@@ -3321,7 +3321,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-card-actions">
                     <button type="button" onClick={() => setEditModal(s)}
                       style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => sendToAssigned(s)}
+                    <button type="button" onClick={() => openLine(s)}
                       style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
                     <button type="button" onClick={() => deleteShip(s)}
                       style={{ flex: '0 0 auto', border: '1px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>削除</button>
@@ -3385,7 +3385,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <td style={{ textAlign: 'center' }}>
                     <button type="button" onClick={() => openEditWindow(s)}
                       style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => sendToAssigned(s)}
+                    <button type="button" onClick={() => openLine(s)}
                       style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
                   </td>
                 )}
@@ -3439,30 +3439,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       {lineTarget && (
         <div onClick={() => setLineTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 460, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
-            <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(lineTarget) || '—'}</b>　<b>{lineTarget.companyName}</b></div>
-            <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 8 }}>{lineTarget.siteName || ''}</div>
-            {Array.isArray(lineTarget.drivers) && lineTarget.drivers.length > 0 && (
-              <div style={{ fontSize: 12, color: '#1a4d8f', marginBottom: 8 }}>現在の担当: {lineTarget.drivers.map(d => d.name).join('、')}</div>
-            )}
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>送り先を選択（従業員管理のドライバー・タップで選択）</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {drivers.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
-                : drivers.map(d => {
-                  const on = lineSel.includes(d.id)
-                  const noId = !cleanLineId(d.lineId)
-                  return (
-                    <button key={d.id} type="button" onClick={() => toggleLineSel(d.id)}
-                      style={{ border: on ? '2px solid #06c755' : '1.5px solid #cdd5e0', background: on ? '#06c755' : '#fff', color: on ? '#fff' : (noId ? '#aab' : '#3a4a5c'), borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                      {d.name}{noId && <span style={{ fontSize: 10, marginLeft: 2 }}>(LINE未設定)</span>}
-                    </button>
-                  )
-                })}
-            </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-              <button type="button" onClick={() => setLineTarget(null)} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
-              <button type="button" onClick={doSendLine} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>💬 一括送信</button>
-            </div>
+            <DriverAssignBody shipment={lineTarget} mode="send" drivers={drivers} onClose={() => setLineTarget(null)} onSaved={() => setLineTarget(null)} />
           </div>
         </div>
       )}
@@ -4383,32 +4360,31 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }
   }
   const [sel, setSel] = useState(initSel)
   const [busy, setBusy] = useState(false)
-  // withLine=true のとき選択者へLINE送信。担当の保存は常に行う（送信先＝担当に反映）
-  const doSave = async (withLine) => {
+  // 担当割当：担当者を保存するだけ（LINE送信はしない）
+  const doAssign = async () => {
     setBusy(true)
     try {
       const u = await saveShipmentDrivers(shipment, sel)
       notifyShipmentsChanged()
-      if (withLine) {
-        if (!sel.length) { alert('送信先が選択されていません。'); setBusy(false); return }
-        const resolved = sel.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanId(emp?.lineId) } })
-        const withId = resolved.filter(r => r.lineId)
-        const without = resolved.filter(r => !r.lineId)
-        if (!withId.length) {
-          alert('送信先にLINEユーザーIDが紐づいていないため送信できませんでした。\n（従業員管理でLINE IDを設定してください）')
-        } else {
-          try {
-            const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: shipment.id, lineUserIds: withId.map(r => r.lineId) })
-            let m = `${withId.map(r => r.name).join('、')} にLINEを送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`
-            if (without.length) m += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
-            alert(m)
-          } catch (e) { alert('LINE送信でエラー: ' + e.message) }
-        }
-      } else {
-        alert(sel.length ? `担当者を割り当てました（${sel.map(d => d.name).join('、')}）` : '担当者を解除しました')
-      }
+      alert(sel.length ? `担当者を割り当てました（${sel.map(d => d.name).join('、')}）` : '担当者を解除しました')
       onSaved && onSaved(u)
     } catch (e) { alert('エラー: ' + e.message); setBusy(false) }
+  }
+  // LINE送信：選んだ送信先へpush送信するだけ。担当（s.drivers）は変更しない
+  const doSend = async () => {
+    if (!sel.length) { alert('送信先が選択されていません。'); return }
+    const resolved = sel.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanId(emp?.lineId || d.lineId) } })
+    const withId = resolved.filter(r => r.lineId)
+    const without = resolved.filter(r => !r.lineId)
+    if (!withId.length) { alert('送信先にLINEユーザーIDが紐づいていないため送信できません。\n（従業員管理でLINE IDを設定してください）'); return }
+    setBusy(true)
+    try {
+      const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: shipment.id, lineUserIds: withId.map(r => r.lineId) })
+      let m = `${withId.map(r => r.name).join('、')} にLINEを送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`
+      if (without.length) m += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
+      alert(m)
+      onClose && onClose()   // 担当は変更しない。送信後は閉じるだけ
+    } catch (e) { alert('LINE送信でエラー: ' + e.message); setBusy(false) }
   }
   const accent = isAssign ? '#1a6a9f' : '#06c755'
   return (
@@ -4420,7 +4396,7 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }
       <DriverPicker value={sel} options={drivers} onChange={setSel} accent={accent} />
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
-        <button type="button" onClick={() => doSave(!isAssign)} disabled={busy}
+        <button type="button" onClick={() => (isAssign ? doAssign() : doSend())} disabled={busy}
           style={{ flex: 1, border: `1.5px solid ${accent}`, background: accent, color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? (isAssign ? '保存中…' : '送信中…') : (isAssign ? '👤 担当に割り当て' : '💬 LINE送信')}</button>
       </div>
     </>
@@ -4774,7 +4750,7 @@ function AssignPage({ isPopup }) {
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
                         <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                       </div>
-                      <button type="button" onClick={() => sendLineDirect(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   )
                 }
@@ -4805,7 +4781,7 @@ function AssignPage({ isPopup }) {
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
                         <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                       </div>
-                      <button type="button" onClick={() => sendLineDirect(s)} style={{ flex: '0 0 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ flex: '0 0 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   )
                 }
@@ -4833,7 +4809,7 @@ function AssignPage({ isPopup }) {
                       <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
                       <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                     </div>
-                    <button type="button" onClick={() => sendLineDirect(s)} style={{ flex: '0 0 110px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                    <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ flex: '0 0 110px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                   </div>
                 )
               })}
