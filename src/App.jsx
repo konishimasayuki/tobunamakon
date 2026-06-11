@@ -4304,8 +4304,8 @@ async function saveShipmentDrivers(shipment, newDrivers) {
   return api.put(`/api/shipments/${shipment.id}?assign=1`, { drivers: nd })
 }
 
-// 担当者を選ぶUI（チップ・最大4人）
-function DriverPicker({ value, options, onChange }) {
+// 担当者を選ぶUI（チップ）。accent=選択時の色
+function DriverPicker({ value, options, onChange, accent = '#1b4ea8' }) {
   const has = (id) => value.some(d => d.id === id)
   const toggle = (emp) => {
     if (has(emp.id)) onChange(value.filter(d => d.id !== emp.id))
@@ -4317,54 +4317,65 @@ function DriverPicker({ value, options, onChange }) {
         : options.map(emp => {
           const on = has(emp.id)
           return <button key={emp.id} type="button" onClick={() => toggle(emp)}
-            style={{ border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#1b4ea8' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{emp.name}</button>
+            style={{ border: on ? `2px solid ${accent}` : '1.5px solid #cdd5e0', background: on ? accent : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{emp.name}</button>
         })}
     </div>
   )
 }
 
-// 担当者振替の本体（モーダル／別ウィンドウ共用）
-// 担当者を選び、「保存してLINE送信」で割り当て＋選択ドライバーへLINE通知を行う
-function DriverAssignBody({ shipment, drivers, onSaved, onClose }) {
-  const [sel, setSel] = useState([])   // 開いた時点では誰も選択しない（PC/モバイル共通）
-  const [busy, setBusy] = useState(false)
+// 担当割当 / LINE送信 の本体（モーダル共用）。mode='assign'（担当を割り当てるだけ）／'send'（送信先へLINE送信）
+// 開いた時、割り当て済みの担当者を初期選択にする（送信先・担当者とも）
+function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }) {
+  const isAssign = mode === 'assign'
   const cleanId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
-  // 保存（担当割り当て）。withLine=true のとき選択ドライバーへLINEも送信する
+  const initSel = () => {
+    const assigned = Array.isArray(shipment.drivers) ? shipment.drivers : (shipment.driverName ? [{ id: shipment.driverId || '', name: shipment.driverName }] : [])
+    return assigned.filter(Boolean).map(d => {
+      const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name)
+      return emp ? { id: emp.id, name: emp.name } : { id: d.id || '', name: d.name }
+    })
+  }
+  const [sel, setSel] = useState(initSel)
+  const [busy, setBusy] = useState(false)
+  // withLine=true のとき選択者へLINE送信。担当の保存は常に行う（送信先＝担当に反映）
   const doSave = async (withLine) => {
     setBusy(true)
     try {
       const u = await saveShipmentDrivers(shipment, sel)
       notifyShipmentsChanged()
       if (withLine) {
-        if (!sel.length) { alert('LINEを送る担当者が選択されていません。'); setBusy(false); return }
+        if (!sel.length) { alert('送信先が選択されていません。'); setBusy(false); return }
         const resolved = sel.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanId(emp?.lineId) } })
         const withId = resolved.filter(r => r.lineId)
         const without = resolved.filter(r => !r.lineId)
         if (!withId.length) {
-          alert('割り当ては保存しました。\nただし選択した担当者にLINEユーザーIDが紐づいていないため送信できませんでした。\n（従業員管理でLINE IDを設定してください）')
+          alert('送信先にLINEユーザーIDが紐づいていないため送信できませんでした。\n（従業員管理でLINE IDを設定してください）')
         } else {
           try {
             const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: shipment.id, lineUserIds: withId.map(r => r.lineId) })
-            let m = `割り当てを保存し、${withId.map(r => r.name).join('、')} にLINEを送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`
+            let m = `${withId.map(r => r.name).join('、')} にLINEを送信しました（${res.sent ?? '?'}/${res.total ?? '?'} 件成功）`
             if (without.length) m += `\n（LINE未設定のためスキップ: ${without.map(r => r.name).join('、')}）`
             alert(m)
-          } catch (e) { alert('割り当ては保存しましたが、LINE送信でエラー: ' + e.message) }
+          } catch (e) { alert('LINE送信でエラー: ' + e.message) }
         }
+      } else {
+        alert(sel.length ? `担当者を割り当てました（${sel.map(d => d.name).join('、')}）` : '担当者を解除しました')
       }
       onSaved && onSaved(u)
     } catch (e) { alert('エラー: ' + e.message); setBusy(false) }
   }
+  const accent = isAssign ? '#1a6a9f' : '#06c755'
   return (
     <>
-      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>💬 LINE送信</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 6 }}>{isAssign ? '👤 担当割当' : '💬 LINE送信'}</div>
       <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
       <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>担当者（タップで選択／解除）</div>
-      <DriverPicker value={sel} options={drivers} onChange={setSel} />
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>{isAssign ? '担当者（タップで選択／解除）' : '送信先（タップで選択／解除）'}</div>
+      <DriverPicker value={sel} options={drivers} onChange={setSel} accent={accent} />
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
-        <button type="button" onClick={() => doSave(true)} disabled={busy}
-          style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '送信中…' : '💬 LINE送信'}</button>
+        <button type="button" onClick={() => doSave(!isAssign)} disabled={busy}
+          style={{ flex: 1, border: `1.5px solid ${accent}`, background: accent, color: '#fff', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? (isAssign ? '保存中…' : '送信中…') : (isAssign ? '👤 担当に割り当て' : '💬 LINE送信')}</button>
       </div>
     </>
   )
@@ -4683,8 +4694,12 @@ function AssignPage({ isPopup }) {
                 if (narrow) {
                   // スマホ（狭い縦画面）：縦カード。操作ボタンは下に横並び
                   return (
-                    <div key={s.id} style={{ background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <div key={s.id} style={{ position: 'relative', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      {s.hasPdf && (
+                        <button type="button" onClick={() => window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')}
+                          style={{ position: 'absolute', top: 12, right: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, border: '1.5px solid #8a97a6', background: '#fff', color: '#3a4a5c', borderRadius: 9, padding: '6px 8px', fontSize: 12, fontWeight: 700, lineHeight: 1.1, cursor: 'pointer' }}>📄<span>PDF確認</span></button>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', paddingRight: s.hasPdf ? 78 : 0 }}>
                         <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 18 }}>{firstTimeOf(s) || '—'}</span>
                         <span style={{ fontWeight: 700, fontSize: 18 }}>{s.companyName}</span>
                         <span style={{ color: '#6b7a8d', fontSize: 15 }}>{s.siteName || ''}</span>
@@ -4694,8 +4709,9 @@ function AssignPage({ isPopup }) {
                       <div style={{ fontSize: 16, color: '#3a4a5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
-                        <button type="button" onClick={() => openAssign(s)} style={{ flex: 1, border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                        <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ flex: 1, border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                       </div>
+                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 9, padding: '12px 0', fontSize: 17, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   )
                 }
@@ -4718,17 +4734,22 @@ function AssignPage({ isPopup }) {
                           <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={lbl}>住所</span><span style={{ color: '#3a4a5c' }}>{addrCell}</span></div>
                         </div>
                       </div>
-                      <div style={{ flex: '0 0 190px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
+                      {s.hasPdf && (
+                        <button type="button" onClick={() => window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')}
+                          style={{ flex: '0 0 74px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, border: '1.5px solid #8a97a6', background: '#fff', color: '#3a4a5c', borderRadius: 10, fontSize: 13, fontWeight: 700, lineHeight: 1.15, cursor: 'pointer' }}>📄<span>PDF確認</span></button>
+                      )}
+                      <div style={{ flex: '0 0 170px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
                         <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
-                        <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                        <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 10, padding: '13px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                       </div>
+                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ flex: '0 0 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                     </div>
                   )
                 }
                 // PC：コンパクトな2行カード（ボタン小さめ・縦並び）。1画面に多く表示できる
                 return (
-                  <div key={s.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 10, padding: '8px 14px' }}>
-                    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div key={s.id} style={{ display: 'flex', gap: 12, alignItems: 'stretch', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 10, padding: '8px 14px' }}>
+                    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 800, color: '#c0392b', fontSize: 16 }}>{firstTimeOf(s) || '—'}</span>
                         <span style={{ fontWeight: 700, fontSize: 16 }}>{s.companyName}</span>
@@ -4741,10 +4762,15 @@ function AssignPage({ isPopup }) {
                         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>住所 {addrCell}</span>
                       </div>
                     </div>
-                    <div style={{ flex: '0 0 140px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {s.hasPdf && (
+                      <button type="button" onClick={() => window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')}
+                        style={{ flex: '0 0 62px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, border: '1.5px solid #8a97a6', background: '#fff', color: '#3a4a5c', borderRadius: 7, fontSize: 12, fontWeight: 700, lineHeight: 1.1, cursor: 'pointer' }}>📄<span>PDF確認</span></button>
+                    )}
+                    <div style={{ flex: '0 0 130px', display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
                       <button type="button" onClick={() => setAddrTarget(s)} style={{ border: '1.5px solid #1a6a9f', background: '#fff', color: '#1a6a9f', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📍 住所設定</button>
-                      <button type="button" onClick={() => openAssign(s)} style={{ border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
+                      <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'assign' })} style={{ border: '1.5px solid #1a6a9f', background: '#1a6a9f', color: '#fff', borderRadius: 7, padding: '6px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>👤 担当割当</button>
                     </div>
+                    <button type="button" onClick={() => setAssignTarget({ ship: s, mode: 'send' })} style={{ flex: '0 0 110px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>💬 LINE送信</button>
                   </div>
                 )
               })}
@@ -4753,7 +4779,7 @@ function AssignPage({ isPopup }) {
       {assignTarget && (
         <div onClick={() => setAssignTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: 14, padding: 18, maxHeight: '88dvh', overflowY: 'auto' }}>
-            <DriverAssignBody shipment={assignTarget} drivers={drivers} onSaved={onModalSaved} onClose={() => setAssignTarget(null)} />
+            <DriverAssignBody shipment={assignTarget.ship} mode={assignTarget.mode} drivers={drivers} onSaved={onModalSaved} onClose={() => setAssignTarget(null)} />
           </div>
         </div>
       )}
