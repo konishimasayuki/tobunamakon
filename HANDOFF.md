@@ -3,8 +3,8 @@
 最終更新: 2026-06-11
 
 ## リポジトリ / デプロイ
-- **本番**: `main` → Vercel 自動デプロイ（**tobunamakon.vercel.app**）。現在の先端 `087e943`。
-- **作業ブランチ**: `claude/tobunamakon-handoff-summary-7go8bm`（main と同内容）。
+- **本番**: `main` → Vercel 自動デプロイ（**tobunamakon.vercel.app**）。現在の先端 `ff7dccd`。
+- **作業ブランチ**: `claude/handoff-md-setup-0bhi97`（main と同内容）。
 - **反映フロー**: 作業ブランチへ push → PR 作成 → main へマージ（＝本番デプロイ）。
 - **DB**: Upstash Redis（従量課金）。`KV_REST_API_URL` / `KV_REST_API_TOKEN`。
 - **外部サービス**: LINE Messaging API、Google Maps（フロント表示＋LINEの地図画像）。
