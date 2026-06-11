@@ -3188,6 +3188,33 @@ function SchedulePage({ onEditShipment, isPopup }) {
       alert('送信に失敗しました: ' + e.message)
     }
   }
+  // LINE送信（担当変更なし）：割り当て済みの担当者へそのままpush送信する
+  const sendToAssigned = async (s) => {
+    const assigned = Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : [])
+    if (!assigned.length) { alert('担当者が割り当てられていません。\n先に「担当」を割り当ててください（出荷登録／配送割り当て）。'); return }
+    const resolved = assigned.map(d => { const emp = drivers.find(e => (d.id && e.id === d.id) || e.name === d.name); return { name: d.name, lineId: cleanLineId(emp?.lineId || d.lineId) } })
+    const withId = resolved.filter(r => r.lineId)
+    const without = resolved.filter(r => !r.lineId)
+    if (!withId.length) { alert('担当者にLINEユーザーIDが設定されていません。\n（従業員管理でLINE IDを設定してください）'); return }
+    if (!window.confirm(`${withId.map(r => r.name).join('、')} にLINEを送信しますか？`)) return
+    try {
+      const res = await api.post('/api/line', { action: 'pushShipment', shipmentId: s.id, lineUserIds: withId.map(r => r.lineId) })
+      const fails = (res.results || []).filter(r => !r.ok)
+      let msg = `送信しました（${res.sent}/${res.total} 件成功）`
+      if (without.length) msg += `\n（LINE未設定でスキップ: ${without.map(r => r.name).join('、')}）`
+      if (fails.length) msg += `\n\n■ 送信失敗:\n${fails.map(f => { const who = withId.find(w => w.lineId === f.to); return `・${who ? who.name : ''}（${f.error || '不明なエラー'}）` }).join('\n')}`
+      alert(msg)
+    } catch (e) { alert('送信に失敗しました: ' + e.message) }
+  }
+  // 伝票を削除（キャンセル＝キャンセル伝票に保管・復元可）
+  const deleteShip = async (s) => {
+    if (!window.confirm(`この伝票を削除しますか？\n${firstTimeOf(s) || ''}　${s.companyName || ''}\n（キャンセル伝票に保管され、復元できます）`)) return
+    try {
+      await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: true })
+      setAll(arr => arr.filter(x => x.id !== s.id))
+      notifyShipmentsChanged()
+    } catch (e) { alert('削除に失敗しました: ' + e.message) }
+  }
 
   const resetReds = async () => {
     const targets = all.filter(s => Array.isArray(s.changedFields) && s.changedFields.length)
@@ -3294,8 +3321,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-card-actions">
                     <button type="button" onClick={() => setEditModal(s)}
                       style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => openLine(s)}
+                    <button type="button" onClick={() => sendToAssigned(s)}
                       style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
+                    <button type="button" onClick={() => deleteShip(s)}
+                      style={{ flex: '0 0 auto', border: '1px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>削除</button>
                   </div>
                 </div>
               ))}
@@ -3316,15 +3345,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <table>
           <colgroup>
             <col style={{ width: '11%' }} />
-            <col style={{ width: '15%' }} />
+            <col style={{ width: '13%' }} />
             {!isPopup && <col style={{ width: '7%' }} />}
             <col style={{ width: '7%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '6%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '14%' }} />
-            {!isPopup && <col style={{ width: '8%' }} />}
+            <col style={{ width: '12%' }} />
+            {!isPopup && <col style={{ width: '6%' }} />}
+            {!isPopup && <col style={{ width: '6%' }} />}
           </colgroup>
           <thead>
             <tr>
@@ -3332,6 +3362,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>車種</th><th>配合</th><th>数量</th><th>担当</th><th>時間</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
+              {!isPopup && <th>削除</th>}
             </tr>
           </thead>
           <tbody>
@@ -3354,8 +3385,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <td style={{ textAlign: 'center' }}>
                     <button type="button" onClick={() => openEditWindow(s)}
                       style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => openLine(s)}
+                    <button type="button" onClick={() => sendToAssigned(s)}
                       style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
+                  </td>
+                )}
+                {!isPopup && (
+                  <td style={{ textAlign: 'center' }}>
+                    <button type="button" onClick={() => deleteShip(s)}
+                      style={{ display: 'block', margin: '0 auto', border: '1px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>削除</button>
                   </td>
                 )}
               </tr>
