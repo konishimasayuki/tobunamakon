@@ -2046,6 +2046,15 @@ function HistoryPanel({ history }) {
   )
 }
 
+// 添付PDFを枠に埋め込んで表示し、右上に大きめの半透明×ボタンを重ねる（閉じて元の画面に戻れる）
+function openPdfViewer(id) {
+  const url = `/api/shipments?id=${encodeURIComponent(id)}&pdf=1`
+  const w = window.open('', '_blank')
+  if (!w) { window.open(url, '_blank'); return }
+  w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF</title><style>html,body{margin:0;height:100%;background:#525659;overflow:hidden}iframe{border:0;position:absolute;inset:0;width:100%;height:100%}.x{position:fixed;top:14px;right:14px;width:60px;height:60px;border-radius:50%;border:none;background:rgba(20,20,20,.45);color:#fff;font-size:34px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2147483647;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 8px rgba(0,0,0,.3)}.x:active{background:rgba(20,20,20,.7)}</style></head><body><iframe src="${url}"></iframe><button class="x" aria-label="閉じる" onclick="window.close()">×</button></body></html>`)
+  w.document.close()
+}
+
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, isPopup }) {
   const isMobile = useIsMobile()
   const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
@@ -2532,7 +2541,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <td style={{ ...S.td, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {s.hasPdf
                         ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`}
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes') }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openPdfViewer(s.id) }}
                             style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>PDF</a>
                         : '—'}
                     </td>
@@ -3141,7 +3150,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 添付PDFを新規ウィンドウで開く
-  const openPdfWin = (id) => window.open(`/api/shipments?id=${encodeURIComponent(id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')
+  const openPdfWin = (id) => openPdfViewer(id)
 
   // LINE送信：送り先（従業員管理のドライバー）を選んで一括送信→送信できたら担当に追加していく
   const cleanLineId = (v) => String(v || '').replace(/[\s　​-‍﻿]/g, '').trim()
@@ -4696,7 +4705,7 @@ function AssignPage({ isPopup }) {
                   return (
                     <div key={s.id} style={{ position: 'relative', background: cardBg, border: '1px solid #d7e0ea', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
                       {s.hasPdf && (
-                        <button type="button" onClick={() => window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')}
+                        <button type="button" onClick={() => openPdfViewer(s.id)}
                           style={{ position: 'absolute', top: 12, right: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, border: '1.5px solid #8a97a6', background: '#fff', color: '#3a4a5c', borderRadius: 9, padding: '6px 8px', fontSize: 12, fontWeight: 700, lineHeight: 1.1, cursor: 'pointer' }}>📄<span>PDF確認</span></button>
                       )}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', paddingRight: s.hasPdf ? 78 : 0 }}>
@@ -4735,7 +4744,7 @@ function AssignPage({ isPopup }) {
                         </div>
                       </div>
                       {s.hasPdf && (
-                        <button type="button" onClick={() => window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')}
+                        <button type="button" onClick={() => openPdfViewer(s.id)}
                           style={{ flex: '0 0 74px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, border: '1.5px solid #8a97a6', background: '#fff', color: '#3a4a5c', borderRadius: 10, fontSize: 13, fontWeight: 700, lineHeight: 1.15, cursor: 'pointer' }}>📄<span>PDF確認</span></button>
                       )}
                       <div style={{ flex: '0 0 170px', display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
@@ -4763,7 +4772,7 @@ function AssignPage({ isPopup }) {
                       </div>
                     </div>
                     {s.hasPdf && (
-                      <button type="button" onClick={() => window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000,scrollbars=yes,resizable=yes')}
+                      <button type="button" onClick={() => openPdfViewer(s.id)}
                         style={{ flex: '0 0 62px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, border: '1.5px solid #8a97a6', background: '#fff', color: '#3a4a5c', borderRadius: 7, fontSize: 12, fontWeight: 700, lineHeight: 1.1, cursor: 'pointer' }}>📄<span>PDF確認</span></button>
                     )}
                     <div style={{ flex: '0 0 130px', display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
