@@ -4648,6 +4648,7 @@ function AssignPage({ isPopup }) {
   const useModal = isPopup || stacked   // 別ウィンドウ内 or スマホ/iPad は振替モーダル、PC(アプリ内)は別ウィンドウ
   const urlDate = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search).get('date') : null
   const [date, setDate] = useState(() => (isPopup && urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : localToday())
+  const [ampm, setAmpm] = useState('both')   // AM/PM表示の絞り込み（'both'|'AM'|'PM'）
   const [all, setAll] = useState([])
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -4666,7 +4667,9 @@ function AssignPage({ isPopup }) {
   useShipmentsChanged(load)   // 別ウィンドウで保存されたら再取得して反映
 
   // all は日付索引で表示日ぶんのみ取得済み。日付変更中も前日の表示を残すため date 判定はしない
-  const rows = [...all]
+  // AM/PM絞り込み（'both'|'AM'|'PM'）。午前=12:00より前、午後=12:00以降
+  const inAmPm = (s) => { if (ampm === 'both') return true; const mm = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? mm < 720 : mm >= 720 }
+  const rows = [...all].filter(inAmPm)
     .sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
 
   const openBoard = () => {
@@ -4708,6 +4711,13 @@ function AssignPage({ isPopup }) {
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} style={RPT.date} />
           <span style={{ fontSize: 13, color: '#6b7a8d', whiteSpace: 'nowrap' }}>（{wd}）</span>
+        </span>
+        {/* AM/PM 絞り込み（押した方だけ表示。もう一度押すと全件） */}
+        <span style={{ display: 'inline-flex', gap: 6 }}>
+          {['AM', 'PM'].map(p => (
+            <button key={p} type="button" onClick={() => setAmpm(a => a === p ? 'both' : p)}
+              style={{ border: ampm === p ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === p ? '#0f3060' : '#fff', color: ampm === p ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '5px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{p}</button>
+          ))}
         </span>
         {!isPopup && (
           <button type="button" onClick={openBoard}
