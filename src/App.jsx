@@ -965,18 +965,27 @@ function shipVolStr(s) {
 
 // 量の数値表示色：整数部が3桁以上(100㎥〜)なら赤、2桁以下なら黒。常に太字（全画面共通ルール）。
 // 範囲入力（例 13〜14）は「〜」より前の数値の桁で判定する。
-function volNumColor(v) {
+function volIntLen(v) {
   const first = String(v ?? '').split('〜')[0]
-  const intLen = first.trim().replace(/[^0-9.]/g, '').split('.')[0].replace(/^0+(?=\d)/, '').length
-  return intLen >= 3 ? '#c81e1e' : '#111'
+  return first.trim().replace(/[^0-9.]/g, '').split('.')[0].replace(/^0+(?=\d)/, '').length
 }
-// 量を「2桁=黒太字 / 3桁=赤太字」で表示する共通レンダラ。unit=true で m³ を付与。値が無ければ fallback を返す
+function volNumColor(v) {
+  return volIntLen(v) >= 3 ? '#c81e1e' : '#111'
+}
+// 量の数値スタイル：2桁=黒の太字／3桁=赤の太字／それ以外(1桁・4桁以上)は太字にしない。範囲(13〜14)は先頭の数値で判定
+function volNumStyle(v) {
+  const n = volIntLen(v)
+  if (n === 2) return { fontWeight: 700, color: '#111' }
+  if (n === 3) return { fontWeight: 700, color: '#c81e1e' }
+  return { fontWeight: 400, color: '#111' }
+}
+// 量を表示する共通レンダラ。unit=true で m³ を付与。値が無ければ fallback を返す。量の特記(volumeNote)があれば数値の前に小さく表示
 function VolNum({ s, unit = false, sep = ' / ', fallback = null }) {
-  const segs = [[s.volume, s.volumePlusA, s.volumeUncertain], [s.volume2, s.volumePlusA2, s.volumeUncertain2]]
-    .map(([v, a, u]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
+  const segs = [[s.volume, s.volumePlusA, s.volumeUncertain, s.volumeNote], [s.volume2, s.volumePlusA2, s.volumeUncertain2, s.volumeNote2]]
+    .map(([v, a, u, note]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, note: String(note || '').trim(), text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
     .filter(Boolean)
   if (!segs.length) return fallback
-  return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}<span style={{ fontWeight: 700, color: volNumColor(seg.num) }}>{seg.text}</span></Fragment>))}</>
+  return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}{seg.note ? <span style={{ fontSize: '.72em', color: '#0f3060', background: '#eef4ff', borderRadius: 4, padding: '0 4px', marginRight: 3 }}>{seg.note}</span> : ''}<span style={volNumStyle(seg.num)}>{seg.text}</span></Fragment>))}</>
 }
 
 // 車種表示: vehicleItems があれば車種名を「・」連結、無ければ vehicleType をそのまま（台数は表記しない）
@@ -1023,11 +1032,13 @@ const emptyShipForm = {
   mixRows: [{ parts: ['', '', ''], note: '' }],   // 配合の複数行。1行目を mixCode/mixNotes に同期
   cementType: '',
   volume: '',
+  volumeNote: '',            // 量の特記（数値の上に小さく表示。配合の特記と同じ要領）
   volumeUncertain: false,
   volumePlusA: false,        // 量に「+a」を付ける
   volumeRange: false,        // 量を範囲（13〜14）で入力するか（UI用）
   hasVolume2: false,         // 2段目の量を使うか（UI用）
   volume2: '',
+  volumeNote2: '',           // 2段目の量の特記
   volumeUncertain2: false,
   volumePlusA2: false,
   volumeRange2: false,
@@ -1897,6 +1908,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
                       const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
                       const rKey = idx === 0 ? 'volumeRange' : 'volumeRange2'
+                      const nKey = idx === 0 ? 'volumeNote' : 'volumeNote2'
                       const raw = String(form[vKey] || '')
                       const sepI = raw.indexOf('〜')
                       const vFrom = sepI >= 0 ? raw.slice(0, sepI) : raw
@@ -1909,19 +1921,27 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const toggleRange = () => setForm(f => { const cur = String(f[vKey] || ''); const i = cur.indexOf('〜'); const from = i >= 0 ? cur.slice(0, i) : cur; const on = !(f[rKey] || i >= 0); return { ...f, [rKey]: on, [vKey]: from } })
                       // ㎥が3桁(整数部3桁以上)のとき文字を大きく
                       const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
-                      // 量の数値：整数2桁以下=黒太字／3桁以上=赤太字（編集で変更扱いのときは赤を優先）
-                      const inStyle = (s) => ({ width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30), fontWeight: 700, color: editChanged.includes('volume') ? '#c81e1e' : volNumColor(s) })
+                      // 量の数値：2桁=黒太字／3桁=赤太字／それ以外は太字なし（編集で変更扱いのときは赤を優先）
+                      const inStyle = (s) => ({ width: isRange ? 56 : 84, fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 38 : 30), ...(editChanged.includes('volume') ? { fontWeight: 700, color: '#c81e1e' } : volNumStyle(s)) })
+                      // 量の特記入力（数値の真上に小さく。配合の特記と同じ要領）
+                      const noteInput = (w) => (
+                        <input className="vol-note" value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
+                          style={{ width: w, fontSize: 10, textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, padding: '1px 0', color: '#0f3060', background: '#f4f8ff', marginBottom: 2 }} />
+                      )
                       return (
-                        <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'center', marginTop: idx ? 4 : 0, gap: 2 }}>
-                          <span style={{ flex: '0 0 16px', display: 'flex', justifyContent: 'center' }}>
+                        <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'flex-end', marginTop: idx ? 4 : 0, gap: 2 }}>
+                          <span style={{ flex: '0 0 16px', display: 'flex', justifyContent: 'center', paddingBottom: 6 }}>
                             {idx === 1 ? (
                               <span className="qlabel" style={{ margin: 0, padding: '1px 5px' }} title="2段目を削除"
-                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeNote2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
                             ) : null}
                           </span>
-                          <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
-                            onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
-                            onCompositionEnd={e => setFrom(e.target.value, false)} />
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                            {noteInput(isRange ? 56 : 84)}
+                            <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
+                              onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                              onCompositionEnd={e => setFrom(e.target.value, false)} />
+                          </div>
                           {isRange && (
                             <>
                               <span style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>〜</span>
@@ -2067,6 +2087,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [error, setError]           = useState('')
   const [search, setSearch]         = useState('')
   const [dateFilter, setDateFilter] = useState('')   // 日付ボタンで絞り込み中の日付（空=絞り込みなし）
+  const [ampm, setAmpm]             = useState('both')   // AM/PM 絞り込み（'both'|'AM'|'PM'）。各フィルターと併用
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
@@ -2401,8 +2422,11 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   }
   // 電話番号検索用：ハイフン・空白を除去して数字だけで比較できるようにする
   const noHyphen = (str) => String(str || '').replace(/[-－ー―‐\s]/g, '')
+  // AM/PM 絞り込み：先頭時間が 12:00 より前=AM／以降=PM。各フィルター（日付・検索）と併用
+  const inAmPm = (s) => { if (ampm === 'both') return true; const mm = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? mm < 720 : mm >= 720 }
   const filtered = shipments.filter(s => {
     if (dateFilter && s.date !== dateFilter) return false
+    if (!inAmPm(s)) return false
     if (!search) return true
     const q = toHira(search)
     const fields = [s.companyName, s.tradingCompany, s.siteName, s.mixCode, s.vehicleType, s.orderContact, s.siteContact, kanaOfCompany(s), kanaOfTrading(s), ...dateVariants(s.date)]
@@ -2422,7 +2446,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const curPage = noPaging ? 0 : Math.min(page, pageCount - 1)
   const pageRows = noPaging ? sortedList : sortedList.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
   // 検索・日付絞り込みが変わったら1ページ目へ
-  useEffect(() => { setPage(0) }, [search, dateFilter])
+  useEffect(() => { setPage(0) }, [search, dateFilter, ampm])
 
   // 予定表で変更された項目を赤く表示
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
@@ -2494,6 +2518,17 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#c0392b', color: '#fff', borderRadius: 6, width: 24, height: 24, fontSize: 14, cursor: 'pointer', lineHeight: 1, zIndex: 2 }}>×</button>
             )}
           </div>
+          {/* AM/PM 絞り込み（本日の左に固定。横スクロールしない）。各フィルター＋AM/PM で併用 */}
+          <div style={{ flex: '0 0 auto', display: 'flex', gap: 6, paddingRight: 8, marginRight: 2, borderRight: '2px solid #e3e8ef' }}>
+            {['AM', 'PM'].map(p => {
+              const on = ampm === p
+              return (
+                <button key={p} type="button" onClick={() => setAmpm(a => a === p ? 'both' : p)}
+                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c' }}>{p}</button>
+              )
+            })}
+          </div>
           {/* 本日〜2週間先（日曜除く）の日付ボタン（横スクロール可）。押したボタンは解除ボタンに変化 */}
           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0', WebkitOverflowScrolling: 'touch' }}>
             {weekDates.map((d) => {
@@ -2525,7 +2560,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', '打設箇所', ''].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -2552,6 +2587,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <td style={S.td}>{s.cementType || '—'}</td>
                     <td style={S.td}><VolNum s={s} unit fallback="—" /></td>
                     <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
+                    <td style={S.td}>{s.pourLocation || '—'}</td>
                     <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
                       <button style={S.delBtn} onClick={(e) => { e.stopPropagation(); setDeleteConfirm(s.id) }}>削除</button>
                     </td>
@@ -3990,7 +4026,7 @@ function DashboardPage() {
                   <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
                   </span>
-                  <span style={{ flex: '0 0 auto', color: '#3a4a5c' }}>{s.vehicleType || ''}{s.volume ? <span style={{ fontWeight: 700, color: volNumColor(s.volume) }}> {s.volume}m³</span> : ''}</span>
+                  <span style={{ flex: '0 0 auto', color: '#3a4a5c' }}>{s.vehicleType || ''}{s.volume ? <span style={volNumStyle(s.volume)}> {s.volume}m³</span> : ''}</span>
                 </div>
               ))}
           </div>
@@ -4037,6 +4073,11 @@ function WeeklySchedulePage() {
             const bin = (s) => { const m = timeToMin(firstTimeOf(s)); return m < 540 ? 0 : m < 720 ? 1 : 2 }
             const binList = [list.filter(s => bin(s) === 0), list.filter(s => bin(s) === 1), list.filter(s => bin(s) === 2)]
             const BIN_LABELS = [{ main: '第一便', sub: '（9時まで）' }, { main: '第二便', sub: '（9時以降）' }, { main: '午後', sub: '' }]
+            // 1日合計（3便の台数合計）と量の合計（m³。範囲入力は上限値で計上・2段目の量も加算）
+            const dayTrucks = binList.reduce((a, bl) => a + vehStats(bl).total, 0)
+            const volUpper = (v) => { if (v == null || String(v).trim() === '') return 0; const last = String(v).split('〜').pop(); const n = parseFloat(String(last).replace(/[^0-9.]/g, '')); return isNaN(n) ? 0 : n }
+            const dayVol = list.reduce((a, s) => a + volUpper(s.volume) + volUpper(s.volume2), 0)
+            const fmtV = (n) => (Math.round(n * 100) / 100).toLocaleString('ja-JP')
             return (
               <div key={ds} style={{ border: '1px solid #dde3ed', borderRadius: 8, minHeight: 220, background: ds === todayStr ? '#eef5ff' : '#fff' }}>
                 <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', fontWeight: 700, fontSize: 13, textAlign: 'center', color: wd === '日' ? '#c0392b' : wd === '土' ? '#1b4ea8' : '#1a2332' }}>{d.getMonth() + 1}/{d.getDate()}（{wd}）</div>
@@ -4061,9 +4102,18 @@ function WeeklySchedulePage() {
                     </div>
                   )
                 })}
+                {/* 1日合計（台数）・量の合計（m³） */}
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', background: '#eef5ff', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13 }}>
+                  <span style={{ fontWeight: 700, color: '#0f3060' }}>1日合計</span>
+                  <span style={{ fontWeight: 800, color: '#0f3060', fontSize: 15 }}>{dayTrucks}台</span>
+                </div>
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid #dde3ed', background: '#fff3f3', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13 }}>
+                  <span style={{ fontWeight: 700, color: '#c0392b' }}>量の合計</span>
+                  <span><b style={{ fontWeight: 800, color: '#c0392b', fontSize: 15 }}>{fmtV(dayVol)}</b><span style={{ fontSize: 11, color: '#6b7a8d' }}>m³</span></span>
+                </div>
                 <div style={{ padding: 6 }}>
                   {list.length === 0 ? <div style={{ fontSize: 11, color: '#c0c8d4' }}>—</div>
-                    : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? <span style={{ fontWeight: 700, color: volNumColor(s.volume) }}> /{s.volume}m³</span> : ''}</span></div>)}
+                    : list.map(s => <div key={s.id} style={{ fontSize: 11, borderBottom: '1px dashed #eee', padding: '3px 0' }}><b>{firstTimeOf(s)}</b> {s.companyName}<br /><span style={{ color: '#6b7a8d' }}>{s.siteName || ''}{s.volume ? <span style={volNumStyle(s.volume)}> /{s.volume}m³</span> : ''}</span></div>)}
                 </div>
               </div>
             )
