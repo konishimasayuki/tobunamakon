@@ -119,7 +119,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!existing || Object.keys(existing).length === 0) return res.status(404).json({ error: '出荷登録が見つかりません' })
       const now = new Date().toISOString()
       const cancelled = !!((req.body as any)?.cancelled)
-      const updated = { ...existing, cancelled, cancelledAt: cancelled ? now : '', updatedAt: now }
+      // 変更履歴に「キャンセル／復元」を日時付きで記録（あとから誰が何をしたか追えるように）
+      const prevHist = Array.isArray((existing as any).history) ? (existing as any).history : []
+      const histItem = { t: now, items: [{ f: '状態', from: cancelled ? '有効' : 'キャンセル', to: cancelled ? 'キャンセル' : '復元' }] }
+      const updated = { ...existing, cancelled, cancelledAt: cancelled ? now : '', updatedAt: now, history: [histItem, ...prevHist].slice(0, 30) }
       await redis.hset(`shipment:${id}`, updated)
       await indexShipment(id as string, (updated as any).date)
       return res.status(200).json(updated)
