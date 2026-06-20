@@ -2092,6 +2092,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [dateFilter, setDateFilter] = useState('')   // 日付ボタンで絞り込み中の日付（空=絞り込みなし）
   const [ampm, setAmpm]             = useState('both')   // AM/PM 絞り込み（'both'|'AM'|'PM'）。各フィルターと併用
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [saveConfirm, setSaveConfirm] = useState(false)   // 登録/更新の確認（ワンクッション）
+  const [picked, setPicked] = useState(null)   // 一覧でシングルクリックして色が変わっている行（ダブルクリックで選択）
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
   const [page, setPage]             = useState(0)
@@ -2344,8 +2346,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     startEdit(s)
   }
 
-  const handleSubmit = async (e) => {
+  // 登録/更新ボタン：いきなり保存せず、確認（ワンクッション）を挟む
+  const handleSubmit = (e) => {
     e.preventDefault()
+    setError('')
+    if (!form.date || !form.companyName) { setError('日付と業者名は必須です'); return }
+    setSaveConfirm(true)
+  }
+  // 実際の保存処理（確認モーダルで「はい」を押したら走る）
+  const doSave = async () => {
+    setSaveConfirm(false)
     setError('')
     setSaving(true)
     try {
@@ -2485,10 +2495,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                 </>
               }
             />
-            {/* 矢印/戻す/消去・リセット/登録 の下の段左：コピーして複製 */}
-            <div style={{ marginTop: 10, display: 'flex' }}>
+            {/* 矢印/戻す/消去・リセット/登録 の下の段左：コピーして複製。編集中は地図の下に削除ボタンも置く */}
+            <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button type="button" onClick={handleDuplicate}
                 style={{ border: '1.5px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📋 コピーして複製</button>
+              {editing && (
+                <button type="button" onClick={() => setDeleteConfirm(editing)}
+                  style={{ marginLeft: 'auto', border: '1.5px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>🗑 この伝票を削除</button>
+              )}
             </div>
             {editing && <div style={{ marginTop: 10, padding: '6px 12px', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 6, fontSize: 13, color: '#8a6d1a' }}>編集中の伝票を更新します（「新規作成に戻す」で取消）</div>}
             {(() => {
@@ -2563,14 +2577,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <table style={S.table}>
               <thead>
                 <tr>
-                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', '打設箇所', ''].map((h, i) => (
+                  {['日付', '時間', '業者名', '商社名', '現場名', 'PDF', '住所', 'ドライバー', '車種', '配合', 'セメント', 'm³', '荷下ろし', '打設箇所'].map((h, i) => (
                     <th key={i} style={S.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map(s => (
-                  <tr key={s.id} style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : undefined }} onClick={() => onRowClick(s)}>
+                  <tr key={s.id} title="シングルクリックで選択（色）／ダブルクリックで開く"
+                    style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : picked === s.id ? '#fff2cc' : undefined }}
+                    onClick={() => setPicked(s.id)} onDoubleClick={() => onRowClick(s)}>
                     <td style={S.td}>{s.date}</td>
                     <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
@@ -2591,9 +2607,6 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     <td style={S.td}><VolNum s={s} unit fallback="—" /></td>
                     <td style={S.td}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
                     <td style={S.td}>{s.pourLocation || '—'}</td>
-                    <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
-                      <button style={S.delBtn} onClick={(e) => { e.stopPropagation(); setDeleteConfirm(s.id) }}>削除</button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -2619,6 +2632,21 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button style={S.cancelBtn} onClick={() => setDeleteConfirm(null)}>やめる</button>
               <button style={S.dangerBtn} onClick={() => handleDelete(deleteConfirm)}>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {saveConfirm && (
+        <div style={S.overlay}>
+          <div style={S.confirmBox}>
+            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>
+              この内容で{editing ? '更新' : '登録'}しますか？
+              {form.companyName ? <><br /><span style={{ fontSize: 12, color: '#6b7a8d' }}>{form.date}　{form.companyName}{form.siteName ? `／${form.siteName}` : ''}</span></> : null}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button style={S.cancelBtn} onClick={() => setSaveConfirm(false)}>やめる</button>
+              <button style={{ ...S.dangerBtn, background: '#1a6a9f', borderColor: '#1a6a9f' }} onClick={doSave}>{editing ? '更新する' : '登録する'}</button>
             </div>
           </div>
         </div>
@@ -4606,6 +4634,7 @@ function CancelPage() {
   useShipmentsChanged(load)
 
   const restore = async (s) => {
+    if (!window.confirm(`「${s.companyName}」${s.date} の伝票を復元しますか？\n出荷予定表・一覧に戻ります。`)) return
     setBusy(s.id)
     try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: false }); notifyShipmentsChanged(); setDetail(null); await load() }
     catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
