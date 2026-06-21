@@ -4192,8 +4192,17 @@ function SeikonOutputPage({ isPopup }) {
 
   // 試験集計（その日の全出荷から：現TP=現場 / 工TP=工場）
   const dayShips = all   // 表示日ぶんのみ取得済み
-  const testGen = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('現TP')).length
-  const testKo = dayShips.filter(s => (Array.isArray(s.testTags) ? s.testTags : []).includes('工TP')).length
+  // 試験件数を AM/PM 別に集計（現TP=現場 / 工TP=工場）。AM=先頭時間が12:00前 / PM=12:00以降
+  const isAM = (s) => timeToMin(firstTimeOf(s)) < 720
+  const hasTest = (s, tag) => (Array.isArray(s.testTags) ? s.testTags : []).includes(tag)
+  const testGenAM = dayShips.filter(s => hasTest(s, '現TP') && isAM(s)).length
+  const testGenPM = dayShips.filter(s => hasTest(s, '現TP') && !isAM(s)).length
+  const testKoAM = dayShips.filter(s => hasTest(s, '工TP') && isAM(s)).length
+  const testKoPM = dayShips.filter(s => hasTest(s, '工TP') && !isAM(s)).length
+  const testRows = [
+    { label: '現場', am: testGenAM, pm: testGenPM },
+    { label: '工場', am: testKoAM, pm: testKoPM },
+  ].filter(r => r.am + r.pm > 0)   // 件数のある項目だけ表示
 
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
@@ -4260,12 +4269,13 @@ function SeikonOutputPage({ isPopup }) {
   // テーブル用の行: 配合は1つにつき1行に分ける。数量(2種)は先頭行の数量セル内で改行表示する
   const tableRows = []
   rows.forEach(s => {
-    const mixes = mixRowsOfShip(s).map(r => r.code).filter(Boolean)
+    const mixes = mixRowsOfShip(s).filter(r => r.code)   // {code, note=配合の特記}
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
-    const vols = [v1, v2].filter(Boolean)
+    // 数量は値ごとに特記(volumeNote)を持たせる
+    const vols = [{ v: v1, note: (s.volumeNote || '').trim() }, { v: v2, note: (s.volumeNote2 || '').trim() }].filter(x => x.v)
     const n = Math.max(1, mixes.length)
-    for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k] || '', vols: k === 0 ? vols : [], primary: k === 0 })
+    for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
 
   // 1行を描画。配合の2行目以降（!primary）は配合のみ（その他は空）
@@ -4274,36 +4284,44 @@ function SeikonOutputPage({ isPopup }) {
     if (!r.primary) {
       return (
         <tr key={key}>
-          <td></td><td></td><td></td><td></td><td></td>
-          <td className="seikon-mix">{padMix(r.mix)}</td>
           <td></td><td></td><td></td><td></td>
+          <td className="seikon-mix">{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></td>
+          <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
         </tr>
       )
     }
     const ts = timesArr(s)
-    const tekiyo2 = [placementsOf(s), tagsOf(s), testOf(s)].filter(Boolean).join(' / ')   // 荷下ろし / 特記 / 試験(現TP・工TP)
+    const tekiyo1 = [notesOf(s), placementsOf(s)].filter(Boolean).join(' / ')   // 備考 ＋ 荷下ろし
+    const tags = tagsOf(s)   // 出荷登録の特記（領/追）
+    const testAbbr = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('・')   // 試験 現/工
+    const isB = String(s.cementType || '').trim() === 'B'
     return (
       <tr key={key}>
-        <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
         <td>{s.companyName || ''}</td>
         <td>{s.siteName || ''}</td>
         <td className="seikon-datsu">{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vehicleLabel(s) || ''}</td>
-        <td className="seikon-mix">{padMix(r.mix)}</td>
-        <td style={{ textAlign: 'center' }}>{s.cementType || ''}</td>
-        <td style={{ textAlign: 'center' }}>{r.vols.length ? r.vols.map((v, i) => <div key={i}>{v}</div>) : ''}</td>
-        <td className="seikon-phone">{s.siteContact || ''}</td>
+        <td className="seikon-mix">{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></td>
+        <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400 }}>{s.cementType || ''}</td>
+        <td style={{ textAlign: 'center' }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></div>) : ''}</td>
+        <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
         <td className="seikon-tekiyo">
-          <div>{notesOf(s)}</div>
-          <div>{tekiyo2}</div>
+          <div>{tekiyo1}</div>
+          <div className="seikon-phone">{s.siteContact || ''}</div>
         </td>
+        <td className="seikon-toku">
+          <div>{tags}</div>
+          <div className="seikon-test">{testAbbr}</div>
+        </td>
+        <td style={{ textAlign: 'center' }}>{(s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}</td>
+        <td></td>
       </tr>
     )
   }
 
   const ROWS = 23
   const blanks = Math.max(0, ROWS - tableRows.length)
-  const cols = ['時間', '業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '担当連絡先', '摘要']
+  const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '摘要', '特記', '地図', 'メモ']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
   return (
@@ -4325,13 +4343,22 @@ function SeikonOutputPage({ isPopup }) {
           <span className="st-ampm">
             <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
           </span>
-          <span className="st-test"><span className="st-test-label">試験</span>　現場：{testGen}件　工場：{testKo}件</span>
+          <span className="st-test"><span className="st-test-label">試験</span>
+            {testRows.length > 0 && (
+              <span className="st-test-grid">
+                <span className="h" /><span className="h">AM</span><span className="h">PM</span>
+                {testRows.map(r => (
+                  <Fragment key={r.label}><span className="rl">{r.label}</span><b>{r.am}</b><b>{r.pm}</b></Fragment>
+                ))}
+              </span>
+            )}
+          </span>
         </div>
         <table className="seikon-table">
           <colgroup>
-            <col style={{ width: '7%' }} /><col style={{ width: '11%' }} /><col style={{ width: '15%' }} /><col style={{ width: '5%' }} />
-            <col style={{ width: '7%' }} /><col style={{ width: '13%' }} /><col style={{ width: '5%' }} />
-            <col style={{ width: '8%' }} /><col style={{ width: '11%' }} /><col style={{ width: '18%' }} />
+            <col style={{ width: '13%' }} /><col style={{ width: '16%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} />
+            <col style={{ width: '10%' }} /><col style={{ width: '3%' }} /><col style={{ width: '8%' }} /><col style={{ width: '7%' }} />
+            <col style={{ width: '17%' }} /><col style={{ width: '4%' }} /><col style={{ width: '3%' }} /><col style={{ width: '11%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
