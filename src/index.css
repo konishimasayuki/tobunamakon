@@ -120,7 +120,7 @@ input, textarea, select { font-family: inherit; }
 .denpyo .readonly-date { font-size:15px; color:#444; padding:1px 0; font-family:'Noto Sans JP',sans-serif; }
 .denpyo .ro-note { font-size:9px; color:#9a9a9a; margin-top:1px; font-family:'Noto Sans JP',sans-serif; }
 /* 車種：縦並び・各チップを大型(最も広い)の幅に固定し、台数入力欄の開始位置を統一 */
-.denpyo .veh-chips { display:flex; flex-direction:column; gap:9px; margin-top:2px; align-items:flex-start; }
+.denpyo .veh-chips { display:flex; flex-direction:column; gap:9px; margin-top:2px; align-items:center; }
 .denpyo .vehpill { display:inline-flex; align-items:center; gap:3px; max-width:100%; }
 .denpyo .veh-chips .chip { width:2.4em; text-align:center; padding:6px 0; font-size:17px; line-height:1.3; flex:0 0 auto; }
 .denpyo .veh-chips .vehqty { width:1.5em; font-size:16px; flex:0 0 auto; }
