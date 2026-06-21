@@ -3375,18 +3375,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('削除に失敗しました: ' + e.message) }
   }
 
-  const resetReds = async () => {
-    const targets = all.filter(s => Array.isArray(s.changedFields) && s.changedFields.length)
-    if (targets.length === 0) { alert('赤（変更）表示はありません'); return }
-    if (!window.confirm(`変更（赤）表示を${targets.length}件リセットしますか？（デバッグ用）`)) return
-    for (const s of targets) {
-      try {
-        const res = await api.put(`/api/shipments/${s.id}`, { ...s, changedFields: [] })
-        setAll(arr => arr.map(x => x.id === res.id ? res : x))
-      } catch (e) { console.error(e) }
-    }
-  }
-
   // AM/PM表示切替（未選択=全体）。印刷には出さない
   const ampmButtons = (
     <span className="no-print" style={{ display: 'inline-flex', gap: 6 }}>
@@ -3494,8 +3482,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                       style={{ flex: 1, border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>✏️ 編集</button>
                     <button type="button" onClick={() => openLine(s)}
                       style={{ flex: 1, border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>LINE送信</button>
-                    <button type="button" onClick={() => deleteShip(s)}
-                      style={{ flex: '0 0 auto', border: '1px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>削除</button>
                   </div>
                 </div>
               ))}
@@ -3504,12 +3490,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
               </div>
             </>
           )}
-          <div style={{ marginTop: 8, textAlign: 'right' }}>
-            <button type="button" onClick={resetReds}
-              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>
-              🧹 変更(赤)をリセット（デバッグ）
-            </button>
-          </div>
         </div>
       ) : (() => {
         const inner = (<>
@@ -3594,14 +3574,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
         ) : (
           <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', lineHeight: 1.5, padding: isPopup ? '8px 8px 16px' : 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
-          </div>
-        )}
-        {!isPopup && (
-          <div style={{ marginTop: 16, textAlign: 'right' }}>
-            <button type="button" onClick={resetReds}
-              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
-              🧹 変更(赤)をリセット（デバッグ）
-            </button>
           </div>
         )}
         </>)
