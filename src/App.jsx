@@ -1098,6 +1098,8 @@ const emptyShipForm = {
   pourFree: false,      // 打設箇所を自由入力モードにしているか
   noteTags: [],         // 領 / 追 の選択
   testTags: [],         // 試験（現TP / 工TP）
+  mapReceived: false,   // 受信確認：地図が届いたか
+  faxReceived: false,   // 受信確認：FAXが届いたか
   orderContact: '', siteContact: '',
   drivers: [],
   notes: [{ text: '', important: false }],
@@ -1676,6 +1678,8 @@ function shipmentToForm(s) {
       : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
     noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
     testTags: Array.isArray(s.testTags) ? s.testTags : [],
+    mapReceived: !!s.mapReceived,
+    faxReceived: !!s.faxReceived,
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
@@ -1754,6 +1758,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
   const setUnload = (val) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload')); if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' }); return { ...f, notes: sortNotes(notes) } })
   const addDriver = (e) => { const emp = employees.find(emp => emp.id === e.target.value); if (!emp) return; setForm(f => f.drivers.some(d => d.id === emp.id) ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] })) }
   const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
+  // 受信確認（地図/FAX）の On/Off ボタンの見た目：受信済みは緑＋✔
+  const recvBtnStyle = (on) => ({ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, border: on ? '1.5px solid #1a7a3a' : '1.5px solid #999', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#333', borderRadius: 6, padding: '6px 4px', fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' })
   // 時間欄に「AM」「PM」単体を入れる（1つ目の時間枠に設定。もう一度押すと解除）
   const setAmPm = (val) => setForm(f => {
     const times = (Array.isArray(f.times) && f.times.length) ? f.times.map(t => ({ ...t })) : [{ text: '', important: false }]
@@ -1814,26 +1820,22 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
             </div>
-            {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / PDF */}
+            {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / 受信確認 / PDF */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 20%', minWidth: 0 }}>
-                <div className="lbl" style={redIf('vehicleType')}>車 種</div>
+              <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
+                <div className="lbl" style={{ ...redIf('vehicleType'), textAlign: 'center' }}>車 種</div>
                 <div className="btn-mid"><div className="veh-chips">
                   {VEHICLE_TYPES.map(o => {
-                    const it = vehItems().find(v => v.type === o)
-                    const on = !!it
+                    const on = vehItems().some(v => v.type === o)
                     return (
                       <span key={o} className="vehpill">
                         <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                        {on && (
-                          <><input className="vehqty" inputMode="numeric" placeholder="台" value={it.qty || ''} onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)} /><span className="vehu">台</span></>
-                        )}
                       </span>
                     )
                   })}
                 </div></div>
               </div>
-              <div className="cell" style={{ flex: '0 0 19%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
                 <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
                 <div className="btn-mid">
                   {!form.pourFree ? (
@@ -1855,7 +1857,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   )}
                 </div>
               </div>
-              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 13%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
                 <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
                   {CEMENT_TYPES.map(o => (
@@ -1863,7 +1865,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   ))}
                 </div></div>
               </div>
-              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 13%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>試験</div>
                 <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
                   {TEST_TAGS.map(t => (
@@ -1871,13 +1873,26 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   ))}
                 </div></div>
               </div>
-              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 10%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>特記</div>
                 <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
                   {NOTE_TAGS.map(t => (
                     <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
                   ))}
                 </div></div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>受信確認</div>
+                <div className="btn-mid" style={{ alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                    <button type="button" onClick={() => setVal('mapReceived', !form.mapReceived)} style={recvBtnStyle(!!form.mapReceived)}>
+                      <span style={{ width: 13, display: 'inline-block', textAlign: 'center' }}>{form.mapReceived ? '✔' : '　'}</span>地図
+                    </button>
+                    <button type="button" onClick={() => setVal('faxReceived', !form.faxReceived)} style={recvBtnStyle(!!form.faxReceived)}>
+                      <span style={{ width: 13, display: 'inline-block', textAlign: 'center' }}>{form.faxReceived ? '✔' : '　'}</span>FAX
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>PDFインポート</div>
@@ -3435,6 +3450,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cellVolume(s)}</div>
                   </div>
+                  {/* 打設 / 種 / 受信確認 */}
+                  <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
+                    <span style={{ color: s.mapReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.mapReceived ? 700 : 400, marginRight: 14 }}>地図{s.mapReceived ? ' ✔' : ''}</span>
+                    <span style={{ color: s.faxReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.faxReceived ? 700 : 400 }}>FAX{s.faxReceived ? ' ✔' : ''}</span>
+                  </span></div>
                   {/* PDF（添付があれば新規ウィンドウで開く） */}
                   {s.hasPdf && (
                     <div className="sc-row"><span className="sc-lbl">PDF</span><span className="sc-val">
@@ -3472,23 +3494,26 @@ function SchedulePage({ onEditShipment, isPopup }) {
         const inner = (<>
         <table>
           <colgroup>
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '13%' }} />
-            {!isPopup && <col style={{ width: '7%' }} />}
             <col style={{ width: '7%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '11%' }} />
+            {!isPopup && <col style={{ width: '5%' }} />}
+            <col style={{ width: '7%' }} />
             <col style={{ width: '6%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            {!isPopup && <col style={{ width: '6%' }} />}
-            {!isPopup && <col style={{ width: '6%' }} />}
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '4%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            {!isPopup && <col style={{ width: '5%' }} />}
+            {!isPopup && <col style={{ width: '4%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>車種</th><th>配合</th><th>数量</th><th>担当</th>
+              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
               {!isPopup && <th>削除</th>}
@@ -3505,9 +3530,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}
                 </td>
                 )}
+                <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
                 <td className="sc-nowrap">{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
+                <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
+                <td style={{ textAlign: 'center', fontSize: 11, lineHeight: 1.45 }}>
+                  <div style={{ color: s.mapReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.mapReceived ? 700 : 400 }}>地図{s.mapReceived ? ' ✔' : ''}</div>
+                  <div style={{ color: s.faxReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.faxReceived ? 700 : 400 }}>FAX{s.faxReceived ? ' ✔' : ''}</div>
+                </td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
                 {!isPopup && (
@@ -3684,26 +3715,8 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
       {/* 出荷内容：車種・配合・量 */}
       <div style={card}>
         <div>
-          <label style={lbl}>車種（タップで選択・台数）</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {VEHICLE_TYPES.map(o => {
-              const it = vehItems().find(v => v.type === o)
-              const on = !!it
-              return (
-                <div key={o} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div onClick={() => toggleVehItem(o)} style={{ ...chip(on), flex: '0 0 96px' }}>{o}</div>
-                  {on && (
-                    <>
-                      <input inputMode="numeric" value={it.qty || ''} placeholder="台数"
-                        onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)}
-                        style={{ ...inp, flex: 1, textAlign: 'center' }} />
-                      <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>台</span>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          <label style={lbl}>車種（タップで選択）</label>
+          {chipRow(VEHICLE_TYPES, o => vehItems().some(v => v.type === o), toggleVehItem)}
         </div>
         <div>
           <label style={lbl}>配合（中央のみ特記可）</label>
@@ -3799,6 +3812,15 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
         <div><label style={lbl}>セメント種</label>{chipRow(CEMENT_TYPES, o => form.cementType === o, o => setVal('cementType', form.cementType === o ? '' : o))}</div>
         <div><label style={lbl}>試験</label>{chipRow(TEST_TAGS, o => (form.testTags || []).includes(o), toggleTestTag)}</div>
         <div><label style={lbl}>特記</label>{chipRow(NOTE_TAGS, o => (form.noteTags || []).includes(o), toggleNoteTag)}</div>
+        <div>
+          <label style={lbl}>受信確認</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
+              const on = !!form[key]
+              return <div key={key} onClick={() => setVal(key, !on)} style={{ flex: '1 1 0', minWidth: 0, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 11, fontSize: 16, fontWeight: 700, cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box', border: on ? '2px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#475467' }}>{on ? '✔ ' : ''}{label}</div>
+            })}
+          </div>
+        </div>
         <div>
           <label style={lbl}>荷下ろし</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
