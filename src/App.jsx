@@ -3471,12 +3471,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <span style={{ display: 'inline-flex', gap: 8 }}>
                       {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
                         const on = !!s[key]
-                        return (
-                          <button key={key} type="button" onClick={() => toggleRecv(s, key)}
-                            style={{ fontSize: 14, padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1.5px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }}>
-                            {label}{on ? ' ✔' : ''}
-                          </button>
-                        )
+                        const st = { fontSize: 14, padding: '6px 14px', borderRadius: 8, fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1.5px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }
+                        return isPopup
+                          ? <span key={key} style={st}>{label}{on ? ' ✔' : ''}</span>
+                          : <button key={key} type="button" onClick={() => toggleRecv(s, key)} style={{ ...st, cursor: 'pointer' }}>{label}{on ? ' ✔' : ''}</button>
                       })}
                     </span>
                   </span></div>
@@ -3562,12 +3560,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
                     {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
                       const on = !!s[key]
-                      return (
-                        <button key={key} type="button" onClick={() => toggleRecv(s, key)} title="タップで受信確認を切替"
-                          style={{ fontSize: 11, lineHeight: 1.2, padding: '3px 2px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1px solid #1a7a3a' : '1px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }}>
-                          {label}{on ? ' ✔' : ''}
-                        </button>
-                      )
+                      const st = { fontSize: 11, lineHeight: 1.2, padding: '3px 2px', borderRadius: 4, fontFamily: 'inherit', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: on ? 700 : 500, border: on ? '1px solid #1a7a3a' : '1px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }
+                      return isPopup
+                        ? <span key={key} style={st}>{label}{on ? ' ✔' : ''}</span>
+                        : <button key={key} type="button" onClick={() => toggleRecv(s, key)} title="タップで受信確認を切替" style={{ ...st, cursor: 'pointer' }}>{label}{on ? ' ✔' : ''}</button>
                     })}
                   </div>
                 </td>
