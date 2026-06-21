@@ -29,6 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.mapView !== undefined) patch.mapView = body.mapView || null
       if (body.mapPin !== undefined) patch.mapPin = body.mapPin || null
       if (Array.isArray(body.mapArrows)) patch.mapArrows = body.mapArrows
+      if (body.mapReceived !== undefined) patch.mapReceived = !!body.mapReceived
+      if (body.faxReceived !== undefined) patch.faxReceived = !!body.faxReceived
       const prevCf = Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []
       const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
       const updated = { ...existing, ...patch, changedFields, updatedAt: new Date().toISOString() }
