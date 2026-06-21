@@ -2967,6 +2967,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('保存エラー: ' + e.message) }
   }
 
+  // 受信確認（地図/FAX）をタップで切替。ログイン不要の assign エンドポイントで該当項目だけ更新（掲示板の別ウィンドウでも保存可）
+  const toggleRecv = async (s, key) => {
+    const next = !s[key]
+    setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: next } : x))   // 楽観更新
+    try {
+      const res = await api.put(`/api/shipments/${s.id}?assign=1`, { [key]: next })
+      setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      notifyShipmentsChanged()
+    } catch (e) {
+      setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: !next } : x))  // 失敗時は戻す
+      alert('保存エラー: ' + e.message)
+    }
+  }
+
   // モーダル編集：構造化パッチ（patch=実データ、changed=変更フィールド名）を一括保存
   const saveStructured = async (s, patch, changedKeys) => {
     const merged = { ...s, ...patch }
@@ -3454,8 +3468,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
                   <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
                   <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
-                    <span style={{ color: s.mapReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.mapReceived ? 700 : 400, marginRight: 14 }}>地図{s.mapReceived ? ' ✔' : ''}</span>
-                    <span style={{ color: s.faxReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.faxReceived ? 700 : 400 }}>FAX{s.faxReceived ? ' ✔' : ''}</span>
+                    <span style={{ display: 'inline-flex', gap: 8 }}>
+                      {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
+                        const on = !!s[key]
+                        return (
+                          <button key={key} type="button" onClick={() => toggleRecv(s, key)}
+                            style={{ fontSize: 14, padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1.5px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }}>
+                            {label}{on ? ' ✔' : ''}
+                          </button>
+                        )
+                      })}
+                    </span>
                   </span></div>
                   {/* PDF（添付があれば新規ウィンドウで開く） */}
                   {s.hasPdf && (
@@ -3535,9 +3558,18 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
-                <td style={{ textAlign: 'center', fontSize: 11, lineHeight: 1.45 }}>
-                  <div style={{ color: s.mapReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.mapReceived ? 700 : 400 }}>地図{s.mapReceived ? ' ✔' : ''}</div>
-                  <div style={{ color: s.faxReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.faxReceived ? 700 : 400 }}>FAX{s.faxReceived ? ' ✔' : ''}</div>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
+                    {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
+                      const on = !!s[key]
+                      return (
+                        <button key={key} type="button" onClick={() => toggleRecv(s, key)} title="タップで受信確認を切替"
+                          style={{ fontSize: 11, lineHeight: 1.2, padding: '3px 2px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1px solid #1a7a3a' : '1px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }}>
+                          {label}{on ? ' ✔' : ''}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td>{cellNotes(s, { plain: true })}{cell(s, 'siteContact', '現場連絡先')}</td>
