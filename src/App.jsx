@@ -3450,6 +3450,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cellVolume(s)}</div>
                   </div>
+                  {/* 打設 / 種 / 受信確認 */}
+                  <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
+                    <span style={{ color: s.mapReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.mapReceived ? 700 : 400, marginRight: 14 }}>地図{s.mapReceived ? ' ✔' : ''}</span>
+                    <span style={{ color: s.faxReceived ? '#1a7a3a' : '#c0c7d0', fontWeight: s.faxReceived ? 700 : 400 }}>FAX{s.faxReceived ? ' ✔' : ''}</span>
+                  </span></div>
                   {/* PDF（添付があれば新規ウィンドウで開く） */}
                   {s.hasPdf && (
                     <div className="sc-row"><span className="sc-lbl">PDF</span><span className="sc-val">
@@ -3708,26 +3715,8 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
       {/* 出荷内容：車種・配合・量 */}
       <div style={card}>
         <div>
-          <label style={lbl}>車種（タップで選択・台数）</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {VEHICLE_TYPES.map(o => {
-              const it = vehItems().find(v => v.type === o)
-              const on = !!it
-              return (
-                <div key={o} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div onClick={() => toggleVehItem(o)} style={{ ...chip(on), flex: '0 0 96px' }}>{o}</div>
-                  {on && (
-                    <>
-                      <input inputMode="numeric" value={it.qty || ''} placeholder="台数"
-                        onChange={e => setVehQty(o, e.target.value, e.nativeEvent?.isComposing)}
-                        style={{ ...inp, flex: 1, textAlign: 'center' }} />
-                      <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>台</span>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          <label style={lbl}>車種（タップで選択）</label>
+          {chipRow(VEHICLE_TYPES, o => vehItems().some(v => v.type === o), toggleVehItem)}
         </div>
         <div>
           <label style={lbl}>配合（中央のみ特記可）</label>
@@ -3823,6 +3812,15 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
         <div><label style={lbl}>セメント種</label>{chipRow(CEMENT_TYPES, o => form.cementType === o, o => setVal('cementType', form.cementType === o ? '' : o))}</div>
         <div><label style={lbl}>試験</label>{chipRow(TEST_TAGS, o => (form.testTags || []).includes(o), toggleTestTag)}</div>
         <div><label style={lbl}>特記</label>{chipRow(NOTE_TAGS, o => (form.noteTags || []).includes(o), toggleNoteTag)}</div>
+        <div>
+          <label style={lbl}>受信確認</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
+              const on = !!form[key]
+              return <div key={key} onClick={() => setVal(key, !on)} style={{ flex: '1 1 0', minWidth: 0, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 11, fontSize: 16, fontWeight: 700, cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box', border: on ? '2px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#475467' }}>{on ? '✔ ' : ''}{label}</div>
+            })}
+          </div>
+        </div>
         <div>
           <label style={lbl}>荷下ろし</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
