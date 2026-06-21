@@ -295,7 +295,7 @@ input, textarea, select { font-family: inherit; }
 .seikon-table td.seikon-datsu { white-space:normal; word-break:break-word; overflow-wrap:anywhere; text-align:center; }
 .seikon-table td { height:30px; }
 /* 車両は文字を5pt大きく */
-.seikon-table td.seikon-veh { font-size:19px; font-weight:700; text-align:center; }
+.seikon-table td.seikon-veh { font-size:15px; font-weight:700; text-align:center; white-space:nowrap; }
 /* 配合は本文より8pt大きく・中央揃え */
 .seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:pre; }
 /* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
@@ -328,7 +328,7 @@ input, textarea, select { font-family: inherit; }
   /* 表は用紙上部から開始。基本は23行+ヘッダーを1ページに収める（多行セルも収まるようフォント・行高を圧縮） */
   .seikon-table th, .seikon-table td { font-size:12px; padding:1px 3px; line-height:1.1; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .seikon-table th { font-size:15px; }
-  .seikon-table td.seikon-veh { font-size:20px; }
+  .seikon-table td.seikon-veh { font-size:16px; white-space:nowrap; }
   .seikon-table td.seikon-mix { font-size:22px; }
   .seikon-table td.seikon-phone, .seikon-tekiyo .seikon-phone { font-size:9px; white-space:nowrap; }
   .seikon-table td.seikon-tekiyo { font-size:10px; }
