@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const p = redis.pipeline()
       ids.forEach(eid => p.hgetall(`employee:${eid}`))
       const rows = await p.exec<Record<string, any>[]>()
-      const drivers = rows.filter(e => e && e.type === 'driver').map(e => ({ id: e.id, name: e.name, type: 'driver', lineId: e.lineId || '' }))
+      const drivers = rows.filter(e => e && e.type === 'driver').map(e => ({ id: e.id, name: e.name, nickname: e.nickname || '', type: 'driver', lineId: e.lineId || '' }))
       drivers.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
       return res.status(200).json(drivers)
     } catch (e) {
@@ -46,13 +46,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { employeeId, name, lineId, type } = req.body
+    const { employeeId, name, nickname, lineId, type } = req.body
     if (!name) return res.status(400).json({ error: '氏名は必須です' })
     try {
       const newId = uuidv4()
       const now = new Date().toISOString()
       const employee = {
-        id: newId, employeeId: employeeId || '', name,
+        id: newId, employeeId: employeeId || '', name, nickname: nickname || '',
         lineId: lineId || '', type: type || 'office',
         createdAt: now, updatedAt: now,
       }
@@ -66,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { employeeId, name, lineId, type } = req.body
+    const { employeeId, name, nickname, lineId, type } = req.body
     if (!name) return res.status(400).json({ error: '氏名は必須です' })
     try {
       const existing = await redis.hgetall(`employee:${id}`)
@@ -75,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...existing,
         employeeId: employeeId || '',
         name,
+        nickname: nickname || '',
         lineId: lineId || '',
         type: type || 'office',
         updatedAt: new Date().toISOString(),
