@@ -290,7 +290,7 @@ input, textarea, select { font-family: inherit; }
 .seikon-title .st-test-grid b { color:#1a4d8f; min-width:1.1em; display:inline-block; text-align:right; }
 .seikon-table { width:100%; border-collapse:collapse; table-layout:fixed; font-family:'Noto Sans JP',sans-serif; border:1px solid #111; box-sizing:border-box; }
 .seikon-table th, .seikon-table td { border:1px solid #111; padding:3px 5px; font-size:14px; line-height:1.25; word-break:break-all; vertical-align:middle; color:#111; }
-.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:16px; overflow:hidden; }
+.seikon-table th { background:#f2f2f2; font-weight:700; text-align:center; white-space:nowrap; font-size:14px; overflow:hidden; }
 /* 打設列：長い文字はセル内で折り返して収める（実データは改行しない＝表示上のみ折り返し） */
 .seikon-table td.seikon-datsu { white-space:normal; word-break:break-word; overflow-wrap:anywhere; text-align:center; }
 .seikon-table td { height:30px; }
@@ -327,7 +327,7 @@ input, textarea, select { font-family: inherit; }
   .seikon-title .st-test-label { padding:1px 6px; }
   /* 表は用紙上部から開始。基本は23行+ヘッダーを1ページに収める（多行セルも収まるようフォント・行高を圧縮） */
   .seikon-table th, .seikon-table td { font-size:12px; padding:1px 3px; line-height:1.1; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .seikon-table th { font-size:15px; }
+  .seikon-table th { font-size:13px; }
   .seikon-table td.seikon-veh { font-size:16px; white-space:nowrap; }
   .seikon-table td.seikon-mix { font-size:22px; }
   .seikon-table td.seikon-phone, .seikon-tekiyo .seikon-phone { font-size:9px; white-space:nowrap; }
