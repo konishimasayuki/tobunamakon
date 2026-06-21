@@ -9,6 +9,41 @@ const EMP_TYPE_LABELS = { office: '事務所', driver: 'ドライバー', admin:
 const EMP_TYPES       = ['office', 'driver', 'admin']
 
 // ============================================================
+// 呼び名（ニックネーム）レジストリ
+// 従業員管理で登録した「呼び名」を、各ページの担当者名表示に反映する。
+// 保存データ（s.drivers[].name）は氏名のまま保持し、表示時のみ id→呼び名 に置換する。
+// 呼び名が未登録なら氏名をそのまま表示する。
+// ============================================================
+const NICK_REG = new Map()   // employee.id -> 呼び名
+function rememberEmployees(list) {
+  let changed = false
+  ;(Array.isArray(list) ? list : []).forEach(e => {
+    if (!e || !e.id) return
+    const nn = String(e.nickname || '').trim()
+    const prev = NICK_REG.get(e.id)
+    if (nn) { if (prev !== nn) { NICK_REG.set(e.id, nn); changed = true } }
+    else if (prev !== undefined) { NICK_REG.delete(e.id); changed = true }
+  })
+  if (changed && typeof window !== 'undefined') window.dispatchEvent(new Event('nickreg'))
+  return list
+}
+// 担当者1人の表示名：呼び名があれば呼び名、なければ氏名
+function dispDriverName(d) {
+  if (!d) return ''
+  if (d.id && NICK_REG.has(d.id)) return NICK_REG.get(d.id)
+  return String(d.name ?? '')
+}
+// レジストリ更新時に再描画させるフック（担当者名を表示するが従業員を読み込まないページで使う）
+function useNickReg() {
+  const [, force] = useState(0)
+  useEffect(() => {
+    const h = () => force(x => x + 1)
+    window.addEventListener('nickreg', h)
+    return () => window.removeEventListener('nickreg', h)
+  }, [])
+}
+
+// ============================================================
 // APIクライアント
 // ============================================================
 const getToken = () => localStorage.getItem('token') || ''
@@ -573,7 +608,7 @@ function ImportModal({ onClose, onDone }) {
 // ============================================================
 // 従業員追加・編集モーダル
 // ============================================================
-const emptyEmpForm = { employeeId: '', name: '', lineId: '', type: 'office' }
+const emptyEmpForm = { employeeId: '', name: '', nickname: '', lineId: '', type: 'office' }
 
 function EmployeeModal({ employee, onSave, onClose }) {
   const isMobile = useIsMobile()
@@ -585,6 +620,7 @@ function EmployeeModal({ employee, onSave, onClose }) {
     setForm(employee ? {
       employeeId: employee.employeeId || '',
       name:       employee.name       || '',
+      nickname:   employee.nickname   || '',
       lineId:     employee.lineId     || '',
       type:       employee.type       || 'office',
     } : emptyEmpForm)
@@ -612,6 +648,12 @@ function EmployeeModal({ employee, onSave, onClose }) {
           <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="従業員ID" value={form.employeeId} onChange={set('employeeId')} />
             <Field label="氏名 *"   value={form.name}       onChange={set('name')} required />
+          </div>
+          <div style={isMobile ? S.grid1 : S.grid2}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <Field label="呼び名" value={form.nickname} onChange={set('nickname')} />
+              <span style={{ fontSize: 11, color: '#6b7a8d', marginTop: 3 }}>入力すると各ページの担当者名がこの呼び名で表示されます（未入力なら氏名）</span>
+            </div>
           </div>
           <div style={isMobile ? S.grid1 : S.grid2}>
             <Field label="LINE ID（U…で始まるユーザーID）" value={form.lineId} onChange={set('lineId')} />
@@ -666,6 +708,7 @@ function EmployeesPage() {
   const load = useCallback(async () => {
     try {
       const data = await api.get('/api/employees')
+      rememberEmployees(data)
       setEmployees(data)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -685,11 +728,13 @@ function EmployeesPage() {
   const handleSave = async (data) => {
     if (editing && editing.id) {
       const updated = await api.put(`/api/employees/${editing.id}`, data)
+      rememberEmployees([updated])
       setEmployees(es => sortEmp(es.map(e => e.id === updated.id ? updated : e)))
     } else if (editing && !editing.id) {
       throw new Error('IDが取得できません。一度ページを更新してください')
     } else {
       const created = await api.post('/api/employees', data)
+      rememberEmployees([created])
       setEmployees(es => sortEmp([...es, created]))
     }
   }
@@ -707,6 +752,7 @@ function EmployeesPage() {
   const cols = [
     { w: null, label: 'ID' },
     { w: null, label: '氏名' },
+    { w: null, label: '呼び名' },
     { w: null, label: '種別' },
     { w: null, label: '' },
   ]
@@ -740,6 +786,7 @@ function EmployeesPage() {
                       <div style={{ fontWeight: 600 }}>{e.name}</div>
                       {e.lineId && <div style={{ fontSize: 11, color: '#6b7a8d' }}>{e.lineId}</div>}
                     </td>
+                    <td style={S.td}>{e.nickname ? <span style={{ fontWeight: 600, color: '#1a4d8f' }}>{e.nickname}</span> : <span style={{ color: '#9aa7b5' }}>—</span>}</td>
                     <td style={S.td}>
                       <span style={{ display: 'inline-block', background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
                         {EMP_TYPE_LABELS[e.type] || e.type}
@@ -2023,13 +2070,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 3 }}>
                   {form.drivers.map((d, i) => (
                     <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
-                      {d.name}
+                      {dispDriverName(d)}
                       <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
                     </span>
                   ))}
                   <select className="f" value="" onChange={addDriver} style={{ width: 'auto', minWidth: 150, border: '1px solid #cdd5e0', borderRadius: 5, padding: '3px 6px' }}>
                     <option value="">＋ ドライバーを追加</option>
-                    {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{dispDriverName(d)}</option>)}
                   </select>
                 </div>
               </div>
@@ -2120,6 +2167,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         api.get('/api/customers'),
         api.get('/api/employees'),
       ])
+      rememberEmployees(e)
       setShipments(s)
       setCustomers(c)
       setEmployees(e.filter(emp => emp.type === 'driver'))
@@ -2600,7 +2648,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                         : '—'}
                     </td>
                     <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{addrCity(s.siteAddress) || '—'}</td>
-                    <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(d => d.name).join('・') : (s.driverName || '—')}</td>
+                    <td style={S.td}>{Array.isArray(s.drivers) && s.drivers.length ? s.drivers.map(dispDriverName).join('・') : (s.driverName || '—')}</td>
                     <td style={S.td}>{vehicleLabel(s) || '—'}</td>
                     <td style={S.td}>{mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ') || '—'}</td>
                     <td style={S.td}>{s.cementType || '—'}</td>
@@ -2757,7 +2805,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 初回＋表示日が変わるたびに読み直す（日付変更時は「読み込み中」を出さず、取得完了時に差し替え＝チラつき防止）
   useEffect(() => { load() }, [date, load])
   useEffect(() => {
-    api.get('/api/employees').then(e => setDrivers((e || []).filter(emp => emp.type === 'driver'))).catch(() => {})
+    api.get('/api/employees').then(e => { rememberEmployees(e); setDrivers((e || []).filter(emp => emp.type === 'driver')) }).catch(() => {})
   }, [])
   // 編集モーダルの業者名・商社名サジェスト用に顧客マスタを読み込む（別ウィンドウ＝ログイン不要時は失敗しても無視）
   useEffect(() => {
@@ -2844,7 +2892,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const getVal = (s, f) => {
     switch (f) {
       case 'drivers': {
-        const names = Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
+        const names = Array.isArray(s.drivers) ? s.drivers.map(dispDriverName) : (s.driverName ? [s.driverName] : [])
         // 1人=1行、2人=各人1行ずつ（2行）、3人以降=2人ごとに改行
         if (names.length <= 2) return names.join('\n')
         const lines = []
@@ -3162,7 +3210,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const v = getVal(s, 'drivers')               // 2人ごとに改行された文字列
     let lines = v ? v.split('\n') : ['']
     if (opts.oneEach) {                           // 各行をさらに分解して1人=1行に
-      const names = (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : []))
+      const names = (Array.isArray(s.drivers) ? s.drivers.map(dispDriverName) : (s.driverName ? [s.driverName] : []))
         .map(x => String(x ?? '').trim()).filter(Boolean)
       lines = names.length ? names : ['']
     }
@@ -3188,7 +3236,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // 担当（スマホカード用）：1人=大きく1段、2人=2段（各1人）、3人以上=2人ずつ（3人＝上2・下1）
   const cellDriversCard = (s) => {
-    const names = (Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : []))
+    const names = (Array.isArray(s.drivers) ? s.drivers.map(dispDriverName) : (s.driverName ? [s.driverName] : []))
       .map(x => String(x ?? '').trim()).filter(Boolean)
     const n = names.length
     const rows = []
@@ -3797,7 +3845,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               {form.drivers.map((d, i) => (
                 <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1.5px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 11, padding: '9px 12px', fontSize: 15, fontWeight: 700 }}>
-                  {d.name}
+                  {dispDriverName(d)}
                   <button type="button" onClick={() => removeDriver(i)} style={{ border: 'none', background: 'none', color: '#1b4ea8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
                 </span>
               ))}
@@ -3805,7 +3853,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
           )}
           <select value="" onChange={addDriver} style={{ ...inp, cursor: 'pointer' }}>
             <option value="">＋ ドライバーを追加</option>
-            {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            {employees.filter(e => !form.drivers.some(d => (d.id && d.id === e.id) || d.name === e.name)).map(d => <option key={d.id} value={d.id}>{dispDriverName(d)}</option>)}
           </select>
         </div>
         <div>
@@ -3910,7 +3958,7 @@ const timeToMin = (t) => {
   if (h) return parseInt(h[1], 10) * 60
   return 99999
 }
-const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(d => d.name) : (s.driverName ? [s.driverName] : [])
+const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(dispDriverName) : (s.driverName ? [s.driverName] : [])
 
 // query を渡すと日付索引で範囲取得（例 '?from=...&to=...'）。未指定は全件（フォールバック）。
 function useShipments(query = '') {
@@ -3930,6 +3978,7 @@ const RPT = {
 }
 
 function DashboardPage() {
+  useNickReg()
   // 先月〜来月（今日・今週も含む）の範囲だけを日付索引で取得（読み取り削減）
   const dashRange = (() => {
     const b = new Date(localToday())
@@ -4375,6 +4424,7 @@ function SeikonOutputPage({ isPopup }) {
 }
 
 function ShipReportPage() {
+  useNickReg()
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments('?date=' + encodeURIComponent(date))
   const rows = all.filter(s => s.date === date).sort((a, b) => timeToMin(firstTimeOf(a)) - timeToMin(firstTimeOf(b)) || String(firstTimeOf(a)).localeCompare(String(firstTimeOf(b))))
@@ -4411,6 +4461,7 @@ function ShipReportPage() {
 }
 
 function DriverReportPage() {
+  useNickReg()
   const [date, setDate] = useState(() => localToday())
   const { all, loading } = useShipments('?date=' + encodeURIComponent(date))
   const rows = all.filter(s => s.date === date)
@@ -4466,7 +4517,7 @@ function DriverPicker({ value, options, onChange, accent = '#1b4ea8' }) {
         : options.map(emp => {
           const on = has(emp.id)
           return <button key={emp.id} type="button" onClick={() => toggle(emp)}
-            style={{ border: on ? `2px solid ${accent}` : '1.5px solid #cdd5e0', background: on ? accent : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{emp.name}</button>
+            style={{ border: on ? `2px solid ${accent}` : '1.5px solid #cdd5e0', background: on ? accent : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{dispDriverName(emp)}</button>
         })}
     </div>
   )
@@ -4576,7 +4627,7 @@ function DriverAssignPopupPage({ id }) {
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     Promise.all([api.get('/api/shipments/' + encodeURIComponent(id)), api.get('/api/employees?drivers=1')])
-      .then(([s, es]) => { setShipment(s && s.id ? s : null); setDrivers(es.filter(e => e.type === 'driver')) })
+      .then(([s, es]) => { rememberEmployees(es); setShipment(s && s.id ? s : null); setDrivers(es.filter(e => e.type === 'driver')) })
       .catch(e => console.error(e)).finally(() => setLoading(false))
   }, [id])
   if (loading) return <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
@@ -4786,7 +4837,7 @@ function AssignPage({ isPopup }) {
   const load = useCallback(async () => {
     try {
       const [s, e] = await Promise.all([api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current)), api.get('/api/employees?drivers=1')])
-      setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
+      rememberEmployees(e); setAll(s); setDrivers(e.filter(x => x.type === 'driver'))
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }, [])
   // 初回＋表示日が変わるたびに読み直す（日付変更時は「読み込み中」を出さず、取得完了時に差し替え＝チラつき防止）
@@ -5332,6 +5383,8 @@ function LockedPage({ onUnlock }) {
 function AppInner() {
   const { user, loading } = useAuth()
   const isMobile = useIsMobile()
+  // 呼び名レジストリを起動時に読み込む（担当者名を表示するが従業員を取得しないページ向け）
+  useEffect(() => { api.get('/api/employees?drivers=1').then(rememberEmployees).catch(() => {}) }, [])
   const notPC = IS_TOUCH_DEVICE || useIsMobile(1025)   // 生コン出荷予定表出力はPCのみ（スマホ・iPadは案内表示）
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const initialEditId = params.get('editShipment') || ''
