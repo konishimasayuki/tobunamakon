@@ -3201,14 +3201,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // 数量：2つあるときは上下2行で表示（各行に +a / ? を付与）。
   // 表示色は「2桁=黒太字 / 3桁=赤太字」。変更（赤）扱いのときは赤を優先。整形表示のため直接編集はせず、編集はフォーム(✏️)で。
+  // 数量の特記（volumeNote / volumeNote2）は数値の上に小さく赤で表示
   const cellVolume = (s) => {
     const has2 = s.volume2 != null && String(s.volume2).trim() !== ''
+    const note1 = String(s.volumeNote || '').trim()
+    const note2 = String(s.volumeNote2 || '').trim()
+    const volNoteLabel = (text) => text
+      ? <span style={{ display: 'block', fontSize: 10, color: '#c81e1e', fontWeight: 700, lineHeight: 1, textAlign: 'center' }}>{text}</span>
+      : null
     // PC直接編集：1段はそのまま、2段は上下に分けてそれぞれ直接編集できるようにする（色は editCell 側で桁により付与）
     if (inlineEdit) {
-      if (!has2) return editCell(s, 'volume', { center: true, big: true })
+      if (!has2) return (
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+          {volNoteLabel(note1)}
+          {editCell(s, 'volume', { center: true, big: true })}
+        </span>
+      )
       return (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+          {volNoteLabel(note1)}
           {editCell(s, 'volume', { center: true, big: true })}
+          {volNoteLabel(note2)}
           {editCell(s, 'volume2', { center: true, big: true })}
         </span>
       )
