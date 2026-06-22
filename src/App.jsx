@@ -135,6 +135,10 @@ function useShipmentsChanged(onChange) {
   }, [onChange])
 }
 
+// Redisのハッシュ値は文字列で返ることがある（true/false が "true"/"false" 等）。
+// 受信確認など真偽フラグは、文字列・数値・真偽いずれの表現でも正しく判定する。
+const isOn = (v) => v === true || v === 1 || v === '1' || v === 'true'
+
 // ローカル（端末）時刻基準の YYYY-MM-DD を返す（toISOStringはUTCで日付がずれるため）
 function localToday() {
   const d = new Date()
@@ -1680,8 +1684,8 @@ function shipmentToForm(s) {
       : !!(s.pourLocation && !POUR_LOCATIONS.includes(s.pourLocation)),
     noteTags: Array.isArray(s.noteTags) ? s.noteTags : [],
     testTags: Array.isArray(s.testTags) ? s.testTags : [],
-    mapReceived: !!s.mapReceived,
-    faxReceived: !!s.faxReceived,
+    mapReceived: isOn(s.mapReceived),
+    faxReceived: isOn(s.faxReceived),
     orderContact: s.orderContact || '',
     siteContact: s.siteContact || '',
     drivers: Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ id: s.driverId || '', name: s.driverName }] : []),
@@ -2981,16 +2985,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
   //          (2) サーバ応答で全項目を上書きすると別の楽観更新を消すので、対象キーだけマージする
   //          (3) notifyShipmentsChanged は呼ばない（自分の楽観更新を refetch で巻き戻すのを防ぐ）
   const toggleRecv = (s, key) => {
-    let next = !s[key]
-    setAll(arr => arr.map(x => {
-      if (x.id !== s.id) return x
-      next = !x[key]
-      return { ...x, [key]: next }
-    }))
+    const next = !isOn(s[key])   // 文字列"false"等でも正しく反転（!"false" だと常にfalseになるため isOn を使う）
+    setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: next } : x))   // 楽観更新（boolで保持）
     api.put(`/api/shipments/${s.id}?assign=1`, { [key]: next })
       .then(res => {
-        // 当該キーだけサーバ値で確定。他キー（同時に別タップ進行中など）は触らない
-        setAll(arr => arr.map(x => x.id === res.id ? { ...x, [key]: !!res[key] } : x))
+        // 当該キーだけサーバ値で確定（boolに正規化）。他キーは触らない
+        setAll(arr => arr.map(x => x.id === res.id ? { ...x, [key]: isOn(res[key]) } : x))
       })
       .catch(e => {
         setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: !next } : x))
@@ -3499,7 +3499,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
                     <span style={{ display: 'inline-flex', gap: 8 }}>
                       {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
-                        const on = !!s[key]
+                        const on = isOn(s[key])
                         const st = { fontSize: 14, padding: '6px 14px', borderRadius: 8, fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1.5px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }
                         return isPopup
                           ? <span key={key} style={st}>{label}{on ? ' ✔' : ''}</span>
@@ -3578,7 +3578,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
                     {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
-                      const on = !!s[key]
+                      const on = isOn(s[key])
                       const st = { fontSize: 11, lineHeight: 1.2, padding: '3px 2px', borderRadius: 4, fontFamily: 'inherit', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: on ? 700 : 500, border: on ? '1px solid #1a7a3a' : '1px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }
                       return isPopup
                         ? <span key={key} style={st}>{label}{on ? ' ✔' : ''}</span>
