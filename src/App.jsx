@@ -2732,9 +2732,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
               <div style={{ overflow: 'auto', padding: '12px 16px', flex: 1 }}>
                 <DenpyoView s={payload} changedFields={changedFields} />
               </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid #e3e8ef' }}>
-                <button style={S.cancelBtn} onClick={() => setSaveConfirm(false)}>やめる</button>
-                <button style={{ ...S.dangerBtn, background: '#1a6a9f', borderColor: '#1a6a9f' }} onClick={doSave}>{editing ? '更新する' : '登録する'}</button>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid #e3e8ef' }}>
+                <button style={S.dangerBtn} onClick={() => { if (window.confirm('入力内容を破棄します。よろしいですか？')) { setSaveConfirm(false); handleReset() } }}>キャンセル</button>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button style={S.cancelBtn} onClick={() => setSaveConfirm(false)}>訂正</button>
+                  <button style={{ ...S.dangerBtn, background: '#1a6a9f', borderColor: '#1a6a9f' }} onClick={doSave}>{editing ? '更新' : '登録'}</button>
+                </div>
               </div>
             </div>
           </div>
