@@ -3264,7 +3264,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
-  // 車種の自由入力（vehicleFree）は備考の先頭に「車種補足」として表示
+  // 車種の自由入力（vehicleFree）は備考の末尾に半角スペースを空けて追加する
   const cellNotes = (s, opts = {}) => {
     if (inlineEdit) return editCell(s, 'notes', { ...opts, multiline: true })
     const arr = Array.isArray(s.notes) ? s.notes : []
@@ -3276,16 +3276,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
     return (
       <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '') + '_vf' + vf.length} style={{ pointerEvents: 'none' }}>
-        {vf ? <span style={{ color: '#1b4ea8', fontWeight: 700 }}>{vf}</span> : null}
         {arr.map((n, i) => {
           const red = wholeRed || isChanged(s, 'note' + i) || (n && n.important)
           return (
             <Fragment key={i}>
-              {(i > 0 || vf) && <span> / </span>}
+              {i > 0 && <span> / </span>}
               <span style={{ color: red ? '#c81e1e' : undefined, fontWeight: (n && n.important) ? 700 : undefined }}>{n.text}</span>
             </Fragment>
           )
         })}
+        {vf ? <span style={{ color: '#1b4ea8', fontWeight: 700 }}>{arr.length ? ' ' : ''}{vf}</span> : null}
       </span>
     )
   }
@@ -4431,7 +4431,7 @@ function SeikonOutputPage({ isPopup }) {
           <div className="seikon-phone">{s.siteContact || ''}{s.vehicleFree ? <span style={{ marginLeft: 8, fontWeight: 700 }}>{s.vehicleFree}</span> : null}</div>
         </td>
         <td className="seikon-toku">
-          <div>{tags}</div>
+          <div className="seikon-toku-tag">{tags}</div>
           <div className="seikon-test">{testAbbr}</div>
         </td>
         <td style={{ textAlign: 'center' }}>{(s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}</td>

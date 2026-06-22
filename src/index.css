@@ -309,6 +309,7 @@ input, textarea, select { font-family: inherit; }
 .seikon-qnote { font-size:9px; font-weight:700; color:#c81e1e; line-height:1.1; }
 /* 特記列：上=出荷登録の特記(領/追)／下=試験(現/工)。狭く2段 */
 .seikon-table td.seikon-toku { text-align:center; font-size:11px; line-height:1.4; }
+.seikon-table td.seikon-toku .seikon-toku-tag { font-weight:700; font-size:12px; }
 .seikon-table td.seikon-toku .seikon-test { color:#2a7a3a; }
 
 @media print {
@@ -333,6 +334,7 @@ input, textarea, select { font-family: inherit; }
   .seikon-table td.seikon-phone, .seikon-tekiyo .seikon-phone { font-size:9px; white-space:nowrap; }
   .seikon-table td.seikon-tekiyo { font-size:10px; }
   .seikon-table td.seikon-toku { font-size:9px; line-height:1.3; }
+  .seikon-table td.seikon-toku .seikon-toku-tag { font-weight:700; font-size:10px; }
   .seikon-table td.seikon-mix .seikon-mnote, .seikon-qnote { font-size:8px; line-height:1; }
   .seikon-title .st-test-grid .h { font-size:7px; }
   .seikon-title .st-test-grid b { color:#111; }
