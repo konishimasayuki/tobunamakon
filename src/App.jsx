@@ -3264,18 +3264,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
-  // 車種の自由入力（vehicleFree）は備考の末尾に半角スペースを空けて追加する
+  // 先頭に特記（領/追）を太字・赤で表示。車種の自由入力（vehicleFree）は備考の末尾に半角スペースを空けて追加する
   const cellNotes = (s, opts = {}) => {
     if (inlineEdit) return editCell(s, 'notes', { ...opts, multiline: true })
     const arr = Array.isArray(s.notes) ? s.notes : []
     const vf = String(s.vehicleFree || '').trim()
+    const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean)
     const cls = 'sc-in sc-notes' + (opts.plain ? ' plain' : '')
     const wholeRed = isChanged(s, 'notes') && !arr.some((_, i) => isChanged(s, 'note' + i))
-    if (!arr.length && !vf) {
+    if (!arr.length && !vf && !tags.length) {
       return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', color: '#cbd2dc' }}>{opts.ph || '備考'}</span>
     }
     return (
-      <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '') + '_vf' + vf.length} style={{ pointerEvents: 'none' }}>
+      <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '') + '_vf' + vf.length + '_t' + tags.length} style={{ pointerEvents: 'none' }}>
+        {tags.length ? <span style={{ color: '#c81e1e', fontWeight: 700, fontSize: '1.1em' }}>{tags.join('・')}{(arr.length || vf) ? '　' : ''}</span> : null}
         {arr.map((n, i) => {
           const red = wholeRed || isChanged(s, 'note' + i) || (n && n.important)
           return (
@@ -3513,7 +3515,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   {/* 打設 / 種 / 受信確認 */}
                   <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
                   <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
-                  <div className="sc-row"><span className="sc-lbl">特記</span><span className="sc-val">{(Array.isArray(s.noteTags) && s.noteTags.length) ? <b style={{ fontWeight: 700, color: '#c81e1e', fontSize: 16 }}>{s.noteTags.join('・')}</b> : '—'}</span></div>
                   <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
                     <span style={{ display: 'inline-flex', gap: 8 }}>
                       {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
@@ -3555,25 +3556,24 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <table>
           <colgroup>
             <col style={{ width: '7%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '11%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '12%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
             <col style={{ width: '7%' }} />
             <col style={{ width: '6%' }} />
-            <col style={{ width: '8%' }} />
+            <col style={{ width: '9%' }} />
             <col style={{ width: '7%' }} />
-            <col style={{ width: '4%' }} />
             <col style={{ width: '4%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '9%' }} />
-            <col style={{ width: '10%' }} />
+            <col style={{ width: '11%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>特記</th><th>受信確認</th><th>担当</th>
+              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -3594,11 +3594,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
-                <td className="sc-nowrap" style={{ textAlign: 'center' }}>
-                  {(Array.isArray(s.noteTags) && s.noteTags.length)
-                    ? <span style={{ fontWeight: 700, fontSize: 14, color: '#c81e1e' }}>{s.noteTags.join('・')}</span>
-                    : null}
-                </td>
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
                     {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
