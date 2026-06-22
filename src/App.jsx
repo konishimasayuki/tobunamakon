@@ -2997,22 +2997,44 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('保存エラー: ' + e.message) }
   }
 
-  // 受信確認（地図/FAX）をタップで切替。ログイン不要の assign エンドポイントで該当項目だけ更新（掲示板の別ウィンドウでも保存可）
-  // バグ対策：(1) closure の s ではなく最新の state から next を決める（連続タップで戻らない）
-  //          (2) サーバ応答で全項目を上書きすると別の楽観更新を消すので、対象キーだけマージする
-  //          (3) notifyShipmentsChanged は呼ばない（自分の楽観更新を refetch で巻き戻すのを防ぐ）
+  // 受信確認（地図/FAX）をタップで切替。連続タップ・応答の前後ズレでも壊れないようにする。
+  //  方針：押された「最終状態(desired)」を伝票ごとにrefで管理し、伝票単位で1リクエストずつ直列保存する。
+  //   - 楽観UIは即時反映。next は ref の desired を反転して決める（closureのsが古くても・連打でも正しい）
+  //   - 保存中に再度押されたら、進行中の保存完了後に最新 desired を再送（差が無くなるまでループ）
+  //   - 地図/FAX は同じ伝票ハッシュを更新するため、両方まとめて1リクエストで送る（同時更新の取りこぼし防止）
+  //   - 確定後にサーバ実値へ同期し、他タブへ通知（自タブには storage イベントは飛ばない）
+  const recvRef = useRef(new Map())   // id -> { desired:{mapReceived,faxReceived}, saving }
+  const saveRecv = async (id) => {
+    const entry = recvRef.current.get(id)
+    if (!entry || entry.saving) return
+    entry.saving = true
+    try {
+      let res, guard = 0
+      while (guard++ < 50) {
+        const snap = { mapReceived: !!entry.desired.mapReceived, faxReceived: !!entry.desired.faxReceived }
+        res = await api.put(`/api/shipments/${id}?assign=1`, snap)
+        // 保存中に新しいタップが無ければ確定（あれば最新値で再送）
+        if (entry.desired.mapReceived === snap.mapReceived && entry.desired.faxReceived === snap.faxReceived) break
+      }
+      recvRef.current.delete(id)
+      if (res) setAll(arr => arr.map(x => x.id === id ? { ...x, mapReceived: isOn(res.mapReceived), faxReceived: isOn(res.faxReceived) } : x))
+      notifyShipmentsChanged()
+    } catch (e) {
+      recvRef.current.delete(id)
+      alert('保存エラー: ' + (e?.message || e))
+      try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch { /* 無視 */ }
+    }
+  }
   const toggleRecv = (s, key) => {
-    const next = !isOn(s[key])   // 文字列"false"等でも正しく反転（!"false" だと常にfalseになるため isOn を使う）
-    setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: next } : x))   // 楽観更新（boolで保持）
-    api.put(`/api/shipments/${s.id}?assign=1`, { [key]: next })
-      .then(res => {
-        // 当該キーだけサーバ値で確定（boolに正規化）。他キーは触らない
-        setAll(arr => arr.map(x => x.id === res.id ? { ...x, [key]: isOn(res[key]) } : x))
-      })
-      .catch(e => {
-        setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: !next } : x))
-        alert('保存エラー: ' + (e?.message || e))
-      })
+    let entry = recvRef.current.get(s.id)
+    if (!entry) {
+      entry = { desired: { mapReceived: isOn(s.mapReceived), faxReceived: isOn(s.faxReceived) }, saving: false }
+      recvRef.current.set(s.id, entry)
+    }
+    const next = !entry.desired[key]
+    entry.desired = { ...entry.desired, [key]: next }
+    setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: next } : x))   // 楽観UI
+    saveRecv(s.id)
   }
 
   // モーダル編集：構造化パッチ（patch=実データ、changed=変更フィールド名）を一括保存
