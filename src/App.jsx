@@ -1727,7 +1727,7 @@ function makeDenpyoHandlers({ form, setForm, employees = [], companyComboOptions
   const setVehQty = (type, qty, composing) => setForm(f => { const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: composing ? String(qty).slice(0, 2) : z2h(qty).replace(/[^0-9]/g, '').slice(0, 2) } : v); return { ...f, ...syncVeh(items) } })
   const vehItems = () => (Array.isArray(form.vehicleItems) ? form.vehicleItems : [])
   const toggleNoteTag = (tag) => setForm(f => { const cur = Array.isArray(f.noteTags) ? f.noteTags : []; return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
-  const toggleTestTag = (tag) => setForm(f => { const cur = Array.isArray(f.testTags) ? f.testTags : []; return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
+  const toggleTestTag = (tag) => setForm(f => { const cur = Array.isArray(f.testTags) ? f.testTags : []; return { ...f, testTags: cur.includes(tag) ? [] : [tag] } })
   const addNoteMessage = (msg) => setForm(f => { const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []; const i = notes.findIndex(n => n && n.kind === 'msg'); if (i >= 0) { const cur = String(notes[i].text || ''); if (cur.split(/\s+/).filter(Boolean).includes(msg)) return f; notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg } } else { notes.push({ text: msg, important: false, kind: 'msg' }) } return { ...f, notes: sortNotes(notes) } })
   const removeNoteMessage = (msg) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []); const i = notes.findIndex(n => n && n.kind === 'msg'); if (i < 0) return f; const rest = String(notes[i].text || '').split(/\s+/).filter(Boolean).filter(x => x !== msg); if (rest.length) notes[i].text = rest.join(' '); else notes.splice(i, 1); return { ...f, notes: sortNotes(notes) } })
   const unloadText = () => { const n = (form.notes || []).find(n => n && n.kind === 'unload'); return n ? n.text : '' }
@@ -1758,7 +1758,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
   const setVehQty = (type, qty, composing) => setForm(f => { const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: composing ? String(qty).slice(0, 2) : z2h(qty).replace(/[^0-9]/g, '').slice(0, 2) } : v); return { ...f, ...syncVeh(items) } })
   const vehItems = () => (Array.isArray(form.vehicleItems) ? form.vehicleItems : [])
   const toggleNoteTag = (tag) => setForm(f => { const cur = Array.isArray(f.noteTags) ? f.noteTags : []; return { ...f, noteTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
-  const toggleTestTag = (tag) => setForm(f => { const cur = Array.isArray(f.testTags) ? f.testTags : []; return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] } })
+  const toggleTestTag = (tag) => setForm(f => { const cur = Array.isArray(f.testTags) ? f.testTags : []; return { ...f, testTags: cur.includes(tag) ? [] : [tag] } })
   const addNoteMessage = (msg) => setForm(f => { const notes = Array.isArray(f.notes) ? f.notes.map(n => ({ ...n })) : []; const i = notes.findIndex(n => n && n.kind === 'msg'); if (i >= 0) { const cur = String(notes[i].text || ''); if (cur.split(/\s+/).filter(Boolean).includes(msg)) return f; notes[i] = { ...notes[i], text: cur.trim() ? cur + ' ' + msg : msg } } else { notes.push({ text: msg, important: false, kind: 'msg' }) } return { ...f, notes: sortNotes(notes) } })
   const unloadText = () => { const n = (form.notes || []).find(n => n && n.kind === 'unload'); return n ? n.text : '' }
   const setUnload = (val) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload')); if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' }); return { ...f, notes: sortNotes(notes) } })
@@ -2303,7 +2303,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   })
   const toggleTestTag = (tag) => setForm(f => {
     const cur = Array.isArray(f.testTags) ? f.testTags : []
-    return { ...f, testTags: cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag] }
+    return { ...f, testTags: cur.includes(tag) ? [] : [tag] }
   })
   // メッセージ追加：1回目は備考にmsg段落を新規追加。2回目以降は同じmsg段落の後ろに半角スペース＋メッセージを追記
   const addNoteMessage = (msg) => setForm(f => {
