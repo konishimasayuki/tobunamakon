@@ -39,7 +39,7 @@ input, textarea, select { font-family: inherit; }
 .denpyo .subrow { display:flex; border-bottom:1px solid #111; flex:1; }
 .denpyo .subrow:last-child { border-bottom:none; }
 .denpyo .chips { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:2px; }
-.denpyo .chip { border:1px solid #999; border-radius:5px; padding:3px 10px; font-size:14px; cursor:pointer; user-select:none; background:#fff; line-height:1.6; font-family:inherit; }
+.denpyo .chip { border:1px solid #999; border-radius:5px; padding:3px 10px; font-size:14px; cursor:pointer; user-select:none; background:#fff; line-height:1.6; font-family:inherit; white-space:nowrap; }
 .denpyo .chip.on { border-color:#1b4ea8; background:#e8f0ff; color:#1b4ea8; font-weight:700; }
 .denpyo .inline { display:flex; align-items:baseline; gap:4px; }
 .denpyo .num { width:54px; border:none; border-bottom:1px solid #111; text-align:center; font-family:inherit; font-size:18px; outline:none; background:transparent; }
