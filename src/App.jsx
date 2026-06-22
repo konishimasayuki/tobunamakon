@@ -2710,23 +2710,36 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         </div>
       )}
 
-      {saveConfirm && (
-        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setSaveConfirm(false)}>
-          <div style={{ background: '#fff', borderRadius: 10, width: 'min(960px, 96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #e3e8ef' }}>
-              <h2 style={{ margin: 0, color: '#1a2332', fontSize: 17 }}>📋 {editing ? '更新内容のプレビュー' : '登録内容のプレビュー'}</h2>
-              <button onClick={() => setSaveConfirm(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
-            </div>
-            <div style={{ overflow: 'auto', padding: '12px 16px', flex: 1 }}>
-              <DenpyoView s={buildPayload()} />
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid #e3e8ef' }}>
-              <button style={S.cancelBtn} onClick={() => setSaveConfirm(false)}>やめる</button>
-              <button style={{ ...S.dangerBtn, background: '#1a6a9f', borderColor: '#1a6a9f' }} onClick={doSave}>{editing ? '更新する' : '登録する'}</button>
+      {saveConfirm && (() => {
+        const payload = buildPayload()
+        // 編集時のみ：編集前(orig)と比べて変わった項目を計算し、プレビューで赤く表示
+        const orig = editing ? (shipments.find(x => x.id === editing) || {}) : null
+        const changedFields = orig ? diffChangedFields(orig, payload) : []
+        return (
+          <div style={S.overlay} onClick={e => e.target === e.currentTarget && setSaveConfirm(false)}>
+            <div style={{ background: '#fff', borderRadius: 10, width: 'min(960px, 96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #e3e8ef' }}>
+                <h2 style={{ margin: 0, color: '#1a2332', fontSize: 17 }}>📋 {editing ? '更新内容のプレビュー' : '登録内容のプレビュー'}</h2>
+                <button onClick={() => setSaveConfirm(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
+              </div>
+              {editing && (
+                <div style={{ padding: '8px 16px', background: '#fff5f5', borderBottom: '1px solid #f0d8d8', fontSize: 12, color: '#c81e1e' }}>
+                  {changedFields.length === 0
+                    ? '※変更箇所はありません'
+                    : <>※赤字＝変更された箇所</>}
+                </div>
+              )}
+              <div style={{ overflow: 'auto', padding: '12px 16px', flex: 1 }}>
+                <DenpyoView s={payload} changedFields={changedFields} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid #e3e8ef' }}>
+                <button style={S.cancelBtn} onClick={() => setSaveConfirm(false)}>やめる</button>
+                <button style={{ ...S.dangerBtn, background: '#1a6a9f', borderColor: '#1a6a9f' }} onClick={doSave}>{editing ? '更新する' : '登録する'}</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -2756,6 +2769,7 @@ function diffChangedFields(orig, next) {
   if (norm(orig.siteName) !== norm(next.siteName)) changed.push('siteName')
   if (norm(orig.siteAddress) !== norm(next.siteAddress)) changed.push('siteAddress')
   if (norm(orig.vehicleType) !== norm(next.vehicleType)) changed.push('vehicleType')
+  if (norm(orig.vehicleFree) !== norm(next.vehicleFree)) changed.push('vehicleFree')
   // 配合：桁グループごとに比較（mix0/mix1/mix2）。1つでも違えば 'mixCode' も付与（旧表示の互換）
   const op = norm(orig.mixCode).split('-')
   const np = norm(next.mixCode).split('-')
@@ -2777,6 +2791,9 @@ function diffChangedFields(orig, next) {
   const origTags = Array.isArray(orig.noteTags) ? orig.noteTags : []
   const nextTags = Array.isArray(next.noteTags) ? next.noteTags : []
   if (!eq(origTags, nextTags)) changed.push('noteTags')
+  const origTests = Array.isArray(orig.testTags) ? orig.testTags : []
+  const nextTests = Array.isArray(next.testTags) ? next.testTags : []
+  if (!eq(origTests, nextTests)) changed.push('testTags')
   if (norm(orig.pourLocation) !== norm(next.pourLocation)) changed.push('pourLocation')
   const origDrivers = (Array.isArray(orig.drivers) ? orig.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
   const nextDrivers = (Array.isArray(next.drivers) ? next.drivers : []).map(d => ({ id: d.id || '', name: d.name }))
@@ -4692,54 +4709,59 @@ function DriverAssignPopupPage({ id }) {
 
 // 伝票キャンセル：伝票を選んでキャンセルすると全リストから非表示になり、ここに保管される
 // 出荷登録の伝票（denpyo）レイアウトを流用した読み取り専用ビュー
-function DenpyoView({ s }) {
+// changedFields: 変更されたフィールド名の配列。該当セルのラベル・値を赤く表示（更新確認プレビューで使用）
+function DenpyoView({ s, changedFields = [] }) {
   const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notes = (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const orderDate = String(s.orderDate || (s.createdAt ? String(s.createdAt).slice(0, 10) : '') || '').replace(/-/g, '/')
   const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)
-  const cell = (label, flex, content) => (
-    <div className="cell" style={{ flex }}>
-      <div className="lbl">{label}</div>
-      <div style={{ fontSize: 15, color: '#111', minHeight: 18, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>
-    </div>
-  )
+  const isRed = (...keys) => keys.some(k => changedFields.includes(k))
+  const cell = (label, flex, content, ...keys) => {
+    const red = isRed(...keys)
+    return (
+      <div className="cell" style={{ flex }}>
+        <div className="lbl" style={red ? { color: '#c81e1e' } : undefined}>{label}</div>
+        <div style={{ fontSize: 15, color: red ? '#c81e1e' : '#111', fontWeight: red ? 700 : undefined, minHeight: 18, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>
+      </div>
+    )
+  }
   return (
     <div className="denpyo">
       <div className="sheet" style={{ margin: 0 }}>
         <div className="band">
           {cell('受 注 日', '0 0 18%', orderDate || '—')}
-          {cell('日 付', '0 0 18%', s.date)}
-          {cell('業 者 名', '1 1 0', s.companyName || '—')}
-          {cell('商 社 名', '1 1 0', s.tradingCompany || '—')}
+          {cell('日 付', '0 0 18%', s.date, 'date')}
+          {cell('業 者 名', '1 1 0', s.companyName || '—', 'companyName')}
+          {cell('商 社 名', '1 1 0', s.tradingCompany || '—', 'tradingCompany')}
         </div>
         <div className="band">
-          {cell('時 間', '0 0 24%', times.join(' / ') || '—')}
-          {cell('現 場 名', '1 1 0', s.siteName || '—')}
+          {cell('時 間', '0 0 24%', times.join(' / ') || '—', 'times')}
+          {cell('現 場 名', '1 1 0', s.siteName || '—', 'siteName')}
         </div>
         <div className="band">
-          {cell('現 場 住 所', '1 1 0', cleanAddr(s.siteAddress) || '未入力')}
+          {cell('現 場 住 所', '1 1 0', cleanAddr(s.siteAddress) || '未入力', 'siteAddress')}
         </div>
         <div className="band">
-          {cell('車 種', '0 0 16%', <>{vehicleLabel(s) || '—'}{s.vehicleFree ? <div style={{ fontSize: 12, color: '#1b4ea8', fontWeight: 700, marginTop: 2 }}>{s.vehicleFree}</div> : null}</>)}
-          {cell('打設箇所', '0 0 16%', s.pourLocation || '—')}
-          {cell('配 合', '1 1 0', mixes.length ? mixes.map((r, i) => <div key={i}>{r.code}{r.note ? `（${r.note}）` : ''}</div>) : '—')}
-          {cell('セメント種', '0 0 12%', s.cementType || '—')}
-          {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—')}
+          {cell('車 種', '0 0 16%', <>{vehicleLabel(s) || '—'}{s.vehicleFree ? <div style={{ fontSize: 12, color: isRed('vehicleFree') ? '#c81e1e' : '#1b4ea8', fontWeight: 700, marginTop: 2 }}>{s.vehicleFree}</div> : null}</>, 'vehicleType', 'vehicleFree')}
+          {cell('打設箇所', '0 0 16%', s.pourLocation || '—', 'pourLocation')}
+          {cell('配 合', '1 1 0', mixes.length ? mixes.map((r, i) => <div key={i}>{r.code}{r.note ? `（${r.note}）` : ''}</div>) : '—', 'mixCode', 'mix0', 'mix1', 'mix2', 'mixnote')}
+          {cell('セメント種', '0 0 12%', s.cementType || '—', 'cementType')}
+          {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—', 'testTags')}
         </div>
         <div className="band">
-          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" />)}
-          {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—')}
-          {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—')}
+          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" />, 'volume')}
+          {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—', 'placements')}
+          {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—', 'noteTags')}
         </div>
         <div className="band">
-          {cell('連 絡 先', '1 1 0', s.orderContact || '—')}
-          {cell('現場連絡先', '1 1 0', s.siteContact || '—')}
+          {cell('連 絡 先', '1 1 0', s.orderContact || '—', 'orderContact')}
+          {cell('現場連絡先', '1 1 0', s.siteContact || '—', 'siteContact')}
         </div>
         <div className="band">
-          {cell('備 考', '1 1 0', notes.length ? notes.map((n, i) => <div key={i}>・{n}</div>) : '—')}
+          {cell('備 考', '1 1 0', notes.length ? notes.map((n, i) => <div key={i}>・{n}</div>) : '—', 'notes')}
         </div>
         <div className="band">
-          {cell('担当ドライバー', '1 1 0', driversOf(s).join('・') || '—')}
+          {cell('担当ドライバー', '1 1 0', driversOf(s).join('・') || '—', 'drivers')}
           {cell('PDF', '0 0 22%', s.hasPdf
             ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); window.open(`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`, '_blank', 'width=900,height=1000') }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
             : '—')}
@@ -4766,8 +4788,8 @@ function CancelPage({ onRestoreEdit }) {
   useEffect(() => { load() }, [load])
   useShipmentsChanged(load)
 
-  const restore = async (s) => {
-    if (!window.confirm(`「${s.companyName}」${s.date} の伝票を復元しますか？\n出荷予定表・一覧に戻り、そのまま編集画面が開きます。`)) return
+  // 復元の実処理（プレビュー＝detailモーダル内の「復元する」ボタンから呼ばれる）
+  const doRestore = async (s) => {
     setBusy(s.id)
     try {
       await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: false })
@@ -4780,8 +4802,8 @@ function CancelPage({ onRestoreEdit }) {
     catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
   }
 
-  // 1件を完全削除（元に戻せない）
-  const delOne = async (s) => {
+  // 完全削除の実処理（プレビュー内の「完全に削除」ボタンから呼ばれる）。元に戻せないため最終確認を残す
+  const doDelete = async (s) => {
     if (!window.confirm(`「${s.companyName}」${s.date} の伝票を完全に削除します。\n元に戻せません。よろしいですか？`)) return
     setBusy(s.id)
     try {
@@ -4854,8 +4876,8 @@ function CancelPage({ onRestoreEdit }) {
                     <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
                   </span>
                   <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
-                  <button type="button" disabled={busy === s.id} onClick={() => restore(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.7 : 1 }}>{busy === s.id ? '復元中…' : '↩ 復元'}</button>
-                  <button type="button" disabled={busy === s.id || deleting} onClick={() => delOne(s)} title="完全に削除（元に戻せません）" style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.6 : 1 }}>🗑 削除</button>
+                  <button type="button" disabled={busy === s.id} onClick={() => setDetail(s)} title="プレビューを表示してから復元" style={{ flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.7 : 1 }}>↩ 復元</button>
+                  <button type="button" disabled={busy === s.id || deleting} onClick={() => setDetail(s)} title="プレビューを表示してから削除" style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.6 : 1 }}>🗑 削除</button>
                 </div>
               ))}
             </div>
@@ -4870,8 +4892,8 @@ function CancelPage({ onRestoreEdit }) {
             <FitToWidth width={720}><DenpyoView s={detail} /></FitToWidth>
             <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setDetail(null)} disabled={busy} style={{ flex: '1 1 120px', border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>閉じる</button>
-              <button type="button" onClick={() => delOne(detail)} disabled={busy} style={{ flex: '1 1 120px', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>🗑 完全に削除</button>
-              <button type="button" onClick={() => restore(detail)} disabled={busy} style={{ flex: '1 1 120px', border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '↩ 復元する'}</button>
+              <button type="button" onClick={() => doDelete(detail)} disabled={busy} style={{ flex: '1 1 120px', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>🗑 完全に削除</button>
+              <button type="button" onClick={() => doRestore(detail)} disabled={busy} style={{ flex: '1 1 120px', border: 'none', background: '#1a8f5a', color: '#fff', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? '処理中…' : '↩ 復元する'}</button>
             </div>
           </div>
         </div>
