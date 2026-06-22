@@ -3513,6 +3513,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   {/* 打設 / 種 / 受信確認 */}
                   <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
                   <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">特記</span><span className="sc-val">{(Array.isArray(s.noteTags) && s.noteTags.length) ? <b style={{ fontWeight: 700, color: '#c81e1e', fontSize: 16 }}>{s.noteTags.join('・')}</b> : '—'}</span></div>
                   <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
                     <span style={{ display: 'inline-flex', gap: 8 }}>
                       {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
@@ -3554,24 +3555,25 @@ function SchedulePage({ onEditShipment, isPopup }) {
         <table>
           <colgroup>
             <col style={{ width: '7%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '11%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
             <col style={{ width: '7%' }} />
             <col style={{ width: '6%' }} />
-            <col style={{ width: '9%' }} />
+            <col style={{ width: '8%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '4%' }} />
+            <col style={{ width: '4%' }} />
             <col style={{ width: '8%' }} />
+            <col style={{ width: '9%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '11%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>受信確認</th><th>担当</th>
+              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>特記</th><th>受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
             </tr>
@@ -3592,6 +3594,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
+                <td className="sc-nowrap" style={{ textAlign: 'center' }}>
+                  {(Array.isArray(s.noteTags) && s.noteTags.length)
+                    ? <span style={{ fontWeight: 700, fontSize: 14, color: '#c81e1e' }}>{s.noteTags.join('・')}</span>
+                    : null}
+                </td>
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
                     {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
