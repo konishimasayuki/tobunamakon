@@ -1073,6 +1073,7 @@ const emptyShipForm = {
   vehicleType: '',
   truckCount: '',
   vehicleItems: [],     // [{ type:'4t', qty:'2' }] 車種＋数量。vehicleType は表示互換用に同期
+  vehicleFree: '',      // 車種の自由入力（補足）。出荷予定表の備考列・生コン予定表の電話番号横に表示
   mixCode: '',
   specialNote: '',
   mixNotes: ['', '', ''],
@@ -1649,6 +1650,7 @@ function shipmentToForm(s) {
     siteAddress: (s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim(),
     vehicleType: s.vehicleType || '',
     truckCount: (s.truckCount ?? '') === '' ? '' : String(s.truckCount),
+    vehicleFree: s.vehicleFree || '',
     vehicleItems: (Array.isArray(s.vehicleItems) && s.vehicleItems.length)
       ? s.vehicleItems.map(v => ({ type: v.type, qty: (v.qty ?? '') === '' ? '1' : String(v.qty) }))
       : String(s.vehicleType || '').split('・').map(x => x.trim()).filter(Boolean).map(t => ({ type: t, qty: '1' })),
@@ -1824,16 +1826,20 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             <div className="band">
               <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
                 <div className="lbl" style={{ ...redIf('vehicleType'), textAlign: 'center' }}>車 種</div>
-                <div className="btn-mid"><div className="veh-chips">
-                  {VEHICLE_TYPES.map(o => {
-                    const on = vehItems().some(v => v.type === o)
-                    return (
-                      <span key={o} className="vehpill">
-                        <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                      </span>
-                    )
-                  })}
-                </div></div>
+                <div className="btn-mid" style={{ gap: 6 }}>
+                  <div className="veh-chips">
+                    {VEHICLE_TYPES.map(o => {
+                      const on = vehItems().some(v => v.type === o)
+                      return (
+                        <span key={o} className="vehpill">
+                          <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                  <input className="f" value={form.vehicleFree || ''} onChange={set('vehicleFree')} placeholder="補足"
+                    style={{ width: '100%', fontSize: 12, padding: '3px 4px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4 }} />
+                </div>
               </div>
               <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
                 <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
@@ -2701,13 +2707,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       )}
 
       {saveConfirm && (
-        <div style={S.overlay}>
-          <div style={S.confirmBox}>
-            <p style={{ marginBottom: 16, color: '#1a2332', fontSize: 14 }}>
-              この内容で{editing ? '更新' : '登録'}しますか？
-              {form.companyName ? <><br /><span style={{ fontSize: 12, color: '#6b7a8d' }}>{form.date}　{form.companyName}{form.siteName ? `／${form.siteName}` : ''}</span></> : null}
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setSaveConfirm(false)}>
+          <div style={{ background: '#fff', borderRadius: 10, width: 'min(960px, 96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #e3e8ef' }}>
+              <h2 style={{ margin: 0, color: '#1a2332', fontSize: 17 }}>📋 {editing ? '更新内容のプレビュー' : '登録内容のプレビュー'}</h2>
+              <button onClick={() => setSaveConfirm(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
+            </div>
+            <div style={{ overflow: 'auto', padding: '12px 16px', flex: 1 }}>
+              <DenpyoView s={buildPayload()} />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid #e3e8ef' }}>
               <button style={S.cancelBtn} onClick={() => setSaveConfirm(false)}>やめる</button>
               <button style={{ ...S.dangerBtn, background: '#1a6a9f', borderColor: '#1a6a9f' }} onClick={doSave}>{editing ? '更新する' : '登録する'}</button>
             </div>
@@ -2968,17 +2977,25 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
 
   // 受信確認（地図/FAX）をタップで切替。ログイン不要の assign エンドポイントで該当項目だけ更新（掲示板の別ウィンドウでも保存可）
-  const toggleRecv = async (s, key) => {
-    const next = !s[key]
-    setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: next } : x))   // 楽観更新
-    try {
-      const res = await api.put(`/api/shipments/${s.id}?assign=1`, { [key]: next })
-      setAll(arr => arr.map(x => x.id === res.id ? res : x))
-      notifyShipmentsChanged()
-    } catch (e) {
-      setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: !next } : x))  // 失敗時は戻す
-      alert('保存エラー: ' + e.message)
-    }
+  // バグ対策：(1) closure の s ではなく最新の state から next を決める（連続タップで戻らない）
+  //          (2) サーバ応答で全項目を上書きすると別の楽観更新を消すので、対象キーだけマージする
+  //          (3) notifyShipmentsChanged は呼ばない（自分の楽観更新を refetch で巻き戻すのを防ぐ）
+  const toggleRecv = (s, key) => {
+    let next = !s[key]
+    setAll(arr => arr.map(x => {
+      if (x.id !== s.id) return x
+      next = !x[key]
+      return { ...x, [key]: next }
+    }))
+    api.put(`/api/shipments/${s.id}?assign=1`, { [key]: next })
+      .then(res => {
+        // 当該キーだけサーバ値で確定。他キー（同時に別タップ進行中など）は触らない
+        setAll(arr => arr.map(x => x.id === res.id ? { ...x, [key]: !!res[key] } : x))
+      })
+      .catch(e => {
+        setAll(arr => arr.map(x => x.id === s.id ? { ...x, [key]: !next } : x))
+        alert('保存エラー: ' + (e?.message || e))
+      })
   }
 
   // モーダル編集：構造化パッチ（patch=実データ、changed=変更フィールド名）を一括保存
@@ -3196,34 +3213,45 @@ function SchedulePage({ onEditShipment, isPopup }) {
         </span>
       )
     }
-    const segs = [[s.volume, s.volumePlusA, s.volumeUncertain], [s.volume2, s.volumePlusA2, s.volumeUncertain2]]
-      .map(([v, a, u]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${a ? '+a' : ''}${u ? '?' : ''}` } })
+    const segs = [[s.volume, s.volumePlusA, s.volumeUncertain, s.volumeNote], [s.volume2, s.volumePlusA2, s.volumeUncertain2, s.volumeNote2]]
+      .map(([v, a, u, n]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, text: `${b}${a ? '+a' : ''}${u ? '?' : ''}`, note: String(n || '').trim() } })
       .filter(Boolean)
     const red = isChanged(s, 'volume')
     if (!segs.length) return <span ref={fitRef} className="sc-mixcode big center" style={{ pointerEvents: 'none' }} />
     return (
       <span ref={fitRef} className="sc-mixcode big center" key={'vol' + (red ? '_c' : '') + '_n' + segs.length} style={{ pointerEvents: 'none' }}>
-        {segs.map((seg, i) => { const r3 = red || volNumColor(seg.num) === '#c81e1e'; return <span key={i} className={r3 ? 'sc-vol3' : undefined} style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 700, color: r3 ? '#c81e1e' : '#111' }}>{seg.text}</span> })}
+        {segs.map((seg, i) => {
+          const r3 = red || volNumColor(seg.num) === '#c81e1e'
+          return (
+            <span key={i} className={r3 ? 'sc-vol3' : undefined} style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 700, color: r3 ? '#c81e1e' : '#111' }}>
+              {seg.note ? <span style={{ display: 'block', fontSize: 10, color: '#c81e1e', fontWeight: 700, lineHeight: 1, marginBottom: 1 }}>{seg.note}</span> : null}
+              {seg.text}
+            </span>
+          )
+        })}
       </span>
     )
   }
 
   // 備考：行ごとに分割描画。追加/変更された行(note0,note1,…)だけ赤くする
+  // 車種の自由入力（vehicleFree）は備考の先頭に「車種補足」として表示
   const cellNotes = (s, opts = {}) => {
     if (inlineEdit) return editCell(s, 'notes', { ...opts, multiline: true })
     const arr = Array.isArray(s.notes) ? s.notes : []
+    const vf = String(s.vehicleFree || '').trim()
     const cls = 'sc-in sc-notes' + (opts.plain ? ' plain' : '')
     const wholeRed = isChanged(s, 'notes') && !arr.some((_, i) => isChanged(s, 'note' + i))
-    if (!arr.length) {
+    if (!arr.length && !vf) {
       return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', color: '#cbd2dc' }}>{opts.ph || '備考'}</span>
     }
     return (
-      <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '')} style={{ pointerEvents: 'none' }}>
+      <span ref={fitRef} className={cls} key={'notes' + (isChanged(s, 'notes') ? '_c' : '') + '_vf' + vf.length} style={{ pointerEvents: 'none' }}>
+        {vf ? <span style={{ color: '#1b4ea8', fontWeight: 700 }}>{vf}</span> : null}
         {arr.map((n, i) => {
           const red = wholeRed || isChanged(s, 'note' + i) || (n && n.important)
           return (
             <Fragment key={i}>
-              {i > 0 && <span> / </span>}
+              {(i > 0 || vf) && <span> / </span>}
               <span style={{ color: red ? '#c81e1e' : undefined, fontWeight: (n && n.important) ? 700 : undefined }}>{n.text}</span>
             </Fragment>
           )
@@ -3497,18 +3525,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <colgroup>
             <col style={{ width: '7%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '11%' }} />
+            <col style={{ width: '12%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
             <col style={{ width: '7%' }} />
             <col style={{ width: '6%' }} />
             <col style={{ width: '9%' }} />
-            <col style={{ width: '6%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '4%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '10%' }} />
+            <col style={{ width: '11%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
-            {!isPopup && <col style={{ width: '4%' }} />}
           </colgroup>
           <thead>
             <tr>
@@ -3517,7 +3544,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               {!isPopup && <th>編集</th>}
-              {!isPopup && <th>削除</th>}
             </tr>
           </thead>
           <tbody>
@@ -3555,12 +3581,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                       style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
                     <button type="button" onClick={() => openLine(s)}
                       style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
-                  </td>
-                )}
-                {!isPopup && (
-                  <td style={{ textAlign: 'center' }}>
-                    <button type="button" onClick={() => deleteShip(s)}
-                      style={{ display: 'block', margin: '0 auto', border: '1px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>削除</button>
                   </td>
                 )}
               </tr>
@@ -4378,7 +4398,7 @@ function SeikonOutputPage({ isPopup }) {
         <td style={{ textAlign: 'center' }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
         <td className="seikon-tekiyo">
           <div>{tekiyo1}</div>
-          <div className="seikon-phone">{s.siteContact || ''}</div>
+          <div className="seikon-phone">{s.siteContact || ''}{s.vehicleFree ? <span style={{ marginLeft: 8, fontWeight: 700 }}>{s.vehicleFree}</span> : null}</div>
         </td>
         <td className="seikon-toku">
           <div>{tags}</div>
@@ -4687,7 +4707,7 @@ function DenpyoView({ s }) {
           {cell('現 場 住 所', '1 1 0', cleanAddr(s.siteAddress) || '未入力')}
         </div>
         <div className="band">
-          {cell('車 種', '0 0 16%', vehicleLabel(s) || '—')}
+          {cell('車 種', '0 0 16%', <>{vehicleLabel(s) || '—'}{s.vehicleFree ? <div style={{ fontSize: 12, color: '#1b4ea8', fontWeight: 700, marginTop: 2 }}>{s.vehicleFree}</div> : null}</>)}
           {cell('打設箇所', '0 0 16%', s.pourLocation || '—')}
           {cell('配 合', '1 1 0', mixes.length ? mixes.map((r, i) => <div key={i}>{r.code}{r.note ? `（${r.note}）` : ''}</div>) : '—')}
           {cell('セメント種', '0 0 12%', s.cementType || '—')}
@@ -4717,7 +4737,7 @@ function DenpyoView({ s }) {
 }
 
 // キャンセル伝票：削除（キャンセル）した伝票の保管庫。復元すると元に戻り一覧から消える
-function CancelPage() {
+function CancelPage({ onRestoreEdit }) {
   const [cancelled, setCancelled] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -4734,9 +4754,16 @@ function CancelPage() {
   useShipmentsChanged(load)
 
   const restore = async (s) => {
-    if (!window.confirm(`「${s.companyName}」${s.date} の伝票を復元しますか？\n出荷予定表・一覧に戻ります。`)) return
+    if (!window.confirm(`「${s.companyName}」${s.date} の伝票を復元しますか？\n出荷予定表・一覧に戻り、そのまま編集画面が開きます。`)) return
     setBusy(s.id)
-    try { await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: false }); notifyShipmentsChanged(); setDetail(null); await load() }
+    try {
+      await api.put(`/api/shipments/${s.id}?cancel=1`, { cancelled: false })
+      notifyShipmentsChanged()
+      setDetail(null)
+      await load()
+      // 復元後、出荷登録の編集画面を直接開く（親に通知）
+      if (onRestoreEdit) onRestoreEdit(s.id)
+    }
     catch (e) { alert('エラー: ' + e.message) } finally { setBusy(null) }
   }
 
@@ -5447,7 +5474,7 @@ function AppInner() {
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />
-    : activeTab === 'cancel' ? <CancelPage />
+    : activeTab === 'cancel' ? <CancelPage onRestoreEdit={(id) => { setPendingEditId(id); setActiveTab('shipments') }} />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
