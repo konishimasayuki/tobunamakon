@@ -294,10 +294,13 @@ input, textarea, select { font-family: inherit; }
 /* 打設列：長い文字はセル内で折り返して収める（実データは改行しない＝表示上のみ折り返し） */
 .seikon-table td.seikon-datsu { white-space:normal; word-break:break-word; overflow-wrap:anywhere; text-align:center; }
 .seikon-table td { height:30px; }
+/* 業者名：列幅を狭く。文字は小さくしてよいので縦幅そのままで折り返す */
+.seikon-table td.seikon-comp { font-size:11px; line-height:1.05; white-space:normal; word-break:break-word; overflow-wrap:anywhere; }
 /* 車両は文字を5pt大きく */
 .seikon-table td.seikon-veh { font-size:15px; font-weight:700; text-align:center; white-space:nowrap; }
-/* 配合は本文より8pt大きく・中央揃え */
-.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:pre; }
+/* 配合は本文より8pt大きく・中央揃え・折り返さない */
+.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; }
+.seikon-table td.seikon-mix > div { white-space:nowrap; }
 /* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
 .seikon-table td.seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; }
 /* 摘要：上=備考(＋荷下ろし)／下=現場連絡先 */
@@ -310,7 +313,7 @@ input, textarea, select { font-family: inherit; }
 /* 特記列：上=出荷登録の特記(領/追)／下=試験(現/工)。狭く2段 */
 .seikon-table td.seikon-toku { text-align:center; font-size:11px; line-height:1.4; }
 .seikon-table td.seikon-toku .seikon-toku-tag { font-weight:700; font-size:12px; }
-.seikon-table td.seikon-toku .seikon-test { color:#2a7a3a; }
+.seikon-table td.seikon-toku .seikon-test { color:#2a7a3a; font-weight:700; }
 
 @media print {
   /* 名前付き@pageは使わず、グローバルの @page(A4 landscape) に任せる（名前付きにすると
