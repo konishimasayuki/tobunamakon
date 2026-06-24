@@ -3621,7 +3621,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <colgroup>
             <col style={{ width: '7%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '11%' }} />
+            <col style={{ width: '12%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
             <col style={{ width: '5%' }} />
             <col style={{ width: '5%' }} />
@@ -3630,9 +3630,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <col style={{ width: '3%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '11%' }} />
-            {!isPopup && <col style={{ width: '6%' }} />}
-            {!isPopup && <col style={{ width: '5%' }} />}
+            <col style={{ width: '12%' }} />
+            {!isPopup && <col style={{ width: '9%' }} />}
           </colgroup>
           <thead>
             <tr>
@@ -3640,8 +3639,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th>{!isPopup && <th className="th-tight">📄PDF</th>}<th className="th-tight">打設</th><th className="th-tight">車種</th><th>配合</th><th>数量</th><th className="th-tight">種</th><th className="th-tight">受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
-              {!isPopup && <th className="th-tight">編集</th>}
-              {!isPopup && <th className="th-tight">削除</th>}
+              {!isPopup && <th className="th-tight">操作</th>}
             </tr>
           </thead>
           <tbody>
@@ -3675,13 +3673,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
-                    <button type="button" className="sc-act edit" onClick={() => openEditWindow(s)}>✏️ 編集</button>
-                    <button type="button" className="sc-act line" onClick={() => openLine(s)}>LINE送信</button>
-                  </td>
-                )}
-                {!isPopup && (
-                  <td style={{ textAlign: 'center' }}>
-                    <button type="button" className="sc-act del" onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button type="button" className="sc-act edit" style={{ flex: 1 }} onClick={() => openEditWindow(s)}>✏️ 編集</button>
+                      <button type="button" className="sc-act del" style={{ flex: 1, marginTop: 0 }} onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
+                    </div>
+                    <button type="button" className="sc-act line" style={{ marginTop: 4 }} onClick={() => openLine(s)}>LINE送信</button>
                   </td>
                 )}
               </tr>
@@ -5009,9 +5005,7 @@ function CancelPage({ onRestoreEdit }) {
                     <span style={{ fontSize: 13, color: '#3a4a5c' }}>{s.date}　<b style={{ color: '#c0392b' }}>{firstTimeOf(s) || ''}</b>　</span>
                     <b>{s.companyName}</b>{s.siteName ? <span style={{ color: '#6b7a8d' }}> ／ {s.siteName}</span> : ''}
                   </span>
-                  <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
-                  <button type="button" disabled={busy === s.id} onClick={() => setDetail(s)} title="プレビューを表示してから復元" style={{ flex: '0 0 auto', border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.7 : 1 }}>↩ 復元</button>
-                  <button type="button" disabled={busy === s.id || deleting} onClick={() => setDetail(s)} title="プレビューを表示してから削除" style={{ flex: '0 0 auto', border: '1.5px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: busy === s.id ? 0.6 : 1 }}>🗑 削除</button>
+                  <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
                 </div>
               ))}
             </div>
