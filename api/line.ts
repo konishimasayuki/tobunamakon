@@ -274,6 +274,7 @@ function shipmentBubble(s: any): any {
   const placements = asArr(s.placements).filter(Boolean)
   const mixNotes = asArr(s.mixNotes).map((x: any) => String(x || '').trim())
   const notesArr = asArr(s.notes).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
+  const notesImp = asArr(s.notes).some((n: any) => n && typeof n === 'object' && n.important)   // 備考の「！」
   const driverMsgArr = asArr(s.driverMessages).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
   const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
   const mapUrl = mapsUrlOf(s)
@@ -288,7 +289,7 @@ function shipmentBubble(s: any): any {
     type: 'box', layout: 'horizontal', spacing: 'sm', margin: 'sm',
     contents: [
       { type: 'text', text: label, size: 'sm', color: '#8a97a6', flex: 4 },
-      { type: 'text', text: value || '—', size: opts.big ? 'lg' : 'sm', weight: opts.big ? 'bold' : 'regular', color: opts.color || '#111111', flex: 8, wrap: true },
+      { type: 'text', text: value || '—', size: opts.big ? 'lg' : 'sm', weight: (opts.big || opts.bold) ? 'bold' : 'regular', color: opts.color || '#111111', flex: 8, wrap: true },
     ],
   })
   const sep = () => ({ type: 'separator', margin: 'md', color: '#eef0f4' })
@@ -341,7 +342,7 @@ function shipmentBubble(s: any): any {
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))
-  if (notesArr.length) contents.push(row('備考', notesArr.join(' / ')))
+  if (notesArr.length) contents.push(row('備考', notesArr.join(' / '), notesImp ? { color: '#c0392b', bold: true } : {}))
   // ドライバーへの連絡：見落とし防止のため赤字・太字で強調（黄色帯で囲う）
   if (driverMsgArr.length) {
     contents.push({

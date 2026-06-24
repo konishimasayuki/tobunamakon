@@ -82,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const dateParam = Array.isArray(q.date) ? q.date[0] : q.date
       const fromParam = Array.isArray(q.from) ? q.from[0] : q.from
       const toParam = Array.isArray(q.to) ? q.to[0] : q.to
-      const ft = (s: any) => Array.isArray(s.times) ? (s.times[0] || '') : (s.time || '')
+      const ft = (s: any) => { const t = Array.isArray(s.times) ? s.times[0] : s.time; return (t && t.text != null) ? t.text : (t || '') }
       let shipments: Record<string, any>[]
       if (!showCancelled && (dateParam || (fromParam && toParam))) {
         // 索引経由：当日 or 期間ぶんの id だけ取得して読む

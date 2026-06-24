@@ -1675,7 +1675,7 @@ function shipmentToForm(s) {
     companyId: s.companyId || '',
     companyName: s.companyName || '',
     tradingCompany: s.tradingCompany || '',
-    times: (Array.isArray(s.times) && s.times.length ? s.times : ['']).map(t => ({ text: String((t && t.text != null) ? t.text : t ?? ''), important: false })),
+    times: (Array.isArray(s.times) && s.times.length ? s.times : ['']).map(t => ({ text: String((t && t.text != null) ? t.text : t ?? ''), important: !!(t && typeof t === 'object' && t.important) })),
     siteName: s.siteName || '',
     siteAddress: (s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim(),
     vehicleType: s.vehicleType || '',
@@ -1730,7 +1730,7 @@ function shipmentToForm(s) {
 function buildShipmentPayload(form) {
   const payload = {
     ...form,
-    times: form.times.map(t => z2h(t.text).replace(/：/g, ':')).filter(t => t.trim() !== ''),
+    times: form.times.map(t => ({ text: z2h(t.text).replace(/：/g, ':'), important: !!t.important })).filter(t => t.text.trim() !== ''),
     notes: form.notes.filter(n => n.text.trim() !== ''),
     driverMessages: form.driverMessages.filter(n => n.text.trim() !== ''),
   }
@@ -2702,7 +2702,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     style={{ ...S.tr, cursor: 'pointer', background: editing === s.id ? '#eef5ff' : picked === s.id ? '#fff2cc' : undefined }}
                     onClick={() => setPicked(s.id)} onDoubleClick={() => onRowClick(s)}>
                     <td style={S.td}>{s.date}</td>
-                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.join(' / ') : '—'}</td>
+                    <td style={S.td}>{Array.isArray(s.times) && s.times.length ? s.times.map(t => (t && t.text != null) ? t.text : t).filter(Boolean).join(' / ') : '—'}</td>
                     <td style={{ ...S.td, fontWeight: 600 }}>{s.companyName}</td>
                     <td style={S.td}>{s.tradingCompany || '—'}</td>
                     <td style={S.td}>{s.siteName || '—'}</td>
@@ -3208,8 +3208,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (inlineEdit) return editCell(s, f, { ...opts, ph, multiline: true })
     const v = getVal(s, f)
     const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
+    const timeImp = f === 'times' && Array.isArray(s.times) && s.times.some(t => t && t.important)
     const cls = 'sc-in sc-ta'
       + (isChanged(s, f) ? ' changed' : '')
+      + (timeImp ? ' imp' : '')
       + (opts.center ? ' center' : '')
       + (opts.big ? ' big' : '')
     return (
@@ -3231,7 +3233,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const cellTimes = (s) => {
     const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : [])
       .map(x => String(x ?? '').trim()).filter(Boolean)
-    const cls = 'sc-in sc-timeitem' + (isChanged(s, 'times') ? ' changed' : '')
+    const cls = 'sc-in sc-timeitem' + (isChanged(s, 'times') ? ' changed' : '') + (Array.isArray(s.times) && s.times.some(t => t && t.important) ? ' imp' : '')
     const saveAll = (container) => {
       const inputs = Array.from(container.querySelectorAll('input.sc-timeitem'))
       saveField(s, 'times', inputs.map(i => i.value.trim()).filter(Boolean).join('\n'))
@@ -4521,6 +4523,8 @@ function SeikonOutputPage({ isPopup }) {
     const cf = Array.isArray(s.changedFields) ? s.changedFields : []
     const chg = (...keys) => keys.some(k => cf.includes(k))
     const chgNote = cf.some(k => k === 'notes' || /^note\d+$/.test(k))
+    const timeImp = Array.isArray(s.times) && s.times.some(t => t && t.important)   // 時間の「！」
+    const noteImp = Array.isArray(s.notes) && s.notes.some(n => n && n.important)    // 備考の「！」
     const red = (on, bold) => on ? { color: '#c81e1e', ...(bold ? { fontWeight: 800 } : {}) } : undefined
     return (
       <tr key={key}>
@@ -4531,9 +4535,9 @@ function SeikonOutputPage({ isPopup }) {
         <td className="seikon-mix" style={red(chg('mixCode', 'mix0', 'mix1', 'mix2', 'mixnote'))}>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></td>
         <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400, ...red(chg('cementType')) }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center', ...red(chg('volume')) }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></div>) : ''}</td>
-        <td style={{ textAlign: 'center', ...red(chg('times'), true) }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
+        <td style={{ textAlign: 'center', ...red(chg('times') || timeImp, true) }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
         <td className="seikon-tekiyo">
-          <div style={red(chgNote || chg('placements'), true)}>{tekiyo1}</div>
+          <div style={red(chgNote || chg('placements') || noteImp, true)}>{tekiyo1}</div>
           <div className="seikon-phone" style={red(chg('siteContact', 'vehicleFree'))}>
             <span style={{ display: 'inline-block', minWidth: s.siteContact ? '13ch' : 0 }}>{s.siteContact || ''}</span>
             {vf.over ? <span style={{ fontWeight: 700 }}>{vf.over}</span> : null}
