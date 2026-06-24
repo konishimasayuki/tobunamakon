@@ -1063,6 +1063,15 @@ function vfPlace(vf) {
   if (!t) return { veh: '', over: '' }
   return vfWidth(t) <= 12 ? { veh: t, over: '' } : { veh: '', over: t }
 }
+// 車両欄に出す補足の文字サイズ：長い(全角5〜6文字)ほど小さくしてセル幅に収める。base=短い時の基準px
+function vfVehFont(t, base = 12) {
+  const w = vfWidth(t)
+  if (w <= 4) return base            // 〜全角2/半角4
+  if (w <= 6) return base - 1        // 〜全角3
+  if (w <= 8) return base - 2        // 〜全角4
+  if (w <= 10) return base - 3       // 〜全角5
+  return base - 4                    // 全角6
+}
 // 配合表示: mixRows があれば各行を配列で（{code,note}）、無ければ mixCode/mixNotes 1行
 // 配合は3枠の位置を保持（例: 中央のみ→「-20-」、先頭のみ→「20--」）。数字が無い時は空。
 function mixCodeOf(parts) {
@@ -3654,7 +3663,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 </td>
                 )}
                 <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
-                <td className="sc-nowrap">{vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.05, whiteSpace: 'normal', wordBreak: 'break-all', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null}{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
+                <td className="sc-nowrap">{vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFont(vfPlace(s.vehicleFree).veh, 13), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null}{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
@@ -4518,7 +4527,7 @@ function SeikonOutputPage({ isPopup }) {
         <td className="seikon-comp" style={red(chg('companyName'))}>{s.companyName || ''}</td>
         <td style={red(chg('siteName'))}>{s.siteName || ''}</td>
         <td className="seikon-datsu" style={red(chg('pourLocation'))}>{s.pourLocation || ''}</td>
-        <td className="seikon-veh" style={red(chg('vehicleType', 'vehicleFree'))}>{vf.veh ? <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.05, whiteSpace: 'normal', wordBreak: 'break-all', color: chg('vehicleFree') ? '#c81e1e' : '#1b4ea8' }}>{vf.veh}</div> : null}<div>{vehicleLabel(s) || ''}</div></td>
+        <td className="seikon-veh" style={red(chg('vehicleType', 'vehicleFree'))}>{vf.veh ? <div style={{ fontSize: vfVehFont(vf.veh, 12), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: chg('vehicleFree') ? '#c81e1e' : '#1b4ea8' }}>{vf.veh}</div> : null}<div>{vehicleLabel(s) || ''}</div></td>
         <td className="seikon-mix" style={red(chg('mixCode', 'mix0', 'mix1', 'mix2', 'mixnote'))}>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></td>
         <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400, ...red(chg('cementType')) }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center', ...red(chg('volume')) }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></div>) : ''}</td>
