@@ -1031,11 +1031,15 @@ function volNumStyle(v) {
   return { fontWeight: 400, color: '#111' }
 }
 // 量を表示する共通レンダラ。unit=true で m³ を付与。値が無ければ fallback を返す。量の特記(volumeNote)があれば数値の前に小さく表示
-function VolNum({ s, unit = false, sep = ' / ', fallback = null }) {
+function VolNum({ s, unit = false, sep = ' / ', fallback = null, stacked = false }) {
   const segs = [[s.volume, s.volumePlusA, s.volumeUncertain, s.volumeNote], [s.volume2, s.volumePlusA2, s.volumeUncertain2, s.volumeNote2]]
     .map(([v, a, u, note]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, note: String(note || '').trim(), text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
     .filter(Boolean)
   if (!segs.length) return fallback
+  // stacked: 特記を数字の上に小さく表示（横幅を抑える）
+  if (stacked) {
+    return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}<span style={{ display: 'inline-block', textAlign: 'center', verticalAlign: 'bottom' }}>{seg.note ? <span style={{ display: 'block', fontSize: '.68em', color: '#0f3060', lineHeight: 1.1 }}>{seg.note}</span> : null}<span style={volNumStyle(seg.num)}>{seg.text}</span></span></Fragment>))}</>
+  }
   return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}{seg.note ? <span style={{ fontSize: '.72em', color: '#0f3060', background: '#eef4ff', borderRadius: 4, padding: '0 4px', marginRight: 3 }}>{seg.note}</span> : ''}<span style={volNumStyle(seg.num)}>{seg.text}</span></Fragment>))}</>
 }
 
@@ -2696,10 +2700,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
                     {/* 地図：現場住所 または PDF のどちらかが入っていればチェック */}
                     <td style={{ ...S.td, textAlign: 'center' }}>{(String(s.siteAddress || '').trim() || s.hasPdf) ? <span style={{ color: '#1a8f5a', fontWeight: 800 }}>✔</span> : '—'}</td>
                     <td style={S.td}>{vehicleLabel(s) || '—'}</td>
-                    <td style={{ ...S.td, maxWidth: 90 }}>{mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ') || '—'}</td>
+                    <td style={{ ...S.td, maxWidth: 90 }}>{(() => {
+                      const rs = mixRowsOfShip(s).filter(r => mixDisplay(r.code))
+                      if (!rs.length) return '—'
+                      return rs.map((r, i) => (<Fragment key={i}>{i > 0 ? ' / ' : ''}<span style={{ display: 'inline-block', textAlign: 'center', verticalAlign: 'bottom' }}>{r.note ? <span style={{ display: 'block', fontSize: '.68em', color: '#c81e1e', lineHeight: 1.1 }}>{r.note}</span> : null}<span>{mixDisplay(r.code)}</span></span></Fragment>))
+                    })()}</td>
                     {/* 種：N は通常・B は太字、フォント少し大きめ */}
                     <td style={{ ...S.td, maxWidth: 44, textAlign: 'center', fontSize: 15, fontWeight: String(s.cementType || '').trim() === 'B' ? 800 : 400 }}>{s.cementType || '—'}</td>
-                    <td style={S.td}><VolNum s={s} unit fallback="—" /></td>
+                    <td style={{ ...S.td, maxWidth: 70 }}><VolNum s={s} unit stacked fallback="—" /></td>
                     <td style={{ ...S.td, maxWidth: 64 }}>{Array.isArray(s.placements) && s.placements.length ? s.placements.join('・') : '—'}</td>
                     <td style={{ ...S.td, maxWidth: 80 }}>{s.pourLocation || '—'}</td>
                     {/* 備考（メモ）：手入力等の備考を ' / ' 連結で表示 */}
@@ -4404,10 +4412,14 @@ function SeikonOutputPage({ isPopup }) {
   const testGenPM = dayShips.filter(s => hasTest(s, '現TP') && !isAM(s)).length
   const testKoAM = dayShips.filter(s => hasTest(s, '工TP') && isAM(s)).length
   const testKoPM = dayShips.filter(s => hasTest(s, '工TP') && !isAM(s)).length
-  const testRows = [
+  // 試験：データのある行(現場/工場)・列(AM/PM)だけを表示する（空の行・列は消える）
+  const testAll = [
     { label: '現場', am: testGenAM, pm: testGenPM },
     { label: '工場', am: testKoAM, pm: testKoPM },
-  ]   // 常に現場・工場の2行を表示（0件は「－」で4マスを埋める）
+  ]
+  const testRows = testAll.filter(r => r.am > 0 || r.pm > 0)   // 件数のある行だけ
+  const testShowAM = testRows.some(r => r.am > 0)              // AM列を出すか
+  const testShowPM = testRows.some(r => r.pm > 0)              // PM列を出すか
 
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
@@ -4554,14 +4566,18 @@ function SeikonOutputPage({ isPopup }) {
         <div className="seikon-title">
           <span className="st-name">生コン出荷予定表</span>
           <span className="st-rest" style={{ display: 'flex', alignItems: 'flex-end', gap: 4, fontSize: 11, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
-            <span onClick={() => setRestOpen(o => !o)} title="クリックで休みを選択"
-              style={{ cursor: 'pointer', borderBottom: '1px dotted #888' }}>休み</span>
-            {restNames.map(n => (
-              <span key={n} style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, padding: '0 2px', border: '1px solid #ddd', borderRadius: 3 }}>
-                {n}<button type="button" className="no-print" onClick={() => removeRest(n)} title="外す"
-                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 11, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+            <button type="button" onClick={() => setRestOpen(o => !o)} title="クリックで休みを選択"
+              style={{ border: '1px solid #b9c4d4', background: restOpen ? '#e7eefb' : '#f3f6fb', color: '#2b3a4d', borderRadius: 6, padding: '2px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', lineHeight: 1.3, boxShadow: '0 1px 0 rgba(0,0,0,.06)' }}>休み</button>
+            {restNames.length > 0 && (
+              <span style={{ display: 'grid', gridTemplateRows: 'auto auto', gridAutoFlow: 'column', alignItems: 'end', columnGap: 3, rowGap: 1 }}>
+                {restNames.map((n, i) => (
+                  <span key={n} style={{ gridColumn: Math.floor(i / 2) + 1, gridRow: (i % 2 === 0) ? 2 : 1, display: 'inline-flex', alignItems: 'center', fontSize: 10, lineHeight: 1.1, padding: '0 3px', border: '1px solid #d7dee8', borderRadius: 3, background: '#fff' }}>
+                    {n}<button type="button" className="no-print" onClick={() => removeRest(n)} title="外す"
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 11, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                  </span>
+                ))}
               </span>
-            ))}
+            )}
             {restOpen && (
               <select className="no-print" value="" autoFocus title="呼び名を選んで追加"
                 onChange={e => { addRest(e.target.value); setRestOpen(false) }}
@@ -4586,19 +4602,21 @@ function SeikonOutputPage({ isPopup }) {
             <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
           </span>
           <span className="st-test"><span className="st-test-label">試験</span>
-            <span className="st-test-grid">
-              <span className="h" /><span className="h">AM</span><span className="h">PM</span>
-              {testRows.map(r => (
-                <Fragment key={r.label}><span className="rl">{r.label}</span><b>{r.am || '－'}</b><b>{r.pm || '－'}</b></Fragment>
-              ))}
-            </span>
+            {testRows.length > 0 && (
+              <span className="st-test-grid" style={{ gridTemplateColumns: ['auto', testShowAM && 'auto', testShowPM && 'auto'].filter(Boolean).join(' ') }}>
+                <span className="h" />{testShowAM && <span className="h">AM</span>}{testShowPM && <span className="h">PM</span>}
+                {testRows.map(r => (
+                  <Fragment key={r.label}><span className="rl">{r.label}</span>{testShowAM && <b>{r.am || '－'}</b>}{testShowPM && <b>{r.pm || '－'}</b>}</Fragment>
+                ))}
+              </span>
+            )}
           </span>
         </div>
         <table className="seikon-table">
           <colgroup>
             <col style={{ width: '10%' }} /><col style={{ width: '18%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} />
             <col style={{ width: '13%' }} /><col style={{ width: '3%' }} /><col style={{ width: '8%' }} /><col style={{ width: '6%' }} />
-            <col style={{ width: '19%' }} /><col style={{ width: '3%' }} /><col style={{ width: '3%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '17%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} /><col style={{ width: '9%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
