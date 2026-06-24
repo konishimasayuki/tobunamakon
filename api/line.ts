@@ -342,7 +342,17 @@ function shipmentBubble(s: any): any {
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))
   if (notesArr.length) contents.push(row('備考', notesArr.join(' / ')))
-  if (driverMsgArr.length) contents.push(row('ドライバーへの連絡', driverMsgArr.join(' / ')))
+  // ドライバーへの連絡：見落とし防止のため赤字・太字で強調（黄色帯で囲う）
+  if (driverMsgArr.length) {
+    contents.push({
+      type: 'box', layout: 'vertical', margin: 'md', paddingAll: '10px', cornerRadius: '8px',
+      backgroundColor: '#fff6e5', borderWidth: '1px', borderColor: '#f0c060',
+      contents: [
+        { type: 'text', text: '🚨 ドライバーへの連絡', size: 'xs', weight: 'bold', color: '#c0392b' },
+        { type: 'text', text: driverMsgArr.join(' / '), size: 'md', weight: 'bold', color: '#c0392b', wrap: true, margin: 'xs' },
+      ],
+    })
+  }
   contents.push(sep())
   contents.push(row('住所', addr || ''))
 
