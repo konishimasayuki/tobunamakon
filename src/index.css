@@ -181,6 +181,12 @@ input, textarea, select { font-family: inherit; }
 .schedule .sc-mixnote-line { display:block; width:100%; font-size:clamp(9px,1.1cqi,13px); color:#c81e1e; font-weight:700; text-align:center; line-height:1.25; white-space:nowrap; }
 .schedule .sc-mixnotes { display:flex; width:100%; }
 .schedule .sc-mixnotes span { flex:1; text-align:center; font-size:clamp(9px,0.85vw,13px); color:#c81e1e; font-weight:700; min-width:0; white-space:nowrap; }
+/* 操作ボタン（編集/LINE送信/削除）：セル幅にフィットし、テーブル幅に追従して縮む（iPad等ではみ出さない） */
+.schedule .sc-act { display:block; width:100%; box-sizing:border-box; margin:0; border-radius:5px; padding:4px 3px; font-size:clamp(10px,1.25cqi,14px); font-weight:600; line-height:1.25; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.schedule .sc-act + .sc-act { margin-top:4px; }
+.schedule .sc-act.edit { border:1px solid #1a8f5a; background:#f0f9f0; color:#1a8f5a; }
+.schedule .sc-act.line { border:1px solid #06c755; background:#06c755; color:#fff; }
+.schedule .sc-act.del { border:1px solid #f0b0b0; background:#fff0f0; color:#c0392b; font-weight:700; }
 
 /* ===== 出荷予定表（縦持ち＝スマホ/iPhone/iPad）カード表示 ===== */
 .sc-cards { display:flex; flex-direction:column; gap:12px; padding:4px 12px 28px; max-width:100%; overflow-x:hidden; }
@@ -278,7 +284,7 @@ input, textarea, select { font-family: inherit; }
 .seikon-sheet { max-width:1000px; margin:0 auto; }
 /* 日付は打設場所の右(=社名30%幅の右)から始める。AM・PMは右端 */
 .seikon-title { display:flex; align-items:flex-end; gap:12px; padding:2px 2px 3px; }
-.seikon-title .st-name { flex:0 0 30%; font-size:18px; font-weight:800; letter-spacing:0.1em; color:#111; }
+.seikon-title .st-name { flex:0 0 auto; font-size:18px; font-weight:800; letter-spacing:0.1em; color:#111; }
 .seikon-title .st-date { font-size:14px; font-weight:700; color:#111; }
 .seikon-title .st-ampm { font-size:12px; font-weight:700; color:#111; margin-left:auto; white-space:nowrap; }
 /* 試験：ラベル＋AM/PM別件数(現場/工場)の小さな表。件数のある行だけ表示 */
