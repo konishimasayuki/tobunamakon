@@ -3639,7 +3639,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th>{!isPopup && <th className="th-tight">📄PDF</th>}<th className="th-tight">打設</th><th className="th-tight">車種</th><th>配合</th><th>数量</th><th className="th-tight">種</th><th className="th-tight">受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
-              {!isPopup && <th className="th-tight">操作</th>}
+              {!isPopup && <th className="th-tight">編集</th>}
             </tr>
           </thead>
           <tbody>
@@ -3673,11 +3673,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button type="button" className="sc-act edit" style={{ flex: 1 }} onClick={() => openEditWindow(s)}>✏️ 編集</button>
-                      <button type="button" className="sc-act del" style={{ flex: 1, marginTop: 0 }} onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'stretch' }}>
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <button type="button" className="sc-act edit" onClick={() => openEditWindow(s)}>✏️ 編集</button>
+                        <button type="button" className="sc-act line" style={{ marginTop: 0 }} onClick={() => openLine(s)}>LINE送信</button>
+                      </div>
+                      <button type="button" className="sc-act del" style={{ flex: '0 0 auto', width: 'auto', marginTop: 0, alignSelf: 'stretch', padding: '4px 6px' }} onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
                     </div>
-                    <button type="button" className="sc-act line" style={{ marginTop: 4 }} onClick={() => openLine(s)}>LINE送信</button>
                   </td>
                 )}
               </tr>
