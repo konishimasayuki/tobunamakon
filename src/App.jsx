@@ -4435,7 +4435,7 @@ function SeikonOutputPage({ isPopup }) {
 
   const timesArr = (s) => (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notesOf = (s) => (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean).join(' / ')
-  const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('・')
+  const tagsOf = (s) => (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
   const testOf = (s) => (Array.isArray(s.testTags) ? s.testTags : []).filter(Boolean).join('・')
   const volOne = (v, a, u) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? '' : `${b}${b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` }
 
@@ -4506,7 +4506,7 @@ function SeikonOutputPage({ isPopup }) {
     const tekiyo1 = [notesOf(s), placementsOf(s)].filter(Boolean).join(' / ')   // 備考 ＋ 荷下ろし
     const vf = vfPlace(s.vehicleFree)   // 車両自由入力の配置（全角=上段／半角=電話の右）
     const tags = tagsOf(s)   // 出荷登録の特記（領/追）
-    const testAbbr = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('・')   // 試験 現/工
+    const testAbbr = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')   // 試験 現/工（区切りなし）
     const isB = String(s.cementType || '').trim() === 'B'
     // 編集・修正された箇所は赤文字（保存済み changedFields を参照）。時間・備考はさらに太字で強調
     const cf = Array.isArray(s.changedFields) ? s.changedFields : []
