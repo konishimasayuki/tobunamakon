@@ -3621,7 +3621,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <colgroup>
             <col style={{ width: '7%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
             {!isPopup && <col style={{ width: '5%' }} />}
             <col style={{ width: '5%' }} />
             <col style={{ width: '5%' }} />
@@ -3630,18 +3630,18 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <col style={{ width: '3%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
+            {!isPopup && <col style={{ width: '6%' }} />}
             {!isPopup && <col style={{ width: '5%' }} />}
-            {!isPopup && <col style={{ width: '4%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th>{!isPopup && <th>📄PDF</th>}<th>打設</th><th>車種</th><th>配合</th><th>数量</th><th>種</th><th>受信確認</th><th>担当</th>
+              <th>現場名</th>{!isPopup && <th className="th-tight">📄PDF</th>}<th className="th-tight">打設</th><th className="th-tight">車種</th><th>配合</th><th>数量</th><th className="th-tight">種</th><th className="th-tight">受信確認</th><th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
-              {!isPopup && <th>編集</th>}
-              {!isPopup && <th>削除</th>}
+              {!isPopup && <th className="th-tight">編集</th>}
+              {!isPopup && <th className="th-tight">削除</th>}
             </tr>
           </thead>
           <tbody>
@@ -3675,16 +3675,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
-                    <button type="button" onClick={() => openEditWindow(s)}
-                      style={{ display: 'block', margin: '0 auto', border: '1px solid #1a8f5a', background: '#f0f9f0', color: '#1a8f5a', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✏️ 編集</button>
-                    <button type="button" onClick={() => openLine(s)}
-                      style={{ display: 'block', margin: '4px auto 0', border: '1px solid #06c755', background: '#06c755', color: '#fff', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>LINE送信</button>
+                    <button type="button" className="sc-act edit" onClick={() => openEditWindow(s)}>✏️ 編集</button>
+                    <button type="button" className="sc-act line" onClick={() => openLine(s)}>LINE送信</button>
                   </td>
                 )}
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
-                    <button type="button" onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）"
-                      style={{ display: 'block', margin: '0 auto', border: '1px solid #f0b0b0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>削除</button>
+                    <button type="button" className="sc-act del" onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
                   </td>
                 )}
               </tr>
@@ -4539,7 +4536,7 @@ function SeikonOutputPage({ isPopup }) {
           <div className="seikon-toku-tag" style={red(chg('noteTags'))}>{tags}</div>
           <div className="seikon-test" style={red(chg('testTags'))}>{testAbbr}</div>
         </td>
-        <td style={{ textAlign: 'center' }}>{(s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}</td>
+        <td style={{ textAlign: 'center' }}>{(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}</td>
         <td></td>
       </tr>
     )
