@@ -3510,6 +3510,25 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('削除に失敗しました: ' + e.message) }
   }
 
+  // 「修正＝赤文字」表示をリセットする（表示日ぶん）。
+  // 消すのは changedFields（=編集された目印）だけ。下記は触らない＝赤のまま保たれる:
+  //  ・値ベースの赤（3桁数量＝volNumColorで色付け、配合の桁数など）
+  //  ・特記タグ（領/追）の固定赤・試験タグ（現/工）・vehicleFree の青  …値・タグそのものを参照しているため
+  //  ・時間/備考の「！」指定赤  …times[i].important / notes[i].important に保存されており、
+  //    PUTで times/notes を丸ごと送り直しても important フラグは欠落しない
+  const resetReds = async () => {
+    const targets = rows.filter(s => Array.isArray(s.changedFields) && s.changedFields.length)
+    if (targets.length === 0) { alert('赤（修正）表示はありません'); return }
+    if (!window.confirm(`この日の「修正＝赤」表示を${targets.length}件分リセットしますか？\n（時間・備考の「！」指定赤と、3桁の数量・特記タグの赤はそのまま残ります）`)) return
+    for (const s of targets) {
+      try {
+        const res = await api.put(`/api/shipments/${s.id}`, { ...s, changedFields: [] })
+        setAll(arr => arr.map(x => x.id === res.id ? res : x))
+      } catch (e) { console.error(e) }
+    }
+    notifyShipmentsChanged()
+  }
+
   // AM/PM表示切替（未選択=全体）。印刷には出さない
   const ampmButtons = (
     <span className="no-print" style={{ display: 'inline-flex', gap: 6 }}>
@@ -3623,6 +3642,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <div style={{ fontSize: 12, color: '#6b7a8d', padding: '4px 2px' }}>
                 黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
               </div>
+              {!isPopup && (
+                <div className="no-print" style={{ marginTop: 8, textAlign: 'right' }}>
+                  <button type="button" onClick={resetReds}
+                    style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '8px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                    title="この日の「修正＝赤」表示をリセット（時間・備考の「！」と元から赤の値はそのまま）">
+                    🧹 赤文字（修正）をリセット
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -3704,6 +3732,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
         ) : (
           <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', lineHeight: 1.5, padding: isPopup ? '8px 8px 16px' : 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
+          </div>
+        )}
+        {!isPopup && rows.length > 0 && (
+          <div className="no-print" style={{ marginTop: 12, textAlign: 'right' }}>
+            <button type="button" onClick={resetReds}
+              style={{ border: '1px dashed #c0392b', background: '#fff', color: '#c0392b', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+              title="この日の「修正＝赤」表示をリセット（時間・備考の「！」と元から赤の値はそのまま）">
+              🧹 赤文字（修正）をリセット
+            </button>
           </div>
         )}
         </>)
