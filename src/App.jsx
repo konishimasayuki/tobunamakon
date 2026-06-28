@@ -1898,13 +1898,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     </select>
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      {/* 縦広め＋1回折り返し可（rows=2） */}
+                      {/* 縦広め＋1回折り返し可（rows=2）。padding-top を増やして1行目を「一覧」ボタンと同じ高さに揃える */}
                       <textarea value={form.pourLocation}
                         onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, pourLocation: composing ? v : z2h(v) })) }}
                         placeholder="入力" rows={2} className="f pour-input"
-                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 42px 5px 6px', boxSizing: 'border-box', width: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.35, fontFamily: 'inherit' }} />
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '14px 42px 4px 6px', boxSizing: 'border-box', width: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.35, fontFamily: 'inherit' }} />
                       <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
-                        style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
+                        style={{ position: 'absolute', right: 4, top: 14, border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer', lineHeight: 1.2 }}>一覧</button>
                     </div>
                   )}
                 </div>
@@ -1968,18 +1968,25 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
               {/* セメント種（3段から移動。N/Bは横並び。2つ目は「＋追加」で出現） */}
               <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
-                <div className="btn-mid" style={{ alignItems: 'center', gap: 4 }}>
-                  <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
-                    {CEMENT_TYPES.map(o => (
-                      <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
-                    ))}
+                <div className="btn-mid" style={{ alignItems: 'center', gap: 6 }}>
+                  {/* 1段目（配合 1段目に対応）。2段目表示時のみ「①」を付ける */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {form.hasCementType2 && <span style={{ fontFamily: "'Noto Sans JP',sans-serif", fontSize: 11, color: '#0f3060', fontWeight: 700 }}>①</span>}
+                    <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
+                      {CEMENT_TYPES.map(o => (
+                        <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
+                      ))}
+                    </div>
                   </div>
                   {form.hasCementType2 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                      <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
-                        {CEMENT_TYPES.map(o => (
-                          <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
-                        ))}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontFamily: "'Noto Sans JP',sans-serif", fontSize: 11, color: '#0f3060', fontWeight: 700 }}>②</span>
+                        <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
+                          {CEMENT_TYPES.map(o => (
+                            <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
+                          ))}
+                        </div>
                       </div>
                       {/* × は NB の下 */}
                       <button type="button" onClick={() => setForm(f => ({ ...f, hasCementType2: false, cementType2: '' }))} title="2つ目のセメント種を削除"
@@ -2086,6 +2093,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const big = (s) => String(s || '').split('.')[0].replace(/[^0-9]/g, '').length >= 3
                       // 量の数値：2桁=黒太字／3桁=赤太字／それ以外は太字なし（編集で変更扱いのときは赤を優先）。3桁が収まる幅を確保
                       const boxW = isRange ? 64 : 104
+                      // 特記の幅は、〜（範囲）を押しても短くならないように固定
+                      const noteW = 104
                       const inStyle = (s) => ({ width: boxW, maxWidth: '100%', fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 36 : 30), ...(editChanged.includes('volume') ? { fontWeight: 700, color: '#c81e1e' } : volNumStyle(s)) })
                       // 量の特記入力（配合の特記=hgnote と同じ見た目：数値の真上に赤い破線の小さなラベル）
                       const noteInput = (w) => (
@@ -2102,7 +2111,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                             ) : null}
                           </span>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            {noteInput(boxW)}
+                            {noteInput(noteW)}
                             <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
                               onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
                               onCompositionEnd={e => setFrom(e.target.value, false)} />
