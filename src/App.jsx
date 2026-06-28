@@ -1898,13 +1898,14 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     </select>
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      {/* 縦広め＋1回折り返し可（rows=2）。padding-top を増やして1行目を「一覧」ボタンと同じ高さに揃える */}
+                      {/* 縦広め＋1回折り返し可（rows=2）。
+                          「一覧」ボタンは元位置(縦中央)のまま。textarea の padding-top を増やして1行目(placeholder)を中央＝ボタンと同じ高さに揃える */}
                       <textarea value={form.pourLocation}
                         onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, pourLocation: composing ? v : z2h(v) })) }}
                         placeholder="入力" rows={2} className="f pour-input"
-                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '14px 42px 4px 6px', boxSizing: 'border-box', width: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.35, fontFamily: 'inherit' }} />
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '18px 42px 6px 6px', boxSizing: 'border-box', width: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.35, fontFamily: 'inherit' }} />
                       <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
-                        style={{ position: 'absolute', right: 4, top: 14, border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer', lineHeight: 1.2 }}>一覧</button>
+                        style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                     </div>
                   )}
                 </div>
@@ -1965,33 +1966,31 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             </div>
             {/* 4段: セメント種 / 配合 / 量 */}
             <div className="band">
-              {/* セメント種（3段から移動。N/Bは横並び。2つ目は「＋追加」で出現） */}
+              {/* セメント種（3段から移動）。
+                  2つ目を追加していない時: 「1つ目」見出し → N B 横並び → ＋追加
+                  2つ目を追加した時:   「1つ目」 → N B ／ 「2つ目」 → N B ／ ×（合計4行＋ボタン） */}
               <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
-                <div className="btn-mid" style={{ alignItems: 'center', gap: 6 }}>
-                  {/* 1段目（配合 1段目に対応）。2段目表示時のみ「①」を付ける */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    {form.hasCementType2 && <span style={{ fontFamily: "'Noto Sans JP',sans-serif", fontSize: 11, color: '#0f3060', fontWeight: 700 }}>①</span>}
-                    <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
-                      {CEMENT_TYPES.map(o => (
-                        <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
-                      ))}
-                    </div>
+                <div className="btn-mid" style={{ alignItems: 'center', gap: 4 }}>
+                  {form.hasCementType2 && (
+                    <div style={{ fontFamily: "'Noto Sans JP',sans-serif", fontSize: 11, color: '#0f3060', fontWeight: 700, textAlign: 'center' }}>1つ目</div>
+                  )}
+                  <div className="chips" style={{ justifyContent: 'center', gap: 4, flexWrap: 'nowrap' }}>
+                    {CEMENT_TYPES.map(o => (
+                      <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
+                    ))}
                   </div>
                   {form.hasCementType2 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontFamily: "'Noto Sans JP',sans-serif", fontSize: 11, color: '#0f3060', fontWeight: 700 }}>②</span>
-                        <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
-                          {CEMENT_TYPES.map(o => (
-                            <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
-                          ))}
-                        </div>
+                    <>
+                      <div style={{ fontFamily: "'Noto Sans JP',sans-serif", fontSize: 11, color: '#0f3060', fontWeight: 700, textAlign: 'center', marginTop: 4 }}>2つ目</div>
+                      <div className="chips" style={{ justifyContent: 'center', gap: 4, flexWrap: 'nowrap' }}>
+                        {CEMENT_TYPES.map(o => (
+                          <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
+                        ))}
                       </div>
-                      {/* × は NB の下 */}
                       <button type="button" onClick={() => setForm(f => ({ ...f, hasCementType2: false, cementType2: '' }))} title="2つ目のセメント種を削除"
-                        style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 11, lineHeight: 1, padding: '1px 8px', cursor: 'pointer' }}>×</button>
-                    </div>
+                        style={{ marginTop: 2, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 11, lineHeight: 1, padding: '1px 8px', cursor: 'pointer' }}>×</button>
+                    </>
                   ) : (
                     <button type="button" className="addrow" style={{ marginTop: 2, padding: '1px 6px', fontSize: 11, whiteSpace: 'nowrap' }}
                       onClick={() => setForm(f => ({ ...f, hasCementType2: true }))}>＋ 追加</button>
@@ -2101,37 +2100,42 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                         <input className="vol-note" value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
                           style={{ width: w, maxWidth: '100%', fontSize: 10, fontWeight: 700, textAlign: 'center', color: '#c81e1e', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', background: 'transparent', fontFamily: 'inherit', padding: '0 0 1px', marginBottom: 2 }} />
                       )
+                      // 〜/?/+a ボタンは「特記」と同じ高さ（上段）に固定。〜（範囲）押下で数字入力幅が変わっても位置は動かない
+                      const delSpacer = (
+                        <span style={{ width: 22, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+                          {idx === 1 ? (
+                            <span className="qlabel" style={{ margin: 0, padding: '1px 4px' }} title="2段目を削除"
+                              onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeNote2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
+                          ) : null}
+                        </span>
+                      )
                       return (
-                        <div className="inline" key={idx} style={{ justifyContent: 'flex-start', alignItems: 'flex-end', marginTop: idx ? 4 : 0, gap: 2 }}>
-                          {/* ×スロットは固定幅。1段目は空でも同じ幅を確保し、2段の量の開始位置を揃える */}
-                          <span style={{ width: 22, flexShrink: 0, display: 'flex', justifyContent: 'center', paddingBottom: 6 }}>
-                            {idx === 1 ? (
-                              <span className="qlabel" style={{ margin: 0, padding: '1px 4px' }} title="2段目を削除"
-                                onClick={() => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeNote2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false }))}>×</span>
-                            ) : null}
-                          </span>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', marginTop: idx ? 4 : 0, gap: 1 }}>
+                          {/* 上段: ×スロット / 特記 / [〜 ? +a] ボタン（固定位置） */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {delSpacer}
                             {noteInput(noteW)}
-                            <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
-                              onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
-                              onCompositionEnd={e => setFrom(e.target.value, false)} />
-                          </div>
-                          {isRange && (
-                            <>
-                              <span style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>〜</span>
-                              <input type="text" inputMode="decimal" style={inStyle(vTo)} value={vTo}
-                                onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
-                                onCompositionEnd={e => setTo(e.target.value, false)} />
-                            </>
-                          )}
-                          {/* 〜/?/+a ボタンを「特記」と同じ高さ（上段）に置き、その下に m³ ＋（有効なら）+a/? 表示が並ぶ */}
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', alignSelf: 'stretch' }}>
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', alignItems: 'center' }}>
                               <span className={'qlabel' + (isRange ? ' on' : '')} title="範囲入力（13〜14）" onClick={toggleRange} style={{ marginLeft: 0 }}>〜</span>
                               <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])} style={{ marginLeft: 0 }}>?</span>
                               <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])} style={{ marginLeft: 0 }}>+a</span>
                             </div>
-                            <span className="unit" style={{ ...redIf('volume'), marginTop: 'auto', paddingTop: 4 }}>m<sup>3</sup>
+                          </div>
+                          {/* 下段: ×スロット / 数値入力 / m³ */}
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                            <span style={{ width: 22, flexShrink: 0 }} />
+                            <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
+                              onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                              onCompositionEnd={e => setFrom(e.target.value, false)} />
+                            {isRange && (
+                              <>
+                                <span style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>〜</span>
+                                <input type="text" inputMode="decimal" style={inStyle(vTo)} value={vTo}
+                                  onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
+                                  onCompositionEnd={e => setTo(e.target.value, false)} />
+                              </>
+                            )}
+                            <span className="unit" style={redIf('volume')}>m<sup>3</sup>
                               {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
                               <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
                             </span>
