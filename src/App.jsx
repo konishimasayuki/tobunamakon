@@ -1108,7 +1108,10 @@ const emptyShipForm = {
   specialNote: '',
   mixNotes: ['', '', ''],
   mixRows: [{ parts: ['', '', ''], note: '' }],   // 配合の複数行。1行目を mixCode/mixNotes に同期
+  mixMode: 'num',   // 配合モード: 'num'=数値 / 'mortar'=モルタル(1:1〜1:4) / 'dry'=ドライテック
   cementType: '',
+  cementType2: '',          // 2つ目のセメント種（2段目の配合に対応）
+  hasCementType2: false,    // 2段目セメント種の表示フラグ（＋追加で出現）
   volume: '',
   volumeNote: '',            // 量の特記（数値の上に小さく表示。配合の特記と同じ要領）
   volumeUncertain: false,
@@ -1690,7 +1693,11 @@ function shipmentToForm(s) {
     mixRows: (Array.isArray(s.mixRows) && s.mixRows.length)
       ? s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
       : [{ parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''], note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }],
+    mixMode: (s.mixMode === 'mortar' || s.mixMode === 'dry' || s.mixMode === 'num') ? s.mixMode
+      : (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num')),
     cementType: s.cementType || '',
+    cementType2: s.cementType2 || '',
+    hasCementType2: !!(s.cementType2 || s.hasCementType2),
     volume: (s.volume ?? '') === '' ? '' : String(s.volume),
     volumeUncertain: !!s.volumeUncertain,
     volumePlusA: !!s.volumePlusA,
@@ -1858,30 +1865,27 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
             </div>
-            {/* 3段: 車種 / 打設箇所 / セメント種 / 試験 / 特記 / 受信確認 / PDF */}
+            {/* 3段: 車種 / 打設箇所 / 試験 / 特記 / 荷下ろし / PDF（セメント種・受信確認は外し、荷下ろしを4段から移動） */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
                 <div className="lbl" style={{ ...redIf('vehicleType'), textAlign: 'center' }}>車 種</div>
-                <div className="btn-mid" style={{ gap: 6 }}>
-                  <div className="veh-chips">
+                <div className="btn-mid" style={{ gap: 4 }}>
+                  {/* 車種チップは横並びで縦をコンパクトに */}
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 4, flexWrap: 'nowrap' }}>
                     {VEHICLE_TYPES.map(o => {
                       const on = vehItems().some(v => v.type === o)
-                      return (
-                        <span key={o} className="vehpill">
-                          <span className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
-                        </span>
-                      )
+                      return <span key={o} className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
                     })}
                   </div>
                   <input className="f" value={form.vehicleFree || ''} onChange={set('vehicleFree')} placeholder="補足"
-                    style={{ width: '100%', fontSize: 12, padding: '3px 4px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4 }} />
+                    style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', display: 'block', fontSize: 12, padding: '3px 4px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, minWidth: 0 }} />
                 </div>
               </div>
-              <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
                 <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
                 <div className="btn-mid">
                   {!form.pourFree ? (
-                    <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 18, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
+                    <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 16, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
                       onChange={e => {
                         if (e.target.value === '入力する') setForm(f => ({ ...f, pourFree: true, pourLocation: '' }))
                         else setVal('pourLocation', e.target.value)
@@ -1899,17 +1903,9 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   )}
                 </div>
               </div>
-              <div className="cell" style={{ flex: '0 0 13%', minWidth: 0 }}>
-                <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
-                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
-                  {CEMENT_TYPES.map(o => (
-                    <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
-                  ))}
-                </div></div>
-              </div>
-              <div className="cell" style={{ flex: '0 0 13%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>試験</div>
-                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                <div className="btn-mid"><div className="chips" style={{ justifyContent: 'center', gap: 3 }}>
                   {TEST_TAGS.map(t => (
                     <span key={t} className={'chip' + ((form.testTags || []).includes(t) ? ' on' : '')} onClick={() => toggleTestTag(t)}>{t}</span>
                   ))}
@@ -1917,23 +1913,24 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
               </div>
               <div className="cell" style={{ flex: '0 0 10%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center' }}>特記</div>
-                <div className="btn-mid"><div className="chips big" style={{ flexDirection: 'column', alignItems: 'center' }}>
+                <div className="btn-mid"><div className="chips" style={{ justifyContent: 'center', gap: 3 }}>
                   {NOTE_TAGS.map(t => (
                     <span key={t} className={'chip' + ((form.noteTags || []).includes(t) ? ' on' : '')} onClick={() => toggleNoteTag(t)}>{t}</span>
                   ))}
                 </div></div>
               </div>
-              <div className="cell" style={{ flex: '0 0 14%', minWidth: 0 }}>
-                <div className="lbl sm" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>受信確認</div>
-                <div className="btn-mid" style={{ alignItems: 'stretch' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                    <button type="button" onClick={() => setVal('mapReceived', !form.mapReceived)} style={recvBtnStyle(mapChecked)}>
-                      <span style={{ width: 13, display: 'inline-block', textAlign: 'center' }}>{mapChecked ? '✔' : '　'}</span>地図
-                    </button>
-                    <button type="button" onClick={() => setVal('faxReceived', !form.faxReceived)} style={recvBtnStyle(!!form.faxReceived)}>
-                      <span style={{ width: 13, display: 'inline-block', textAlign: 'center' }}>{form.faxReceived ? '✔' : '　'}</span>FAX
-                    </button>
+              {/* 荷下ろし（4段から移動）: 2x2 グリッド＋自由入力 */}
+              <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>荷下ろし</div>
+                <div className="btn-mid" style={{ gap: 2 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+                    {PLACEMENT_TYPES.map(o => {
+                      const on = (form.placements || []).includes(o)
+                      return <span key={o} className={'chip' + (on ? ' on' : '')} style={{ textAlign: 'center' }}
+                        onClick={() => setVal('placements', on ? (form.placements || []).filter(x => x !== o) : [...(form.placements || []), o])}>{o}</span>
+                    })}
                   </div>
+                  <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" style={{ marginTop: 2, padding: '2px 6px', fontSize: 12 }} />
                 </div>
               </div>
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
@@ -1960,12 +1957,63 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
             </div>
-            {/* 4段: 配合 / 量・荷下ろし */}
+            {/* 4段: セメント種 / 配合 / 量 */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 42%', minWidth: 0 }}>
-                <div className="lbl" style={redIf('mixCode')}>配 合</div>
+              {/* セメント種（3段から移動。N/Bは横並び。2つ目は「＋追加」で出現） */}
+              <div className="cell" style={{ flex: '0 0 12%', minWidth: 0 }}>
+                <div className="lbl sm" style={{ textAlign: 'center' }}>セメント種</div>
+                <div className="btn-mid" style={{ alignItems: 'center', gap: 4 }}>
+                  <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
+                    {CEMENT_TYPES.map(o => (
+                      <span key={o} className={'chip' + (form.cementType === o ? ' on' : '')} onClick={() => setVal('cementType', form.cementType === o ? '' : o)}>{o}</span>
+                    ))}
+                  </div>
+                  {form.hasCementType2 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {CEMENT_TYPES.map(o => (
+                        <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
+                      ))}
+                      <button type="button" onClick={() => setForm(f => ({ ...f, hasCementType2: false, cementType2: '' }))} title="2つ目のセメント種を削除"
+                        style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 11, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
+                    </div>
+                  ) : (
+                    <button type="button" className="addrow" style={{ marginTop: 2, padding: '1px 6px', fontSize: 11, whiteSpace: 'nowrap' }}
+                      onClick={() => setForm(f => ({ ...f, hasCementType2: true }))}>＋ 追加</button>
+                  )}
+                </div>
+              </div>
+              <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
+                {/* 「配合」ラベル + モード切替（数値/モルタル/ドライテック）を横並びに */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <div className="lbl" style={{ marginBottom: 0, flex: '0 0 auto', ...redIf('mixCode') }}>配 合</div>
+                  <div style={{ flex: 1, display: 'flex', gap: 3 }}>
+                    {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => (
+                      <button key={m} type="button"
+                        onClick={() => setForm(f => {
+                          if (f.mixMode === m) return f
+                          if (m === 'dry') return { ...f, mixMode: 'dry', mixCode: 'ドライテック', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+                          if (m === 'mortar') return { ...f, mixMode: 'mortar', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+                          return { ...f, mixMode: 'num', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+                        })}
+                        style={{ flex: 1, border: form.mixMode === m ? '1.5px solid #0f3060' : '1.5px solid #cdd5e0', background: form.mixMode === m ? '#0f3060' : '#fff', color: form.mixMode === m ? '#fff' : '#475467', borderRadius: 5, padding: '2px 4px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: '.04em', lineHeight: 1.3 }}>{label}</button>
+                    ))}
+                  </div>
+                </div>
                 <div className="btn-mid">
-                {(() => {
+                {form.mixMode === 'mortar' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '6px 14px' }}>
+                    {['1:1', '1:2', '1:3', '1:4'].map(r => {
+                      const on = form.mixCode === r
+                      return (
+                        <button key={r} type="button"
+                          onClick={() => setForm(f => ({ ...f, mixCode: r, mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }))}
+                          style={{ height: 44, border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 6, fontSize: 20, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{r}</button>
+                      )
+                    })}
+                  </div>
+                ) : form.mixMode === 'dry' ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 28, fontWeight: 800, color: '#111', letterSpacing: '0.1em' }}>ドライテック</div>
+                ) : (() => {
                   const rows = mixRowsOf()
                   const two = rows.length > 1
                   return (
@@ -2004,8 +2052,9 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 })()}
                 </div>
               </div>
-              <div className="cell stack" style={{ flex: 1, padding: 0 }}>
-                <div className="subrow" style={{ flex: '0 0 auto' }}>
+              {/* 量（ラベルなし。空いた縦スペースで2段表示を整える。荷下ろし subrow は3段へ移動済） */}
+              <div className="cell" style={{ flex: 1, padding: 0 }}>
+                <div className="subrow" style={{ flex: 1, borderBottom: 'none' }}>
                   <div className="cell m3" style={{ flex: 1, minWidth: 0, flexDirection: 'column', justifyContent: 'center', padding: '8px 6px' }}>
                     {[0, 1].map(idx => {
                       if (idx === 1 && !form.hasVolume2) return null
@@ -2071,15 +2120,6 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }}
                         onClick={() => setForm(f => ({ ...f, hasVolume2: true }))}>＋ 量を追加</button>
                     )}
-                  </div>
-                </div>
-                <div className="subrow" style={{ flex: 1 }}>
-                  <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="lbl">荷下ろし</div>
-                    <div className="btn-mid">
-                      <Chips options={PLACEMENT_TYPES} value={form.placements} multi onChange={v => setVal('placements', v)} big />
-                      <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" />
-                    </div>
                   </div>
                 </div>
               </div>

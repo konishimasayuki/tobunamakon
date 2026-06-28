@@ -150,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 新規作成
   if (req.method === 'POST' && !hasId) {
-    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, vehicleFree, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeNote, volumeUncertain, volumePlusA, volume2, volumeNote2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, mapReceived, faxReceived, orderContact, siteContact, drivers, notes, driverMessages, mapView, mapPin, mapArrows, pdfData, pdfName } = req.body
+    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, vehicleFree, truckCount, vehicleItems, mixCode, mixMode, specialNote, mixNotes, mixRows, cementType, cementType2, volume, volumeNote, volumeUncertain, volumePlusA, volume2, volumeNote2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, mapReceived, faxReceived, orderContact, siteContact, drivers, notes, driverMessages, mapView, mapPin, mapArrows, pdfData, pdfName } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const newId = uuidv4()
@@ -170,10 +170,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         truckCount: truckCount || '',
         vehicleItems: Array.isArray(vehicleItems) ? vehicleItems : [],
         mixCode: mixCode || '',
+        mixMode: (mixMode === 'mortar' || mixMode === 'dry') ? mixMode : 'num',
         specialNote: specialNote || '',
         mixNotes: Array.isArray(mixNotes) ? mixNotes : ['', '', ''],
         mixRows: Array.isArray(mixRows) ? mixRows : [],
         cementType: cementType || '',
+        cementType2: cementType2 || '',
         volume: volume || '',
         volumeNote: volumeNote || '',
         volumeUncertain: !!volumeUncertain,
@@ -216,7 +218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 更新
   if (req.method === 'PUT' && hasId) {
-    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, vehicleFree, truckCount, vehicleItems, mixCode, specialNote, mixNotes, mixRows, cementType, volume, volumeNote, volumeUncertain, volumePlusA, volume2, volumeNote2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, mapReceived, faxReceived, orderContact, siteContact, drivers, notes, driverMessages, changedFields, mapView, mapPin, mapArrows, pdfData, pdfName } = req.body
+    const { date, orderDate, companyId, companyName, tradingCompany, times, siteName, siteAddress, vehicleType, vehicleFree, truckCount, vehicleItems, mixCode, mixMode, specialNote, mixNotes, mixRows, cementType, cementType2, volume, volumeNote, volumeUncertain, volumePlusA, volume2, volumeNote2, volumeUncertain2, volumePlusA2, placements, pourLocation, noteTags, testTags, mapReceived, faxReceived, orderContact, siteContact, drivers, notes, driverMessages, changedFields, mapView, mapPin, mapArrows, pdfData, pdfName } = req.body
     if (!date || !companyName) return res.status(400).json({ error: '日付と業者名は必須です' })
     try {
       const existing = await redis.hgetall(`shipment:${id}`)
@@ -240,10 +242,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         truckCount: truckCount || '',
         vehicleItems: Array.isArray(vehicleItems) ? vehicleItems : (Array.isArray((existing as any).vehicleItems) ? (existing as any).vehicleItems : []),
         mixCode: mixCode || '',
+        mixMode: (mixMode === 'mortar' || mixMode === 'dry') ? mixMode : ((mixMode === 'num') ? 'num' : ((existing as any).mixMode || 'num')),
         specialNote: specialNote || '',
         mixNotes: Array.isArray(mixNotes) ? mixNotes : ['', '', ''],
         mixRows: Array.isArray(mixRows) ? mixRows : (Array.isArray((existing as any).mixRows) ? (existing as any).mixRows : []),
         cementType: cementType || '',
+        cementType2: cementType2 !== undefined ? (cementType2 || '') : ((existing as any).cementType2 ?? ''),
         volume: volume || '',
         volumeNote: volumeNote !== undefined ? (volumeNote || '') : ((existing as any).volumeNote ?? ''),
         volumeUncertain: !!volumeUncertain,
