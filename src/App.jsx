@@ -2014,7 +2014,8 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     ))}
                   </div>
                 </div>
-                <div className="btn-mid">
+                {/* 数値/モルタル/ドライテックの3モードで配合エリアの高さが変わらないよう、最小高を統一(147px ≒ 数値モードの内容高) */}
+                <div className="btn-mid" style={{ minHeight: 147, justifyContent: 'center' }}>
                 {form.mixMode === 'mortar' ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '6px 14px' }}>
                     {['1:1', '1:2', '1:3', '1:4'].map(r => {
@@ -2027,7 +2028,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     })}
                   </div>
                 ) : form.mixMode === 'dry' ? (
-                  <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 28, fontWeight: 800, color: '#111', letterSpacing: '0.1em' }}>ドライテック</div>
+                  <div style={{ textAlign: 'center', fontSize: 32, fontWeight: 800, color: '#111', letterSpacing: '0.1em' }}>ドライテック</div>
                 ) : (() => {
                   const rows = mixRowsOf()
                   const two = rows.length > 1
