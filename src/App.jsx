@@ -1095,6 +1095,13 @@ function mixDisplay(code) {
   return s.split('-').map(p => (p || '').trim() || '　').join('-')
 }
 function mixRowsOfShip(s) {
+  // モルタル(1:1〜1:4)・ドライテックは mixCode をそのまま1行として返す
+  // （mixRows は数値モード用の {parts:[],note} 形式しか持たないため、
+  //   モルタル/ドライテックでは mixCode を直接表示できるようフォールバックする）
+  const code = String(s.mixCode || '')
+  if (code === 'ドライテック' || /^1:[1-4]$/.test(code)) {
+    return [{ code, note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
+  }
   if (Array.isArray(s.mixRows) && s.mixRows.length) {
     return s.mixRows.map(r => ({ code: mixCodeOf(r.parts), note: r.note || '' }))
   }
@@ -2939,9 +2946,9 @@ function diffChangedFields(orig, next) {
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
-  // 出荷予定表は縦持ち（スマホ・iPhone・iPad）前提。横スクロールのテーブルではなく
-  // 1件=1カードの縦リストで表示する。PC・横向き（>=1025px）のみ従来テーブル。
-  const isMobile = useIsMobile(1025)
+  // 出荷予定表: スマホ(<768px)は1件=1カードの縦リスト。
+  // iPad(768〜1024) と PC(>=1025) は従来テーブル＋セル直接編集。
+  const isMobile = useIsMobile(768)
   // 別ウィンドウ（isPopup）では幅に関わらず常にPC版テーブルを表示する。
   // → スマホで「別ウィンドウで開く」を押すと、横画面でPCレイアウトの予定表が出る。
   const compact = isMobile && !isPopup
