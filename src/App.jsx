@@ -3077,7 +3077,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
       case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
       case 'mixCode': return mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ')
+      // 1行目/2行目の配合コード・特記を個別に編集できるよう分割
+      case 'mixCode0': return mixDisplay(mixRowsOfShip(s)[0]?.code || '')
+      case 'mixCode1': return mixDisplay(mixRowsOfShip(s)[1]?.code || '')
       case 'mixnote': return (mixRowsOfShip(s)[0]?.note || '')   // 1行目の配合特記
+      case 'mixnote2': return (mixRowsOfShip(s)[1]?.note || '')  // 2行目の配合特記
       case 'volume': {
         // 直接編集できるよう1段目のみ返す（2段目は volume2 として別に編集）
         const b = (s.volume == null ? '' : String(s.volume)).trim()
@@ -3106,19 +3110,36 @@ function SchedulePage({ onEditShipment, isPopup }) {
       const types = raw.split(/[・,、/\s]+/).map(x => x.trim()).filter(Boolean)
       return { ...s, vehicleType: types.join('・'), vehicleItems: types.map(t => ({ type: t, qty: '' })) }
     }
+    // s.mixRows から編集可能な配列(parts/note)を得るヘルパ。mixRows が無ければ mixCode/mixNotes からフォールバック
+    const getEditableMixRows = (s) => {
+      if (Array.isArray(s.mixRows) && s.mixRows.length) {
+        return s.mixRows.map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
+      }
+      const p = String(s.mixCode || '').split('-')
+      return [{ parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
+    }
     if (f === 'mixCode') {
       // 表示の整形（"24　　" や "18-15-20"）を解析。既存の note は同じ行の index で温存する。
-      const oldRows = mixRowsOfShip(s)
+      const oldRows = getEditableMixRows(s)
       const rows = raw.split('/').map(x => x.trim()).filter(Boolean).slice(0, 2)
         .map((r, i) => { const p = r.split(/[-　 ]/); return { parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: oldRows[i]?.note || '' } })
       const list = rows.length ? rows : [{ parts: ['', '', ''], note: oldRows[0]?.note || '' }]
       return { ...s, mixRows: list, mixCode: list[0].parts.slice(0, 3).join('-') }
     }
-    if (f === 'mixnote') {
-      // 1行目の配合特記だけ更新。parts は温存
-      const rows = mixRowsOfShip(s).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
-      if (!rows.length) rows.push({ parts: ['', '', ''], note: '' })
-      rows[0].note = raw
+    if (f === 'mixCode0' || f === 'mixCode1') {
+      // 1行目/2行目のコードだけ更新。他行 parts/note を温存
+      const idx = f === 'mixCode0' ? 0 : 1
+      const rows = getEditableMixRows(s)
+      while (rows.length <= idx) rows.push({ parts: ['', '', ''], note: '' })
+      const p = raw.split(/[-　 ]/)
+      rows[idx].parts = [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()]
+      return { ...s, mixRows: rows, mixCode: rows[0].parts.slice(0, 3).join('-') }
+    }
+    if (f === 'mixnote' || f === 'mixnote2') {
+      const idx = f === 'mixnote' ? 0 : 1
+      const rows = getEditableMixRows(s)
+      while (rows.length <= idx) rows.push({ parts: ['', '', ''], note: '' })
+      rows[idx].note = raw
       return { ...s, mixRows: rows }
     }
     return { ...s, [f]: raw }
@@ -3232,6 +3253,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
     // 数量は編集中も「2桁=黒 / 3桁=赤」の太字を保つ（変更扱いのときは赤優先）。印刷でも赤を保つため sc-vol3 クラスも付与
     const isVol = f === 'volume' || f === 'volume2'
     const vol3 = isVol && (isChanged(s, f) || volNumColor(v) === '#c81e1e')
+    // 「！」重要マーカー: 時間/備考に1つでも important があれば編集モードでも赤太字で表示
+    const timeImp = f === 'times' && Array.isArray(s.times) && s.times.some(t => t && t.important)
+    const noteImp = f === 'notes' && Array.isArray(s.notes) && s.notes.some(n => n && n.important)
+    const imp = timeImp || noteImp
     const cls = 'sc-in sc-edit'
       + (isChanged(s, f) ? ' changed' : '')
       + (opts.center ? ' center' : '')
@@ -3239,7 +3264,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
       + (opts.xl ? ' xl' : '')
       + (opts.plain ? ' plain' : '')
       + (vol3 ? ' sc-vol3' : '')
-    const editStyle = isVol ? { fontWeight: 700, color: vol3 ? '#c81e1e' : '#111' } : undefined
+      + (imp ? ' imp' : '')
+    const editStyle = isVol
+      ? { fontWeight: 700, color: vol3 ? '#c81e1e' : '#111' }
+      : (imp ? { color: '#c81e1e', fontWeight: 700 } : undefined)
     const common = {
       key: f + '_e' + (isChanged(s, f) ? '_c' : ''),
       ref: fitRef,
@@ -3345,18 +3373,35 @@ function SchedulePage({ onEditShipment, isPopup }) {
     // 配合モード判定（mortar/dry/num）
     const mode = s.mixMode || (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
     if (inlineEdit) {
-      // モード別表示。num モードは「特記(中央)」入力欄を上に重ねる。
       if (mode === 'num') {
-        const noteChanged = isChanged(s, 'mixnote') || isChanged(s, 'mixCode')
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
+        // 数値モード: 行ごとに「特記(上) / 配合(下)」を縦に並べる（数量2段表示と同じ流儀）
+        const rowsSrc = (Array.isArray(s.mixRows) && s.mixRows.length) ? s.mixRows : [{ parts: ['', '', ''], note: '' }]
+        const hasRow1 = rowsSrc.length > 1 || (rowsSrc[1] && (rowsSrc[1].note || (rowsSrc[1].parts || []).some(p => p && String(p).trim())))
+        const noteInput = (field) => {
+          const changed = isChanged(s, field) || isChanged(s, 'mixCode')
+          return (
             <input type="text"
-              key={'mn' + (noteChanged ? '_c' : '')}
-              defaultValue={getVal(s, 'mixnote')}
+              key={field + '_e' + (changed ? '_c' : '')}
+              defaultValue={getVal(s, field)}
               placeholder="特記"
-              onBlur={(e) => saveField(s, 'mixnote', e.target.value)}
+              onBlur={(e) => saveField(s, field, e.target.value)}
               style={{ width: '80%', alignSelf: 'center', fontSize: 10, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: '0 2px 1px', fontFamily: 'inherit' }} />
-            {editCell(s, 'mixCode', { ...opts })}
+          )
+        }
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 1 }}>
+            {/* 1行目 */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+              {noteInput('mixnote')}
+              {editCell(s, 'mixCode0', { ...opts })}
+            </div>
+            {/* 2行目（存在時のみ） */}
+            {hasRow1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', marginTop: 2 }}>
+                {noteInput('mixnote2')}
+                {editCell(s, 'mixCode1', { ...opts })}
+              </div>
+            )}
           </div>
         )
       }
