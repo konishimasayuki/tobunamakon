@@ -1867,7 +1867,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             </div>
             {/* 3段: 車種 / 打設箇所 / 試験 / 特記 / 荷下ろし / PDF（セメント種・受信確認は外し、荷下ろしを4段から移動） */}
             <div className="band">
-              <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
                 <div className="lbl" style={{ ...redIf('vehicleType'), textAlign: 'center' }}>車 種</div>
                 <div className="btn-mid" style={{ gap: 4 }}>
                   {/* 車種チップは横並びで縦をコンパクトに */}
@@ -1877,8 +1877,11 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       return <span key={o} className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
                     })}
                   </div>
-                  <input className="f" value={form.vehicleFree || ''} onChange={set('vehicleFree')} placeholder="補足"
-                    style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', display: 'block', fontSize: 12, padding: '3px 4px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, minWidth: 0 }} />
+                  {/* 補足は textarea で折り返し（2行まで自動拡張） */}
+                  <textarea className="f" value={form.vehicleFree || ''}
+                    onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, vehicleFree: composing ? v : z2h(v) })) }}
+                    placeholder="補足" rows={1}
+                    style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', display: 'block', fontSize: 12, padding: '3px 6px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, minWidth: 0, resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.3, fontFamily: 'inherit' }} />
                 </div>
               </div>
               <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
@@ -1895,8 +1898,11 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     </select>
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      <FitField value={form.pourLocation} onChange={set('pourLocation')} baseSize={13} placeholder="入力" className="f pour-input"
-                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 42px 5px 6px', boxSizing: 'border-box' }} />
+                      {/* 縦広め＋1回折り返し可（rows=2） */}
+                      <textarea value={form.pourLocation}
+                        onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, pourLocation: composing ? v : z2h(v) })) }}
+                        placeholder="入力" rows={2} className="f pour-input"
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '5px 42px 5px 6px', boxSizing: 'border-box', width: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.35, fontFamily: 'inherit' }} />
                       <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
                         style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                     </div>
@@ -1933,10 +1939,10 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" style={{ marginTop: 2, padding: '2px 6px', fontSize: 12 }} />
                 </div>
               </div>
-              <div className="cell" style={{ flex: 1, minWidth: 0 }}>
+              <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
                 <div className="lbl sm" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>PDFインポート</div>
                 <div className="btn-mid" style={{ alignItems: 'center', gap: 4 }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #999', background: '#fafafa', borderRadius: 6, padding: '7px 16px', fontSize: 20, cursor: 'pointer', color: '#333' }}>📄
+                  <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #999', background: '#fafafa', borderRadius: 6, padding: '6px 14px', fontSize: 18, cursor: 'pointer', color: '#333' }}>📄
                     <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onPdfImport} />
                   </label>
                   {(form.pdfData || form.hasPdf) && (
@@ -1969,12 +1975,15 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     ))}
                   </div>
                   {form.hasCementType2 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {CEMENT_TYPES.map(o => (
-                        <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                      <div className="chips" style={{ justifyContent: 'center', gap: 4 }}>
+                        {CEMENT_TYPES.map(o => (
+                          <span key={o} className={'chip' + (form.cementType2 === o ? ' on' : '')} onClick={() => setVal('cementType2', form.cementType2 === o ? '' : o)}>{o}</span>
+                        ))}
+                      </div>
+                      {/* × は NB の下 */}
                       <button type="button" onClick={() => setForm(f => ({ ...f, hasCementType2: false, cementType2: '' }))} title="2つ目のセメント種を削除"
-                        style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 11, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
+                        style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 11, lineHeight: 1, padding: '1px 8px', cursor: 'pointer' }}>×</button>
                     </div>
                   ) : (
                     <button type="button" className="addrow" style={{ marginTop: 2, padding: '1px 6px', fontSize: 11, whiteSpace: 'nowrap' }}
@@ -2106,13 +2115,18 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                                 onCompositionEnd={e => setTo(e.target.value, false)} />
                             </>
                           )}
-                          <span className="unit" style={redIf('volume')}>m<sup>3</sup>
-                            {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
-                            <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
-                          </span>
-                          <span className={'qlabel' + (isRange ? ' on' : '')} title="範囲入力（13〜14）" onClick={toggleRange}>〜</span>
-                          <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])}>?</span>
-                          <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])}>+a</span>
+                          {/* 〜/?/+a ボタンを「特記」と同じ高さ（上段）に置き、その下に m³ ＋（有効なら）+a/? 表示が並ぶ */}
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', alignSelf: 'stretch' }}>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <span className={'qlabel' + (isRange ? ' on' : '')} title="範囲入力（13〜14）" onClick={toggleRange} style={{ marginLeft: 0 }}>〜</span>
+                              <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])} style={{ marginLeft: 0 }}>?</span>
+                              <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])} style={{ marginLeft: 0 }}>+a</span>
+                            </div>
+                            <span className="unit" style={{ ...redIf('volume'), marginTop: 'auto', paddingTop: 4 }}>m<sup>3</sup>
+                              {form[aKey] ? <span style={{ marginLeft: 4, fontWeight: 700, color: '#c81e1e' }}>+a</span> : null}
+                              <span className={'qmark' + (form[uKey] ? ' on' : '')}>?</span>
+                            </span>
+                          </div>
                         </div>
                       )
                     })}

@@ -70,17 +70,17 @@ input, textarea, select { font-family: inherit; }
 .denpyo .haigou3 { display:flex; align-items:flex-end; justify-content:center; gap:6px; margin-top:2px; }
 .denpyo .haigou3 .hgsep { font-size:38px; font-weight:700; color:#111; align-self:flex-end; line-height:1; }
 .denpyo .haigou3 .hgcol { display:flex; flex-direction:column; align-items:center; }
-.denpyo .haigou3 .hgnote { width:3.4em; text-align:center; font-size:10px; color:#c81e1e; font-weight:700; border:none; border-bottom:1px dashed #e7a3a3; outline:none; background:transparent; font-family:inherit; padding:0 0 1px; }
+.denpyo .haigou3 .hgnote { width:7em; text-align:center; font-size:10px; color:#c81e1e; font-weight:700; border:none; border-bottom:1px dashed #e7a3a3; outline:none; background:transparent; font-family:inherit; padding:0 0 1px; }
 .denpyo .haigou3 .hgnote::placeholder { color:#e7a3a3; }
 /* 特記は中央のみ。左右はレイアウト維持のため同じ高さの空きを確保 */
-.denpyo .haigou3 .hgnote-spacer { width:3.4em; height:calc(10px + 2px); }
+.denpyo .haigou3 .hgnote-spacer { width:7em; height:calc(10px + 2px); }
 .denpyo .haigou3 .hg { width:1.7em; text-align:center; border:none; border-bottom:3px solid #111; font-size:44px; font-weight:700; font-family:inherit; outline:none; background:transparent; padding:0; color:#111; }
 /* 配合：常にcompactサイズ。1行/2行で配合エリアの高さを完全に揃えるため mixwrap を固定高にする */
 .denpyo .haigou3.compact { margin-top:0; gap:4px; }
 .denpyo .haigou3.compact .hg { font-size:22px; border-bottom-width:2px; }
 .denpyo .haigou3.compact .hgsep { font-size:18px; }
-.denpyo .haigou3.compact .hgnote { font-size:9px; width:3em; }
-.denpyo .haigou3.compact .hgnote-spacer { width:3em; height:calc(9px + 1px); }
+.denpyo .haigou3.compact .hgnote { font-size:9px; width:6em; }
+.denpyo .haigou3.compact .hgnote-spacer { width:6em; height:calc(9px + 1px); }
 /* 各行：中央揃え。×ボタンは行末 */
 .denpyo .mixrow { display:flex; align-items:flex-end; justify-content:center; gap:4px; position:relative; }
 /* 固定高（2行ぶん）。中央に配置。縦を少し広げる */
