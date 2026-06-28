@@ -1897,13 +1897,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       {POUR_LOCATIONS.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   ) : (
-                    <div style={{ position: 'relative' }}>
-                      {/* 縦広め＋1回折り返し可（rows=2）。
-                          「一覧」ボタンは元位置(縦中央)のまま。textarea の padding-top を増やして1行目(placeholder)を中央＝ボタンと同じ高さに揃える */}
+                    /* textarea を固定高(40px)にして、placeholder「入力」が「一覧」ボタンと同じ縦中央に来るようにする。
+                       1回折り返しは入力時に内部スクロール（縦40px固定・はみ出しは overflow:auto） */
+                    <div style={{ position: 'relative', height: 40 }}>
                       <textarea value={form.pourLocation}
                         onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, pourLocation: composing ? v : z2h(v) })) }}
                         placeholder="入力" rows={2} className="f pour-input"
-                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '18px 42px 6px 6px', boxSizing: 'border-box', width: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.35, fontFamily: 'inherit' }} />
+                        style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '10px 42px 4px 6px', boxSizing: 'border-box', width: '100%', height: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.3, fontFamily: 'inherit', overflowY: 'auto' }} />
                       <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
                         style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
                     </div>
@@ -2059,9 +2059,10 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                         </div>
                       ))}
                     </div>
-                    {rows.length < 2 && (
-                      <button type="button" className="addrow" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }} onClick={addMixRow}>＋ 配合を追加</button>
-                    )}
+                    {/* ＋追加ボタンは2行時も visibility:hidden で同じ高さを維持（フォーム全体の縦寸が動かないように） */}
+                    <button type="button" className="addrow"
+                      style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center', visibility: rows.length < 2 ? 'visible' : 'hidden', pointerEvents: rows.length < 2 ? 'auto' : 'none' }}
+                      onClick={addMixRow}>＋ 配合を追加</button>
                     </>
                   )
                 })()}
@@ -2111,11 +2112,11 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       )
                       return (
                         <div key={idx} style={{ display: 'flex', flexDirection: 'column', marginTop: idx ? 4 : 0, gap: 1 }}>
-                          {/* 上段: ×スロット / 特記 / [〜 ? +a] ボタン（固定位置） */}
+                          {/* 上段: ×スロット / 特記 / [〜 ? +a] ボタン（特記の真横に固定配置） */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             {delSpacer}
                             {noteInput(noteW)}
-                            <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                               <span className={'qlabel' + (isRange ? ' on' : '')} title="範囲入力（13〜14）" onClick={toggleRange} style={{ marginLeft: 0 }}>〜</span>
                               <span className={'qlabel' + (form[uKey] ? ' on' : '')} onClick={() => setVal(uKey, !form[uKey])} style={{ marginLeft: 0 }}>?</span>
                               <span className={'qlabel' + (form[aKey] ? ' on' : '')} onClick={() => setVal(aKey, !form[aKey])} style={{ marginLeft: 0 }}>+a</span>
