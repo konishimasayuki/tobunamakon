@@ -3481,19 +3481,31 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const volNoteLabel = (text) => text
       ? <span style={{ display: 'block', fontSize: 10, color: '#c81e1e', fontWeight: 700, lineHeight: 1, textAlign: 'center' }}>{text}</span>
       : null
+    // 直接編集できる量の特記 input（配合特記と同じ赤・破線下線スタイル）
+    const volNoteInput = (field) => {
+      const changed = isChanged(s, field) || isChanged(s, 'volume')
+      return (
+        <input type="text"
+          key={field + '_e' + (changed ? '_c' : '')}
+          defaultValue={getVal(s, field)}
+          placeholder="特記"
+          onBlur={(e) => saveField(s, field, e.target.value)}
+          style={{ width: '80%', alignSelf: 'center', fontSize: 10, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: '0 2px 0', fontFamily: 'inherit' }} />
+      )
+    }
     // PC直接編集：1段はそのまま、2段は上下に分けてそれぞれ直接編集できるようにする（色は editCell 側で桁により付与）
     if (inlineEdit) {
       if (!has2) return (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-          {volNoteLabel(note1)}
+          {volNoteInput('volumeNote')}
           {editCell(s, 'volume', { center: true, big: true })}
         </span>
       )
       return (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-          {volNoteLabel(note1)}
+          {volNoteInput('volumeNote')}
           {editCell(s, 'volume', { center: true, big: true })}
-          {volNoteLabel(note2)}
+          {volNoteInput('volumeNote2')}
           {editCell(s, 'volume2', { center: true, big: true })}
         </span>
       )
