@@ -3077,6 +3077,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       case 'notes': return (Array.isArray(s.notes) ? s.notes.map(n => n.text) : []).join(' / ')
       case 'noteTags': return (Array.isArray(s.noteTags) ? s.noteTags : []).join('・')
       case 'mixCode': return mixRowsOfShip(s).map(r => mixDisplay(r.code)).filter(Boolean).join(' / ')
+      case 'mixnote': return (mixRowsOfShip(s)[0]?.note || '')   // 1行目の配合特記
       case 'volume': {
         // 直接編集できるよう1段目のみ返す（2段目は volume2 として別に編集）
         const b = (s.volume == null ? '' : String(s.volume)).trim()
@@ -3106,11 +3107,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
       return { ...s, vehicleType: types.join('・'), vehicleItems: types.map(t => ({ type: t, qty: '' })) }
     }
     if (f === 'mixCode') {
-      // 表示の整形（"24　　" や "18-15-20"）を解析。区切りは「-」全角空白・半角空白いずれも1文字＝1セクション境界として位置を保持
+      // 表示の整形（"24　　" や "18-15-20"）を解析。既存の note は同じ行の index で温存する。
+      const oldRows = mixRowsOfShip(s)
       const rows = raw.split('/').map(x => x.trim()).filter(Boolean).slice(0, 2)
-        .map(r => { const p = r.split(/[-　 ]/); return { parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: '' } })
-      const list = rows.length ? rows : [{ parts: ['', '', ''], note: '' }]
+        .map((r, i) => { const p = r.split(/[-　 ]/); return { parts: [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()], note: oldRows[i]?.note || '' } })
+      const list = rows.length ? rows : [{ parts: ['', '', ''], note: oldRows[0]?.note || '' }]
       return { ...s, mixRows: list, mixCode: list[0].parts.slice(0, 3).join('-') }
+    }
+    if (f === 'mixnote') {
+      // 1行目の配合特記だけ更新。parts は温存
+      const rows = mixRowsOfShip(s).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' }))
+      if (!rows.length) rows.push({ parts: ['', '', ''], note: '' })
+      rows[0].note = raw
+      return { ...s, mixRows: rows }
     }
     return { ...s, [f]: raw }
   }
@@ -3333,10 +3342,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 配合：複数行対応。各行は桁グループごとに分割描画。変更された桁(mix0/mix1/mix2)だけ赤くする（1行目のみ桁単位、追加行は行単位）
   // 空セクションは「-」を出さず全角空白で表示（例 24-- → 24　　）。数字が入った隣同士だけ「-」でつなぐ。
   const cellMix = (s, opts = {}) => {
-    if (inlineEdit) return editCell(s, 'mixCode', { ...opts })
-    const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
-    // 配合モードによる特別表示（モルタル / ドライテック）
+    // 配合モード判定（mortar/dry/num）
     const mode = s.mixMode || (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
+    if (inlineEdit) {
+      // モード別表示。num モードは「特記(中央)」入力欄を上に重ねる。
+      if (mode === 'num') {
+        const noteChanged = isChanged(s, 'mixnote') || isChanged(s, 'mixCode')
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
+            <input type="text"
+              key={'mn' + (noteChanged ? '_c' : '')}
+              defaultValue={getVal(s, 'mixnote')}
+              placeholder="特記"
+              onBlur={(e) => saveField(s, 'mixnote', e.target.value)}
+              style={{ width: '80%', alignSelf: 'center', fontSize: 10, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: '0 2px 1px', fontFamily: 'inherit' }} />
+            {editCell(s, 'mixCode', { ...opts })}
+          </div>
+        )
+      }
+      return editCell(s, 'mixCode', { ...opts })
+    }
+    const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
     if (mode === 'dry') {
       return (
         <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', fontSize: 14, fontWeight: 800, letterSpacing: '.04em', whiteSpace: 'nowrap' }}>ドライテック</span>
@@ -3773,7 +3799,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
-                <td className="sc-nowrap">{vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFontSchedule(vfPlace(s.vehicleFree).veh), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null}{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
+                {/* 車種: 補足(vehicleFree) も inline 編集可。表示時のみ vfPlace で長い文字は備考列にあふれさせる */}
+                <td className="sc-nowrap">
+                  {inlineEdit ? (
+                    <input type="text"
+                      key={'vf' + (isChanged(s, 'vehicleFree') ? '_c' : '')}
+                      defaultValue={s.vehicleFree || ''}
+                      placeholder="補足"
+                      onBlur={(e) => saveField(s, 'vehicleFree', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 700, color: '#1b4ea8', textAlign: 'center', border: 'none', borderBottom: '1px dashed #c0d0e3', background: 'transparent', outline: 'none', padding: '0 2px 1px' }} />
+                  ) : (
+                    vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFontSchedule(vfPlace(s.vehicleFree).veh), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null
+                  )}
+                  {cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}
+                </td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 {/* 種: 1つだけ=従来どおり / 2つあれば縦並び（B/N など） */}
@@ -3795,7 +3834,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   return ct(c1)
                 })()}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
-                <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
+                <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
                 {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
                 <td style={{ textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }}>
                   {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}
