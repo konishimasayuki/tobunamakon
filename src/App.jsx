@@ -5566,6 +5566,198 @@ function AssignPage({ isPopup }) {
   )
 }
 
+// デバッグ依頼用の掲示板（PC専用）。
+// ・スレッド一覧（新しい順、自動更新なし。手動の「🔄 更新」ボタン）
+// ・新規スレッド作成（タイトル + 本文 + 画像）
+// ・スレッドを開くと本文と返信が時系列に並び、自分も返信できる
+function DebugPage() {
+  const { user } = useAuth()
+  const [threads, setThreads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [openId, setOpenId] = useState(null)   // 詳細表示中のスレッドID（null=一覧）
+  const [newTitle, setNewTitle] = useState('')
+  const [newBody, setNewBody] = useState('')
+  const [newImg, setNewImg] = useState('')
+  const [posting, setPosting] = useState(false)
+
+  const reload = async () => {
+    setLoading(true)
+    try { setThreads(await api.get('/api/debug')) }
+    catch (e) { alert('取得エラー: ' + (e?.message || e)) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { reload() }, [])   // 初回のみ。自動更新なし
+  const opened = openId ? threads.find(t => t.id === openId) : null
+
+  const onImg = (e, setter) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ''
+    if (!f) return
+    if (!/^image\//.test(f.type)) { alert('画像ファイルを選んでください'); return }
+    if (f.size > 3 * 1024 * 1024) { alert('画像が大きすぎます（最大3MB）。スクショを縮小して下さい'); return }
+    const r = new FileReader()
+    r.onload = () => setter(String(r.result || ''))
+    r.onerror = () => alert('画像の読込に失敗しました')
+    r.readAsDataURL(f)
+  }
+
+  const postThread = async () => {
+    if (!newTitle.trim() && !newBody.trim() && !newImg) { alert('タイトル・本文・画像のいずれかを入力してください'); return }
+    setPosting(true)
+    try {
+      const t = await api.post('/api/debug', { title: newTitle, body: newBody, image: newImg })
+      setThreads(prev => [t, ...prev])
+      setNewTitle(''); setNewBody(''); setNewImg('')
+    } catch (e) { alert('投稿エラー: ' + (e?.message || e)) }
+    finally { setPosting(false) }
+  }
+
+  const delThread = async (t) => {
+    if (!window.confirm(`スレッドを削除しますか？\n「${t.title || t.body.slice(0, 30)}」`)) return
+    try {
+      await api.del('/api/debug?id=' + encodeURIComponent(t.id))
+      setThreads(prev => prev.filter(x => x.id !== t.id))
+      if (openId === t.id) setOpenId(null)
+    } catch (e) { alert('削除エラー: ' + (e?.message || e)) }
+  }
+
+  const fmt = (iso) => {
+    try { const d = new Date(iso); const p = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}` }
+    catch { return '' }
+  }
+
+  const card = { background: '#fff', border: '1px solid #dde3ed', borderRadius: 10, padding: 14, marginBottom: 12 }
+  const lbl = { fontSize: 12, fontWeight: 700, color: '#475467', marginBottom: 4 }
+  const inp = { width: '100%', boxSizing: 'border-box', fontSize: 14, padding: '8px 10px', border: '1.5px solid #d4dbe5', borderRadius: 8, fontFamily: 'inherit' }
+  const btn = (variant) => ({ border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+    background: variant === 'primary' ? 'linear-gradient(135deg,#1a4d8f,#1a6a9f)' : variant === 'ghost' ? '#fff' : '#eef0f4',
+    color: variant === 'primary' ? '#fff' : variant === 'ghost' ? '#3a4a5c' : '#475467',
+    ...(variant === 'ghost' ? { border: '1.5px solid #cdd5e0' } : {}) })
+
+  if (opened) {
+    return (
+      <div style={{ height: '100%', overflow: 'auto', padding: 20, background: '#f3f5f9' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button type="button" onClick={() => setOpenId(null)} style={btn('ghost')}>← 一覧へ戻る</button>
+          <h2 style={{ margin: 0, fontSize: 18, color: '#1a2332' }}>🐛 デバッグ依頼</h2>
+        </div>
+        <DebugThreadView thread={opened} user={user} fmt={fmt} onImg={onImg} onPosted={(t) => { setThreads(prev => prev.map(x => x.id === t.id ? t : x)) }} onDelete={() => delThread(opened)} />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ height: '100%', overflow: 'auto', padding: 20, background: '#f3f5f9' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: 18, color: '#1a2332' }}>🐛 デバッグ依頼</h2>
+        <button type="button" onClick={reload} disabled={loading} style={btn('ghost')}>🔄 更新</button>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#6b7a8d' }}>※ 自動更新はしません。新着確認は手動で🔄 更新を押してください</span>
+      </div>
+
+      {/* 新規スレッド作成 */}
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#1a2332', marginBottom: 8 }}>＋ 新規依頼を投稿</div>
+        <div style={{ marginBottom: 8 }}>
+          <div style={lbl}>タイトル</div>
+          <input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="例: 出荷予定表で配合の特記が消える" style={inp} maxLength={200} />
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <div style={lbl}>本文（再現手順や期待動作など）</div>
+          <textarea value={newBody} onChange={e => setNewBody(e.target.value)} rows={4} style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ ...btn('ghost'), display: 'inline-flex', alignItems: 'center', gap: 6 }}>📷 スクショ添付
+            <input type="file" accept="image/*" onChange={e => onImg(e, setNewImg)} style={{ display: 'none' }} />
+          </label>
+          {newImg && (
+            <>
+              <img src={newImg} alt="preview" style={{ height: 60, border: '1px solid #cdd5e0', borderRadius: 6 }} />
+              <button type="button" onClick={() => setNewImg('')} style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>🗑 画像を外す</button>
+            </>
+          )}
+          <button type="button" onClick={postThread} disabled={posting} style={{ ...btn('primary'), marginLeft: 'auto', opacity: posting ? 0.6 : 1 }}>{posting ? '投稿中…' : '投稿する'}</button>
+        </div>
+      </div>
+
+      {/* スレッド一覧 */}
+      {loading ? <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中…</div>
+        : threads.length === 0 ? <div style={{ padding: 20, color: '#6b7a8d' }}>まだ依頼はありません。最初の投稿をしてください。</div>
+        : threads.map(t => {
+          const last = t.replies && t.replies.length ? t.replies[t.replies.length - 1] : null
+          return (
+            <div key={t.id} style={{ ...card, cursor: 'pointer' }} onClick={() => setOpenId(t.id)}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1a2332' }}>{t.title || '(無題)'}</span>
+                <span style={{ fontSize: 12, color: '#6b7a8d' }}>{t.author?.name || '匿名'} ／ {fmt(t.createdAt)}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#1b4ea8', fontWeight: 700 }}>💬 {(t.replies || []).length}</span>
+              </div>
+              {t.body ? <div style={{ marginTop: 6, fontSize: 13, color: '#3a4a5c', whiteSpace: 'pre-wrap', maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.body}</div> : null}
+              {t.image ? <img src={t.image} alt="" style={{ marginTop: 8, maxHeight: 80, border: '1px solid #cdd5e0', borderRadius: 6 }} /> : null}
+              {last && <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d' }}>↳ 最新返信: {last.author?.name || '匿名'} ／ {fmt(last.createdAt)}</div>}
+            </div>
+          )
+        })}
+    </div>
+  )
+}
+
+// スレッド詳細：親投稿 + 返信一覧 + 返信フォーム
+function DebugThreadView({ thread, user, fmt, onImg, onPosted, onDelete }) {
+  const [body, setBody] = useState('')
+  const [img, setImg] = useState('')
+  const [posting, setPosting] = useState(false)
+  const isOwner = thread.author && user && thread.author.id === user.id
+  const canDelete = isOwner || user?.role === 'admin'
+  const submit = async () => {
+    if (!body.trim() && !img) { alert('本文または画像を入力してください'); return }
+    setPosting(true)
+    try {
+      const t = await api.post('/api/debug?id=' + encodeURIComponent(thread.id), { body, image: img })
+      setBody(''); setImg('')
+      onPosted(t)
+    } catch (e) { alert('返信エラー: ' + (e?.message || e)) }
+    finally { setPosting(false) }
+  }
+  const post = ({ author, body, image, createdAt }, opts = {}) => (
+    <div style={{ background: '#fff', border: '1px solid #dde3ed', borderRadius: 10, padding: 14, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, color: '#1a2332', fontSize: 14 }}>{author?.name || '匿名'}</span>
+        <span style={{ fontSize: 12, color: '#6b7a8d' }}>{fmt(createdAt)}</span>
+        {opts.head && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#fff', background: '#1a4d8f', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>親投稿</span>}
+      </div>
+      {opts.title ? <div style={{ marginTop: 6, fontSize: 16, fontWeight: 700, color: '#1a2332' }}>{opts.title}</div> : null}
+      {body ? <div style={{ marginTop: 8, fontSize: 14, color: '#1a2332', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{body}</div> : null}
+      {image ? <a href={image} target="_blank" rel="noopener noreferrer"><img src={image} alt="" style={{ marginTop: 10, maxWidth: '100%', maxHeight: 480, border: '1px solid #cdd5e0', borderRadius: 6 }} /></a> : null}
+    </div>
+  )
+  return (
+    <div>
+      {post({ author: thread.author, body: thread.body, image: thread.image, createdAt: thread.createdAt }, { head: true, title: thread.title })}
+      {(thread.replies || []).map(r => <Fragment key={r.id}>{post(r)}</Fragment>)}
+      {/* 返信フォーム */}
+      <div style={{ background: '#fff', border: '1px solid #dde3ed', borderRadius: 10, padding: 14, marginTop: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#475467', marginBottom: 6 }}>💬 返信を投稿</div>
+        <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="本文を入力（誰でも返信できます）" style={{ width: '100%', boxSizing: 'border-box', fontSize: 14, padding: '8px 10px', border: '1.5px solid #d4dbe5', borderRadius: 8, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1.5px solid #cdd5e0', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📷 スクショ添付
+            <input type="file" accept="image/*" onChange={e => onImg(e, setImg)} style={{ display: 'none' }} />
+          </label>
+          {img && (
+            <>
+              <img src={img} alt="preview" style={{ height: 50, border: '1px solid #cdd5e0', borderRadius: 6 }} />
+              <button type="button" onClick={() => setImg('')} style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>🗑 外す</button>
+            </>
+          )}
+          {canDelete && (
+            <button type="button" onClick={onDelete} style={{ border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>🗑 スレッドを削除</button>
+          )}
+          <button type="button" onClick={submit} disabled={posting} style={{ marginLeft: 'auto', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: 'linear-gradient(135deg,#1a4d8f,#1a6a9f)', color: '#fff', opacity: posting ? 0.6 : 1 }}>{posting ? '送信中…' : '返信する'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SettingsPage() {
   const isMobile = useIsMobile()
   const [token, setToken] = useState('')
@@ -5793,6 +5985,7 @@ const TABS = [
   { id: 'settings', label: '設定', icon: '⚙️' },
   { id: 'customers', label: '顧客管理', icon: '👥' },
   { id: 'employees', label: '従業員管理', icon: '👷' },
+  { id: 'debug', label: 'デバッグ依頼', icon: '🐛', pcOnly: true },
 ]
 
 function Layout({ children, activeTab, onTabChange }) {
@@ -5800,9 +5993,9 @@ function Layout({ children, activeTab, onTabChange }) {
   const [open, setOpen]   = useState(false)
   const isMobile = useIsMobile()
   const isPC = !isMobile
-  // 生コン出荷予定表出力はPCのみ。タッチ端末(iPhone/iPad)＝横向きで幅が広くても非表示
+  // 生コン出荷予定表出力・デバッグ依頼はPCのみ。タッチ端末(iPhone/iPad)＝横向きで幅が広くても非表示
   const notPC = IS_TOUCH_DEVICE || useIsMobile(1025)
-  const navTabs = TABS.filter(t => !(notPC && t.id === 'seikon'))
+  const navTabs = TABS.filter(t => !(notPC && (t.id === 'seikon' || t.pcOnly)))
 
   // モバイルでドロワーを開いている間は背面スクロールを止める
   useEffect(() => {
@@ -5977,6 +6170,9 @@ function AppInner() {
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
+    : activeTab === 'debug' ? (notPC
+      ? <div style={{ padding: 24, color: '#6b7a8d' }}>デバッグ依頼はパソコンからご利用ください。</div>
+      : <DebugPage />)
     : null
   // 準備中タブは未アンロックならパスワード画面を表示
   if (LOCKED_TABS.includes(activeTab) && !unlocked[activeTab]) {
