@@ -4545,14 +4545,16 @@ function SeikonOutputPage({ isPopup }) {
   const testGenPM = dayShips.filter(s => hasTest(s, '現TP') && !isAM(s)).length
   const testKoAM = dayShips.filter(s => hasTest(s, '工TP') && isAM(s)).length
   const testKoPM = dayShips.filter(s => hasTest(s, '工TP') && !isAM(s)).length
-  // 試験：データのある行(現場/工場)・列(AM/PM)だけを表示する（空の行・列は消える）
+  // 試験：行(現場/工場)・列(AM/PM)のラベルは常に維持。値が0は空欄で表示する。
+  // ただし全件0(その日に試験データ無し)のときは見出しごと非表示にする。
   const testAll = [
     { label: '現場', am: testGenAM, pm: testGenPM },
     { label: '工場', am: testKoAM, pm: testKoPM },
   ]
-  const testRows = testAll.filter(r => r.am > 0 || r.pm > 0)   // 件数のある行だけ
-  const testShowAM = testRows.some(r => r.am > 0)              // AM列を出すか
-  const testShowPM = testRows.some(r => r.pm > 0)              // PM列を出すか
+  const testHasAny = testAll.some(r => r.am > 0 || r.pm > 0)
+  const testRows = testAll        // 常に2行表示
+  const testShowAM = true         // 常にAM列表示
+  const testShowPM = true         // 常にPM列表示
 
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
@@ -4700,58 +4702,40 @@ function SeikonOutputPage({ isPopup }) {
       <div className="seikon-sheet">
         <div className="seikon-title">
           <span className="st-name">生コン出荷予定表</span>
-          <span className="st-rest" style={{ display: 'flex', alignItems: 'flex-end', gap: 4, fontSize: 11, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
-            <button type="button" onClick={() => setRestOpen(o => !o)} title="クリックで休みを選択"
-              style={{ border: '1px solid #b9c4d4', background: restOpen ? '#e7eefb' : '#f3f6fb', color: '#2b3a4d', borderRadius: 6, padding: '2px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', lineHeight: 1.3, boxShadow: '0 1px 0 rgba(0,0,0,.06)' }}>休み</button>
-            {restNames.length > 0 && (
-              <span style={{ display: 'grid', gridTemplateRows: 'auto auto', gridAutoFlow: 'column', alignItems: 'end', columnGap: 3, rowGap: 1 }}>
-                {restNames.map((n, i) => (
-                  <span key={n} style={{ gridColumn: Math.floor(i / 2) + 1, gridRow: (i % 2 === 0) ? 2 : 1, display: 'inline-flex', alignItems: 'center', fontSize: 10, lineHeight: 1.1, padding: '0 3px', border: '1px solid #d7dee8', borderRadius: 3, background: '#fff' }}>
-                    {n}<button type="button" className="no-print" onClick={() => removeRest(n)} title="外す"
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 11, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
-                  </span>
-                ))}
-              </span>
-            )}
-            {restOpen && (
-              <select className="no-print" value="" autoFocus title="呼び名を選んで追加"
-                onChange={e => { addRest(e.target.value); setRestOpen(false) }}
-                onBlur={() => setRestOpen(false)}
-                style={{ fontSize: 10, padding: '1px', border: '1px solid #bbb', borderRadius: 3, fontFamily: 'inherit' }}>
-                <option value="">選択…</option>
-                {nickList.filter(n => !restNames.includes(n)).map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            )}
-            {presentEdit ? (
-              <input type="number" min="0" autoFocus value={presentDefault}
-                onChange={e => savePresentDefault(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                onBlur={() => setPresentEdit(false)} onKeyDown={e => { if (e.key === 'Enter') setPresentEdit(false) }}
-                style={{ width: '3.4em', fontSize: 11, padding: '1px 2px', border: '1px solid #888', borderRadius: 3 }} />
-            ) : (
-              <b onClick={() => setPresentEdit(true)} title="クリックで出社数の基準（デフォルト）を編集"
-                style={{ cursor: 'pointer', borderBottom: '1px dotted #888', color: '#0f3060' }}>{presentCount}名</b>
-            )}
+          <span className="st-rest" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
+            <span style={{ color: '#2b3a4d', fontSize: 12, fontWeight: 700 }}>休み</span>
+            {/* 自由入力テキスト（呼び名/コメントなど自由に） */}
+            <input type="text" value={restText} onChange={e => saveRest(e.target.value)}
+              placeholder="例: 田中 高橋"
+              style={{ width: '12em', fontSize: 12, padding: '2px 6px', border: '1px solid #b9c4d4', borderRadius: 4, fontFamily: 'inherit', color: '#111' }} />
+            {/* 出社人数: 直接編集できる number input（基準デフォルトも localStorage 保存） */}
+            <input type="number" min="0" value={presentDefault}
+              onChange={e => savePresentDefault(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              title="出社人数（基準デフォルトとして保存）"
+              style={{ width: '3.4em', fontSize: 12, padding: '2px 4px', border: '1px solid #888', borderRadius: 4, color: '#0f3060', fontWeight: 700, textAlign: 'center' }} />
+            <span style={{ color: '#0f3060', fontWeight: 700 }}>名</span>
           </span>
           <span className="st-date">{titleDate}</span>
           <span className="st-ampm">
             <b style={{ opacity: ampm === 'PM' ? 0.3 : 1 }}>AM</b> ・ <b style={{ opacity: ampm === 'AM' ? 0.3 : 1 }}>PM</b>
           </span>
           <span className="st-test"><span className="st-test-label">試験</span>
-            {testRows.length > 0 && (
-              <span className="st-test-grid" style={{ gridTemplateColumns: ['auto', testShowAM && 'auto', testShowPM && 'auto'].filter(Boolean).join(' ') }}>
-                <span className="h" />{testShowAM && <span className="h">AM</span>}{testShowPM && <span className="h">PM</span>}
+            {testHasAny && (
+              <span className="st-test-grid" style={{ gridTemplateColumns: 'auto auto auto' }}>
+                <span className="h" /><span className="h">AM</span><span className="h">PM</span>
                 {testRows.map(r => (
-                  <Fragment key={r.label}><span className="rl">{r.label}</span>{testShowAM && <b>{r.am || '－'}</b>}{testShowPM && <b>{r.pm || '－'}</b>}</Fragment>
+                  <Fragment key={r.label}><span className="rl">{r.label}</span><b>{r.am || ''}</b><b>{r.pm || ''}</b></Fragment>
                 ))}
               </span>
             )}
           </span>
         </div>
         <table className="seikon-table">
+          {/* 列: 業者名10 / 現場名18 / 打設4 / 車輌6(↑+2) / 配合13 / 種3 / 数量8 / 時間6 / 摘要15(↓-2) / 特記4 / 地図4 / メモ9 */}
           <colgroup>
-            <col style={{ width: '10%' }} /><col style={{ width: '18%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} />
+            <col style={{ width: '10%' }} /><col style={{ width: '18%' }} /><col style={{ width: '4%' }} /><col style={{ width: '6%' }} />
             <col style={{ width: '13%' }} /><col style={{ width: '3%' }} /><col style={{ width: '8%' }} /><col style={{ width: '6%' }} />
-            <col style={{ width: '17%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '15%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} /><col style={{ width: '9%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
