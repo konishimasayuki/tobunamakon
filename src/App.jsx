@@ -3447,10 +3447,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
       <span ref={fitRef} className={cls} key={'mix' + (isChanged(s, 'mixCode') ? '_c' : '') + '_n' + rows.length} style={{ pointerEvents: 'none' }}>
         {rows.map((r, ri) => {
           const parts = String(r.code || '').split('-')
-          // 各配合行の下にその行の特記を表示（配合→特記→配合→特記…）
-          const noteRed = ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))
+          // 各配合行の「上」にその行の特記を表示（特記→配合→特記→配合…）
+          const noteRed = (ri === 0 && (isChanged(s, 'mixnote') || isChanged(s, 'mixCode'))) || (ri === 1 && isChanged(s, 'mixnote2'))
           return (
             <Fragment key={ri}>
+              {(r.note && r.note.trim()) ? (
+                <span className="sc-mixnote-line" style={noteRed ? { color: '#c81e1e' } : undefined}>{r.note}</span>
+              ) : null}
               {r.code ? (
                 <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
                   {parts.map((p, i) => (
@@ -3460,9 +3463,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     </Fragment>
                   ))}
                 </span>
-              ) : null}
-              {(r.note && r.note.trim()) ? (
-                <span className="sc-mixnote-line" style={noteRed ? { color: '#c81e1e' } : undefined}>{r.note}</span>
               ) : null}
             </Fragment>
           )
@@ -3936,12 +3936,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
         )}
         </>)
         if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
-        // 別ウィンドウ: 画面が表の基準幅(860px)より広ければ幅100%で画面いっぱいに（PC）、
-        // 狭ければ FitToWidth で縮小して横スクロールを出さない（スマホ縦）。
+        // 別ウィンドウ:
+        //   ・PC幅(>=880)では画面いっぱいに表示
+        //   ・スマホ幅(<880)では FitToWidth による縮小だと地図など右端の列が見切れるため、
+        //     横スクロール可能にして全列を読めるようにする
         return popupNarrow
-          ? <FitToWidth width={860} max={1} style={{ padding: '4px 0 24px' }}>
-              <div className="schedule popup-view" style={{ width: 860 }}>{inner}</div>
-            </FitToWidth>
+          ? <div className="schedule popup-view" style={{ padding: '4px 0 24px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ minWidth: 760 }}>{inner}</div>
+            </div>
           : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{inner}</div>
       })()}
       {editModal && (
@@ -4075,30 +4077,69 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
         <div>
           <label style={lbl}>車種（タップで選択）</label>
           {chipRow(VEHICLE_TYPES, o => vehItems().some(v => v.type === o), toggleVehItem)}
+          {/* 車種の自由記述（補足） */}
+          <input value={form.vehicleFree || ''} onChange={set('vehicleFree')} placeholder="補足（例: ポンプ車）"
+            style={{ ...inp, marginTop: 8, textAlign: 'center', color: '#1b4ea8', fontWeight: 700 }} />
         </div>
         <div>
-          <label style={lbl}>配合（中央のみ特記可）</label>
-          {mixRowsOf().map((r, ri) => (
-            <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 12 : 0 }}>
-              {[0, 1, 2].map(i => (
-                <Fragment key={i}>
-                  {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#101828', paddingBottom: 11 }}>-</span>}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {i === 1
-                      ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記"
-                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
-                      : <div style={{ height: 16 }} />}
-                    <input value={r.parts[i] || ''} inputMode="numeric" placeholder="00"
-                      onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
-                      onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
-                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #d4dbe5', borderRadius: 11, padding: '12px 4px', fontFamily: 'inherit', color: '#101828', marginTop: 4 }} />
-                  </div>
-                </Fragment>
-              ))}
-              {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} style={{ ...smallBtn, height: 52 }}>×</button>}
+          <label style={lbl}>配合</label>
+          {/* 配合モード切替（数値 / モルタル / ドライテック） */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => {
+              const on = (form.mixMode || (form.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(form.mixCode || '') ? 'mortar' : 'num'))) === m
+              return (
+                <button key={m} type="button"
+                  onClick={() => setForm(f => {
+                    if ((f.mixMode || 'num') === m) return f
+                    if (m === 'dry') return { ...f, mixMode: 'dry', mixCode: 'ドライテック', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+                    if (m === 'mortar') return { ...f, mixMode: 'mortar', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+                    return { ...f, mixMode: 'num', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+                  })}
+                  style={{ flex: 1, border: on ? '2px solid #0f3060' : '1.5px solid #d4dbe5', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#475467', borderRadius: 10, padding: '10px 6px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          {/* モード別のフォーム */}
+          {(form.mixMode === 'mortar' || (!form.mixMode && /^1:[1-4]$/.test(form.mixCode || ''))) ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {['1:1', '1:2', '1:3', '1:4'].map(r => {
+                const on = form.mixCode === r
+                return (
+                  <button key={r} type="button"
+                    onClick={() => setForm(f => ({ ...f, mixMode: 'mortar', mixCode: r, mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }))}
+                    style={{ height: 56, border: on ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 11, fontSize: 22, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{r}</button>
+                )
+              })}
             </div>
-          ))}
-          {mixRowsOf().length < 2 && <button type="button" onClick={addMixRow} style={{ ...addBtn, marginTop: 10 }}>＋ 配合を追加</button>}
+          ) : (form.mixMode === 'dry' || (!form.mixMode && form.mixCode === 'ドライテック')) ? (
+            <div style={{ textAlign: 'center', padding: '18px 0', fontSize: 28, fontWeight: 800, color: '#111', letterSpacing: '0.1em', border: '1.5px solid #d4dbe5', borderRadius: 11, background: '#fff' }}>ドライテック</div>
+          ) : (
+            <>
+              {mixRowsOf().map((r, ri) => (
+                <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 12 : 0 }}>
+                  {[0, 1, 2].map(i => (
+                    <Fragment key={i}>
+                      {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#101828', paddingBottom: 11 }}>-</span>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {i === 1
+                          ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記"
+                              style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
+                          : <div style={{ height: 16 }} />}
+                        <input value={r.parts[i] || ''} inputMode="numeric" placeholder="00"
+                          onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
+                          onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
+                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #d4dbe5', borderRadius: 11, padding: '12px 4px', fontFamily: 'inherit', color: '#101828', marginTop: 4 }} />
+                      </div>
+                    </Fragment>
+                  ))}
+                  {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} style={{ ...smallBtn, height: 52 }}>×</button>}
+                </div>
+              ))}
+              {mixRowsOf().length < 2 && <button type="button" onClick={addMixRow} style={{ ...addBtn, marginTop: 10 }}>＋ 配合を追加</button>}
+            </>
+          )}
         </div>
         <div>
           <label style={lbl}>量（m³）</label>
@@ -4108,6 +4149,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
             const uKey = idx === 0 ? 'volumeUncertain' : 'volumeUncertain2'
             const aKey = idx === 0 ? 'volumePlusA' : 'volumePlusA2'
             const rKey = idx === 0 ? 'volumeRange' : 'volumeRange2'
+            const nKey = idx === 0 ? 'volumeNote' : 'volumeNote2'
             const raw = String(form[vKey] || '')
             const sepI = raw.indexOf('〜')
             const vFrom = sepI >= 0 ? raw.slice(0, sepI) : raw
@@ -4123,25 +4165,30 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
               <button type="button" onClick={onClick} style={{ flex: '0 0 auto', minWidth: 48, height: 50, padding: '0 10px', borderRadius: 11, fontSize: 16, fontWeight: 700, cursor: 'pointer', boxSizing: 'border-box', border: on ? '2px solid #c0392b' : '1.5px solid #d4dbe5', background: on ? '#c0392b' : '#fff', color: on ? '#fff' : '#98a2b3' }}>{label}</button>
             )
             return (
-              <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: idx ? 8 : 0 }}>
-                <input value={vFrom} inputMode="decimal" placeholder="0"
-                  onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
-                  onCompositionEnd={e => setFrom(e.target.value, false)}
-                  style={{ ...inp, flex: 1, fontSize: big(vFrom) ? 22 : 16, fontWeight: big(vFrom) ? 700 : 400 }} />
-                {isRange && (
-                  <>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#101828', flex: '0 0 auto' }}>〜</span>
-                    <input value={vTo} inputMode="decimal" placeholder="0"
-                      onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
-                      onCompositionEnd={e => setTo(e.target.value, false)}
-                      style={{ ...inp, flex: 1, fontSize: big(vTo) ? 22 : 16, fontWeight: big(vTo) ? 700 : 400 }} />
-                  </>
-                )}
-                <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>m³</span>
-                {sq(isRange, '〜', toggleRange)}
-                {sq(form[aKey], '+a', () => setVal(aKey, !form[aKey]))}
-                {sq(form[uKey], '?', () => setVal(uKey, !form[uKey]))}
-                {idx === 1 && sq(false, '×', () => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false })))}
+              <div key={idx} style={{ marginTop: idx ? 8 : 0 }}>
+                {/* 量の特記（数値の上に小さく赤・破線下線） */}
+                <input value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', fontWeight: 700, textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit', marginBottom: 4 }} />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input value={vFrom} inputMode="decimal" placeholder="0"
+                    onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
+                    onCompositionEnd={e => setFrom(e.target.value, false)}
+                    style={{ ...inp, flex: 1, fontSize: big(vFrom) ? 22 : 16, fontWeight: big(vFrom) ? 700 : 400 }} />
+                  {isRange && (
+                    <>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: '#101828', flex: '0 0 auto' }}>〜</span>
+                      <input value={vTo} inputMode="decimal" placeholder="0"
+                        onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
+                        onCompositionEnd={e => setTo(e.target.value, false)}
+                        style={{ ...inp, flex: 1, fontSize: big(vTo) ? 22 : 16, fontWeight: big(vTo) ? 700 : 400 }} />
+                    </>
+                  )}
+                  <span style={{ fontSize: 16, color: '#475467', flex: '0 0 auto' }}>m³</span>
+                  {sq(isRange, '〜', toggleRange)}
+                  {sq(form[aKey], '+a', () => setVal(aKey, !form[aKey]))}
+                  {sq(form[uKey], '?', () => setVal(uKey, !form[uKey]))}
+                  {idx === 1 && sq(false, '×', () => setForm(f => ({ ...f, hasVolume2: false, volume2: '', volumeNote2: '', volumeRange2: false, volumeUncertain2: false, volumePlusA2: false })))}
+                </div>
               </div>
             )
           })}
@@ -4166,8 +4213,22 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
             </div>
           )}
         </div>
-        {/* セメント種・試験・特記：3グループとも同じ大きさのボタンに統一 */}
-        <div><label style={lbl}>セメント種</label>{chipRow(CEMENT_TYPES, o => form.cementType === o, o => setVal('cementType', form.cementType === o ? '' : o))}</div>
+        {/* セメント種・試験・特記：3グループとも同じ大きさのボタンに統一。2つ目は ＋追加 / × で出し入れ */}
+        <div>
+          <label style={lbl}>セメント種{form.hasCementType2 ? '（1つ目）' : ''}</label>
+          {chipRow(CEMENT_TYPES, o => form.cementType === o, o => setVal('cementType', form.cementType === o ? '' : o))}
+          {form.hasCementType2 ? (
+            <div style={{ marginTop: 10 }}>
+              <label style={lbl}>セメント種（2つ目）
+                <button type="button" onClick={() => setForm(f => ({ ...f, hasCementType2: false, cementType2: '' }))}
+                  style={{ marginLeft: 8, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>× 削除</button>
+              </label>
+              {chipRow(CEMENT_TYPES, o => form.cementType2 === o, o => setVal('cementType2', form.cementType2 === o ? '' : o))}
+            </div>
+          ) : (
+            <button type="button" onClick={() => setForm(f => ({ ...f, hasCementType2: true }))} style={{ ...addBtn, marginTop: 8 }}>＋ セメント種を追加</button>
+          )}
+        </div>
         <div><label style={lbl}>試験</label>{chipRow(TEST_TAGS, o => (form.testTags || []).includes(o), toggleTestTag)}</div>
         <div><label style={lbl}>特記</label>{chipRow(NOTE_TAGS, o => (form.noteTags || []).includes(o), toggleNoteTag)}</div>
         <div>
