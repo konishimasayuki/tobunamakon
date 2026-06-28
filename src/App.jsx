@@ -3377,6 +3377,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
         // 数値モード: 行ごとに「特記(上) / 配合(下)」を縦に並べる（数量2段表示と同じ流儀）
         const rowsSrc = (Array.isArray(s.mixRows) && s.mixRows.length) ? s.mixRows : [{ parts: ['', '', ''], note: '' }]
         const hasRow1 = rowsSrc.length > 1 || (rowsSrc[1] && (rowsSrc[1].note || (rowsSrc[1].parts || []).some(p => p && String(p).trim())))
+        // small オプションのとき: フォント / 行間 / padding を詰めて高さを縮める
+        const codeStyle = opts.small ? { fontSize: 13, lineHeight: 1.1, padding: '0 2px' } : undefined
         const noteInput = (field) => {
           const changed = isChanged(s, field) || isChanged(s, 'mixCode')
           return (
@@ -3385,21 +3387,29 @@ function SchedulePage({ onEditShipment, isPopup }) {
               defaultValue={getVal(s, field)}
               placeholder="特記"
               onBlur={(e) => saveField(s, field, e.target.value)}
-              style={{ width: '80%', alignSelf: 'center', fontSize: 10, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: '0 2px 1px', fontFamily: 'inherit' }} />
+              style={{ width: '80%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: '0 2px 0', fontFamily: 'inherit' }} />
           )
         }
+        const renderCode = (field) => {
+          if (!opts.small) return editCell(s, field, { ...opts })
+          // small モード: editCell の big を外して style override
+          const sub = { ...opts }
+          delete sub.big
+          const el = editCell(s, field, sub)
+          return el ? <span style={codeStyle}>{el}</span> : el
+        }
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0, lineHeight: 1.1 }}>
             {/* 1行目 */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
               {noteInput('mixnote')}
-              {editCell(s, 'mixCode0', { ...opts })}
+              {renderCode('mixCode0')}
             </div>
             {/* 2行目（存在時のみ） */}
             {hasRow1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', marginTop: 2 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', marginTop: 1 }}>
                 {noteInput('mixnote2')}
-                {editCell(s, 'mixCode1', { ...opts })}
+                {renderCode('mixCode1')}
               </div>
             )}
           </div>
@@ -3407,7 +3417,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       }
       return editCell(s, 'mixCode', { ...opts })
     }
-    const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
+    const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '') + (opts.small ? ' sc-mixcode-small' : '')
     if (mode === 'dry') {
       return (
         <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', fontSize: 14, fontWeight: 800, letterSpacing: '.04em', whiteSpace: 'nowrap' }}>ドライテック</span>
@@ -3858,7 +3868,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   )}
                   {cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}
                 </td>
-                <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
+                <td className="sc-nowrap">{cellMix(s, { center: true, small: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 {/* 種: 1つだけ=従来どおり / 2つあれば縦並び（B/N など） */}
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{(() => {
