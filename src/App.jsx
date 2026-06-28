@@ -1072,6 +1072,15 @@ function vfVehFont(t, base = 12) {
   if (w <= 10) return base - 3       // 〜全角5
   return base - 4                    // 全角6
 }
+// 出荷予定表（一覧）専用: 車種列を 7% に絞った分、補足文字を大きめ(数量18pxと同等の読みやすさ)に
+function vfVehFontSchedule(t) {
+  const w = vfWidth(t)
+  if (w <= 4) return 18              // 〜全角2
+  if (w <= 6) return 17              // 〜全角3
+  if (w <= 8) return 16              // 〜全角4
+  if (w <= 10) return 14             // 〜全角5
+  return 12                          // 全角6+
+}
 // 配合表示: mixRows があれば各行を配列で（{code,note}）、無ければ mixCode/mixNotes 1行
 // 配合は3枠の位置を保持（例: 中央のみ→「-20-」、先頭のみ→「20--」）。数字が無い時は空。
 function mixCodeOf(parts) {
@@ -3326,6 +3335,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const cellMix = (s, opts = {}) => {
     if (inlineEdit) return editCell(s, 'mixCode', { ...opts })
     const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '')
+    // 配合モードによる特別表示（モルタル / ドライテック）
+    const mode = s.mixMode || (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
+    if (mode === 'dry') {
+      return (
+        <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', fontSize: 14, fontWeight: 800, letterSpacing: '.04em', whiteSpace: 'nowrap' }}>ドライテック</span>
+      )
+    }
+    if (mode === 'mortar') {
+      return (
+        <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.15 }}>
+          <span style={{ fontSize: 10, color: '#7a5d00', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 3, padding: '0 4px', fontWeight: 700, letterSpacing: '.05em', marginBottom: 2 }}>モルタル</span>
+          <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '.05em' }}>{s.mixCode || ''}</span>
+        </span>
+      )
+    }
     const rows = mixRowsOfShip(s).filter(r => r.code || r.note)
     if (!rows.length) {
       return <span ref={fitRef} className={cls} style={{ pointerEvents: 'none' }} />
@@ -3711,20 +3735,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
       ) : (() => {
         const inner = (<>
         <table>
-          {/* 列構成: 時間 / 業者名+商社 / 現場名 / 打設 / 車種(広め) / 配合 / 数量 / 種 / 担当 / 備考+連絡先 / 地図 / (編集) */}
+          {/* 列構成: 時間 / 業者名+商社 / 現場名 / 打設 / 車種(7%) / 配合 / 数量 / 種(4%) / 担当 / 備考+連絡先 / 地図 / (編集) */}
           <colgroup>
             <col style={{ width: '7%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '13%' }} />
-            <col style={{ width: '5%' }} />
             <col style={{ width: '11%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '5%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '9%' }} />
             <col style={{ width: '7%' }} />
-            <col style={{ width: '3%' }} />
+            <col style={{ width: '4%' }} />
             <col style={{ width: '9%' }} />
-            <col style={{ width: '15%' }} />
+            <col style={{ width: '17%' }} />
             <col style={{ width: '3%' }} />
-            {!isPopup && <col style={{ width: '8%' }} />}
+            {!isPopup && <col style={{ width: '7%' }} />}
           </colgroup>
           <thead>
             <tr>
@@ -3749,10 +3773,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
-                <td className="sc-nowrap">{vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFont(vfPlace(s.vehicleFree).veh, 13), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null}{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
+                <td className="sc-nowrap">{vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFontSchedule(vfPlace(s.vehicleFree).veh), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null}{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
-                <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
+                {/* 種: 1つだけ=従来どおり / 2つあれば縦並び（B/N など） */}
+                <td className="sc-nowrap" style={{ textAlign: 'center' }}>{(() => {
+                  const ct = (v) => v === 'B'
+                    ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b>
+                    : <span style={{ fontSize: 16 }}>{v || ''}</span>
+                  const c1 = s.cementType || ''
+                  const c2 = s.cementType2 || ''
+                  if (c1 && c2) {
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
+                        <span>{ct(c1)}</span>
+                        <span style={{ fontSize: 9, color: '#999', lineHeight: 1 }}>─</span>
+                        <span>{ct(c2)}</span>
+                      </div>
+                    )
+                  }
+                  return ct(c1)
+                })()}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
                 {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
