@@ -1877,11 +1877,11 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       return <span key={o} className={'chip' + (on ? ' on' : '')} onClick={() => toggleVehItem(o)}>{o}</span>
                     })}
                   </div>
-                  {/* 補足は textarea で折り返し（2行まで自動拡張） */}
+                  {/* 補足は textarea で折り返し（2行まで自動拡張）。縦横とも中央寄せ */}
                   <textarea className="f" value={form.vehicleFree || ''}
                     onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, vehicleFree: composing ? v : z2h(v) })) }}
-                    placeholder="補足" rows={1}
-                    style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', display: 'block', fontSize: 12, padding: '3px 6px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, minWidth: 0, resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.3, fontFamily: 'inherit' }} />
+                    placeholder="補足" rows={2}
+                    style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', display: 'block', fontSize: 12, padding: '10px 6px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, minWidth: 0, resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.3, fontFamily: 'inherit', verticalAlign: 'middle' }} />
                 </div>
               </div>
               <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
@@ -3675,27 +3675,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cellVolume(s)}</div>
                   </div>
-                  {/* 打設 / 種 / 受信確認 */}
+                  {/* 打設 / 種 / 地図（PDF・受信確認列は削除） */}
                   <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
                   <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
-                  <div className="sc-row"><span className="sc-lbl">受信確認</span><span className="sc-val">
-                    <span style={{ display: 'inline-flex', gap: 8 }}>
-                      {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
-                        const on = isOn(s[key])
-                        const st = { fontSize: 14, padding: '6px 14px', borderRadius: 8, fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: on ? 700 : 500, border: on ? '1.5px solid #1a7a3a' : '1.5px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }
-                        return isPopup
-                          ? <span key={key} style={st}>{label}{on ? ' ✔' : ''}</span>
-                          : <button key={key} type="button" onClick={() => toggleRecv(s, key)} style={{ ...st, cursor: 'pointer' }}>{label}{on ? ' ✔' : ''}</button>
-                      })}
-                    </span>
+                  <div className="sc-row"><span className="sc-lbl">地図</span><span className="sc-val" style={{ fontWeight: 800, color: '#1a7a3a' }}>
+                    {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : '—'}
                   </span></div>
-                  {/* PDF（添付があれば新規ウィンドウで開く） */}
-                  {s.hasPdf && (
-                    <div className="sc-row"><span className="sc-lbl">PDF</span><span className="sc-val">
-                      <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }}
-                        style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}>📄 PDFを開く</a>
-                    </span></div>
-                  )}
                   {/* 備考（横並び） */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
                   {/* 現場連絡先 */}
@@ -3726,27 +3711,34 @@ function SchedulePage({ onEditShipment, isPopup }) {
       ) : (() => {
         const inner = (<>
         <table>
+          {/* 列構成: 時間 / 業者名+商社 / 現場名 / 打設 / 車種(広め) / 配合 / 数量 / 種 / 担当 / 備考+連絡先 / 地図 / (編集) */}
           <colgroup>
             <col style={{ width: '7%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '12%' }} />
-            {!isPopup && <col style={{ width: '5%' }} />}
+            <col style={{ width: '13%' }} />
             <col style={{ width: '5%' }} />
-            <col style={{ width: '5%' }} />
+            <col style={{ width: '11%' }} />
             <col style={{ width: '9%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '3%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '12%' }} />
-            {!isPopup && <col style={{ width: '9%' }} />}
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '3%' }} />
+            {!isPopup && <col style={{ width: '8%' }} />}
           </colgroup>
           <thead>
             <tr>
               <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th>{!isPopup && <th className="th-tight">📄PDF</th>}<th className="th-tight">打設</th><th className="th-tight">車種</th><th>配合</th><th>数量</th><th className="th-tight">種</th><th className="th-tight">受信確認</th><th>担当</th>
+              <th>現場名</th>
+              <th className="th-tight">打設</th>
+              <th className="th-tight">車種</th>
+              <th>配合</th>
+              <th>数量</th>
+              <th className="th-tight">種</th>
+              <th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
+              <th className="th-tight">地図</th>
               {!isPopup && <th className="th-tight">編集</th>}
             </tr>
           </thead>
@@ -3756,29 +3748,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
-                {!isPopup && (
-                <td className="sc-nowrap" style={{ textAlign: 'center' }}>
-                  {s.hasPdf ? <a href={`/api/shipments?id=${encodeURIComponent(s.id)}&pdf=1`} onClick={(e) => { e.preventDefault(); openPdfWin(s.id) }} style={{ color: '#1a4d8f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}>📄PDF</a> : null}
-                </td>
-                )}
                 <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
                 <td className="sc-nowrap">{vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFont(vfPlace(s.vehicleFree).veh, 13), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null}{cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}</td>
                 <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{s.cementType === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{s.cementType || ''}</span>}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
-                    {[['地図', 'mapReceived'], ['FAX', 'faxReceived']].map(([label, key]) => {
-                      const on = isOn(s[key])
-                      const st = { fontSize: 11, lineHeight: 1.2, padding: '3px 2px', borderRadius: 4, fontFamily: 'inherit', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: on ? 700 : 500, border: on ? '1px solid #1a7a3a' : '1px solid #d4dbe5', background: on ? '#eafaef' : '#fff', color: on ? '#1a7a3a' : '#98a2b3' }
-                      return isPopup
-                        ? <span key={key} style={st}>{label}{on ? ' ✔' : ''}</span>
-                        : <button key={key} type="button" onClick={() => toggleRecv(s, key)} title="タップで受信確認を切替" style={{ ...st, cursor: 'pointer' }}>{label}{on ? ' ✔' : ''}</button>
-                    })}
-                  </div>
-                </td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
+                {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
+                <td style={{ textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }}>
+                  {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}
+                </td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'stretch' }}>
