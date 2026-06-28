@@ -3525,7 +3525,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const arr = Array.isArray(s.notes) ? s.notes : []
     // 車両自由入力：noVf のときは備考に出さない（車両欄／電話の右に別途表示するため）
     const vf = opts.noVf ? '' : String(s.vehicleFree || '').trim()
-    const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean)
+    // 特記タグ(領/追): noTags のときは備考に出さない（特記列で別途表示するため）
+    const tags = opts.noTags ? [] : (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean)
     const cls = 'sc-in sc-notes' + (opts.plain ? ' plain' : '')
     const wholeRed = isChanged(s, 'notes') && !arr.some((_, i) => isChanged(s, 'note' + i))
     if (!arr.length && !vf && !tags.length) {
@@ -3787,14 +3788,30 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">配合</span>{cellMix(s, { center: true, big: true })}</div>
                     <div className="sc-box sc-volbox"><span className="sc-lbl">数量</span>{cellVolume(s)}</div>
                   </div>
-                  {/* 打設 / 種 / 地図（PDF・受信確認列は削除） */}
+                  {/* 打設 / 種 / 特記 / 地図 */}
                   <div className="sc-row"><span className="sc-lbl">打設</span><span className="sc-val">{cell(s, 'pourLocation', '打設箇所')}</span></div>
-                  <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{s.cementType === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (s.cementType || '—')}</span></div>
+                  <div className="sc-row"><span className="sc-lbl">種</span><span className="sc-val">{(() => {
+                    const ct = (v) => v === 'B' ? <b style={{ fontWeight: 800 }}>B</b> : (v || '—')
+                    return s.cementType2 ? <span>{ct(s.cementType)} / {ct(s.cementType2)}</span> : ct(s.cementType)
+                  })()}</span></div>
+                  {/* 特記: 領追(赤太字) + 現工(testTags 略表記) */}
+                  <div className="sc-row"><span className="sc-lbl">特記</span><span className="sc-val">{(() => {
+                    const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
+                    const tests = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')
+                    if (!tags && !tests) return <span style={{ color: '#cbd2dc' }}>—</span>
+                    return (
+                      <span>
+                        {tags ? <b style={{ color: '#c81e1e', fontSize: '1.05em' }}>{tags}</b> : null}
+                        {tags && tests ? <span style={{ marginLeft: 8 }} /> : null}
+                        {tests ? <b style={{ color: '#111' }}>{tests}</b> : null}
+                      </span>
+                    )
+                  })()}</span></div>
                   <div className="sc-row"><span className="sc-lbl">地図</span><span className="sc-val" style={{ fontWeight: 800, color: '#1a7a3a' }}>
                     {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : '—'}
                   </span></div>
-                  {/* 備考（横並び） */}
-                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true })}</span></div>
+                  {/* 備考（横並び）: 領追は特記行に統合したので noTags */}
+                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true, noTags: true })}</span></div>
                   {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
@@ -3823,7 +3840,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       ) : (() => {
         const inner = (<>
         <table>
-          {/* 列構成: 時間 / 業者名+商社 / 現場名 / 打設 / 車種(7%) / 配合 / 数量 / 種(4%) / 担当 / 備考+連絡先 / 地図 / (編集) */}
+          {/* 列構成: 時間 / 業者+商社 / 現場 / 打設 / 車種(7%) / 配合 / 数量 / 種(3%) / 担当 / 備考+連絡先(16%) / 特記(2.5%) / 地図(2.5%) / (編集) */}
           <colgroup>
             <col style={{ width: '7%' }} />
             <col style={{ width: '11%' }} />
@@ -3832,10 +3849,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <col style={{ width: '7%' }} />
             <col style={{ width: '9%' }} />
             <col style={{ width: '7%' }} />
-            <col style={{ width: '4%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '17%' }} />
             <col style={{ width: '3%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '2.5%' }} />
+            <col style={{ width: '2.5%' }} />
             {!isPopup && <col style={{ width: '7%' }} />}
           </colgroup>
           <thead>
@@ -3850,6 +3868,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <th className="th-tight">種</th>
               <th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
+              <th className="th-tight">特記</th>
               <th className="th-tight">地図</th>
               {!isPopup && <th className="th-tight">編集</th>}
             </tr>
@@ -3896,7 +3915,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   return ct(c1)
                 })()}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
-                <td>{cellNotes(s, { plain: true, noVf: true })}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
+                {/* 備考: 領追インラインは特記列に統合したので noTags で抑制 */}
+                <td>{cellNotes(s, { plain: true, noVf: true, noTags: true })}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
+                {/* 特記: 上=領/追(赤太字)、下=現/工(testTags の TP を除く略表記) */}
+                <td className="sc-nowrap" style={{ textAlign: 'center', padding: '2px 2px' }}>{(() => {
+                  const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
+                  const tests = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')
+                  if (!tags && !tests) return null
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                      {tags ? <div style={{ fontSize: 11, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
+                      {tests ? <div style={{ fontSize: 10, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
+                    </div>
+                  )
+                })()}</td>
                 {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
                 <td style={{ textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }}>
                   {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}
