@@ -3794,6 +3794,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
                     <div className="sc-box"><span className="sc-lbl">担当</span>{cellDriversCard(s)}</div>
                     <div className="sc-box sc-vehbox"><span className="sc-lbl">車種</span>
                       <div className="sc-veh">
+                        {/* 補足(vehicleFree) は車種数字の上に表示（備考には出さない） */}
+                        {String(s.vehicleFree || '').trim() ? (
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1b4ea8', lineHeight: 1.1, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.vehicleFree}</div>
+                        ) : null}
                         {cell(s, 'vehicleType', '', { center: true, big: true })}
                       </div>
                     </div>
@@ -3822,8 +3826,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   <div className="sc-row"><span className="sc-lbl">地図</span><span className="sc-val" style={{ fontWeight: 800, color: '#1a7a3a' }}>
                     {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : '—'}
                   </span></div>
-                  {/* 備考（横並び）: 領追は特記行に統合したので noTags */}
-                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true, noTags: true })}</span></div>
+                  {/* 備考（横並び）: 領追は特記行・vehicleFree は車種に統合したので noTags + noVf */}
+                  <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true, noTags: true, noVf: true })}</span></div>
                   {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
