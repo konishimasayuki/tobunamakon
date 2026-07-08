@@ -1173,7 +1173,7 @@ function fitText(ta, min = 7) {
 
 // 横幅に収まるよう文字サイズを自動縮小する input（現場名・現場住所など）。
 // プレースホルダ（透かし）も実テキストと同じく縮小される（同じ要素の font-size を縮めるため）。
-function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style, lang }) {
+function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15, min = 9, type = 'text', style, lang, dataIme }) {
   const ref = useRef(null)
   const composingRef = useRef(false)   // IME変換中フラグ
   const fit = () => {
@@ -1204,6 +1204,7 @@ function FitField({ value, onChange, placeholder, className = 'f', baseSize = 15
     // composingRef はフォント自動調整(fit)を変換中だけ止めるためにのみ使う。
     <input ref={ref} className={className} type={type} value={value} lang={lang}
       autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+      data-ime={dataIme}
       onChange={e => { onChange(e); requestAnimationFrame(fit) }}
       onCompositionStart={() => { composingRef.current = true }}
       onCompositionEnd={e => { composingRef.current = false; onChange(e); requestAnimationFrame(fit) }}
@@ -1272,6 +1273,7 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
       <input className={className} style={style} value={value} placeholder={placeholder} required={required}
+        data-ime="kana"
         onChange={e => { onChange(e); setShowAll(false); setOpen(true) }}
         onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setOpen(true) }}
         onBlur={() => { blurTimer.current = setTimeout(() => { setOpen(false); setShowAll(false) }, 200) }} />
@@ -1870,13 +1872,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl" style={redIf('siteName')}>現 場 名</div>
                     {/* 現場名は従来どおり1行・自動縮小（FitField）。IMEは全角かな（PC対応ブラウザのみ） */}
-                    <FitField value={form.siteName} onChange={set('siteName')} lang="ja" style={{ ...redIf('siteName'), imeMode: 'active' }} />
+                    <FitField value={form.siteName} onChange={set('siteName')} lang="ja" dataIme="kana" style={{ ...redIf('siteName'), imeMode: 'active' }} />
                   </div>
                 </div>
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
                     <div className="lbl">現 場 住 所</div>
-                    <FitField value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} />
+                    <FitField value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} dataIme="kana" />
                   </div>
                 </div>
               </div>
@@ -1896,7 +1898,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                   {/* 補足は textarea で折り返し（2行まで自動拡張）。縦横とも中央寄せ */}
                   <textarea className="f" value={form.vehicleFree || ''}
                     onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, vehicleFree: composing ? v : z2h(v) })) }}
-                    placeholder="補足" rows={2}
+                    placeholder="補足" rows={2} data-ime="kana"
                     style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', display: 'block', fontSize: 12, padding: '10px 6px', textAlign: 'center', border: '1px solid #cdd5e0', borderRadius: 4, minWidth: 0, resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.3, fontFamily: 'inherit', verticalAlign: 'middle' }} />
                 </div>
               </div>
@@ -1918,7 +1920,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                     <div style={{ position: 'relative', height: 40 }}>
                       <textarea value={form.pourLocation}
                         onChange={(e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, pourLocation: composing ? v : z2h(v) })) }}
-                        placeholder="入力" rows={2} className="f pour-input"
+                        placeholder="入力" rows={2} className="f pour-input" data-ime="kana"
                         style={{ ...redIf('pourLocation'), fontSize: 13, textAlign: 'center', border: '1.5px solid #1b4ea8', borderRadius: 6, background: '#f2f7ff', padding: '10px 42px 4px 6px', boxSizing: 'border-box', width: '100%', height: '100%', resize: 'none', wordBreak: 'break-all', overflowWrap: 'anywhere', lineHeight: 1.3, fontFamily: 'inherit', overflowY: 'auto' }} />
                       <button type="button" onClick={() => setForm(f => ({ ...f, pourFree: false, pourLocation: '' }))}
                         style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: '1px solid #bbb', background: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 5px', cursor: 'pointer' }}>一覧</button>
@@ -2173,11 +2175,11 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             <div className="band">
               <div className="cell" style={{ flex: '0 0 50%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em' }}>連 絡 先</div>
-                <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} />
+                <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} data-ime="ascii" inputMode="tel" />
               </div>
               <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em', ...redIf('siteContact') }}>現 場 連 絡 先</div>
-                <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} />
+                <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} data-ime="ascii" inputMode="tel" />
               </div>
             </div>
             {/* 6段: 備考 ＋ メッセージ追加 */}
@@ -4100,11 +4102,11 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
         </div>
         <div>
           <label style={lbl}>現場名</label>
-          <input value={form.siteName} onChange={set('siteName')} style={inp} />
+          <input value={form.siteName} onChange={set('siteName')} style={inp} data-ime="kana" />
         </div>
         <div>
           <label style={lbl}>現場住所</label>
-          <input value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} style={inp} />
+          <input value={form.siteAddress} onChange={set('siteAddress')} placeholder={DEFAULT_SITE_ADDRESS} style={inp} data-ime="kana" />
           <div style={{ marginTop: 10 }}>
             <SiteMap
               address={form.siteAddress}
@@ -4127,6 +4129,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
           {chipRow(VEHICLE_TYPES, o => vehItems().some(v => v.type === o), toggleVehItem)}
           {/* 車種の自由記述（補足） */}
           <input value={form.vehicleFree || ''} onChange={set('vehicleFree')} placeholder="補足（例: ポンプ車）"
+            data-ime="kana"
             style={{ ...inp, marginTop: 8, textAlign: 'center', color: '#1b4ea8', fontWeight: 700 }} />
         </div>
         <div>
@@ -4322,11 +4325,11 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
         </div>
         <div>
           <label style={lbl}>連絡先</label>
-          <input value={form.orderContact} onChange={set('orderContact')} inputMode="tel" style={inp} />
+          <input value={form.orderContact} onChange={set('orderContact')} inputMode="tel" style={inp} data-ime="ascii" />
         </div>
         <div>
           <label style={lbl}>現場連絡先</label>
-          <input value={form.siteContact} onChange={set('siteContact')} inputMode="tel" style={inp} />
+          <input value={form.siteContact} onChange={set('siteContact')} inputMode="tel" style={inp} data-ime="ascii" />
         </div>
         <div>
           <label style={lbl}>担当ドライバー</label>
@@ -5890,6 +5893,33 @@ function SettingsPage() {
         <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
           ※復元は「追加・上書き」です（同じデータは置き換え、今あるデータは消しません）。<br />
           ※添付PDFはバックアップに含まれません（データ本体のみ）。
+        </div>
+      </div>
+
+      {/* 拡張機能ダウンロード */}
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🧩 IME 自動切替 拡張機能（Windows/Chrome・Edge）</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          出荷登録の入力欄で、フィールドに応じて IME モード（かな / 半角英数）のヒントを送るブラウザ拡張機能です。
+          <br />初回フォーカス時のみヒントを送ります。ユーザーが手動で IME を切り替えた後は上書きしません。
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <a href="/tobu-ime-ext.zip" download style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, display: 'inline-block', textDecoration: 'none' }}>📥 拡張機能をダウンロード (ZIP)</a>
+        </div>
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ fontSize: 13, fontWeight: 700, color: '#1a4d8f', cursor: 'pointer' }}>▶ インストール手順（Chrome / Edge）</summary>
+          <ol style={{ fontSize: 12.5, color: '#3a4a5c', lineHeight: 1.8, marginTop: 8, paddingLeft: 22 }}>
+            <li>ダウンロードした ZIP を任意の場所に展開する</li>
+            <li>ブラウザのアドレスバーに <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>chrome://extensions</code>（Edge は <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>edge://extensions</code>）と入力</li>
+            <li>右上の「デベロッパーモード」を <b>ON</b> にする</li>
+            <li>「パッケージ化されていない拡張機能を読み込む」ボタンで、展開したフォルダを選択</li>
+            <li>拡張機能一覧に「東部生コン IME 自動切替」が表示されれば完了</li>
+          </ol>
+        </details>
+        <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
+          ⚠ 対象: 全角かな = 業者名 / 商社名 / 現場名 / 現場住所 / 車種補足 / 打設箇所 / 荷下ろし / 特記 / 備考<br />
+          ⚠ 対象: 半角英数 = 受注日 / 日付 / 時間 / 配合 / 量 / 連絡先 / 現場連絡先<br />
+          ※ Web の制約により IME モードを「必ず」切り替えることは保証できません（ベストエフォート）。
         </div>
       </div>
 
