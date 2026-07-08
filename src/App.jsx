@@ -1271,16 +1271,7 @@ function KanaCombo({ value, onChange, onPick, options, placeholder, className = 
   const pick = (o) => { if (blurTimer.current) clearTimeout(blurTimer.current); onPick(o); setOpen(false); setShowAll(false) }
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%', display: 'flex', alignItems: 'stretch' }}>
-      {/* IME ヒント:
-          ・lang="ja": Chromium 系(Chrome/Edge) が「日本語入力を期待する欄」と認識するヒント
-          ・inputMode="text": IMEを使うテキスト入力である旨のヒント
-          ・autoComplete="off": IME 状態を保つため(オートコンプリートで途中補完されると
-            IME モードが解除される場合がある)
-          ・style.imeMode: Firefox 66 未満の旧仕様。現行は無視されるが害はない
-          ・注意: Windows での IME を強制的に「かな」にする Web 標準 API は存在しません。
-            以下はあくまでヒントで、ユーザーの IME 状態を上書きすることはできません。 */}
-      <input className={className} style={{ imeMode: 'active', ...style }} value={value} placeholder={placeholder} required={required}
-        lang="ja" inputMode="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+      <input className={className} style={style} value={value} placeholder={placeholder} required={required}
         onChange={e => { onChange(e); setShowAll(false); setOpen(true) }}
         onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setOpen(true) }}
         onBlur={() => { blurTimer.current = setTimeout(() => { setOpen(false); setShowAll(false) }, 200) }} />
