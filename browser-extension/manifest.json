@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "東部生コン IME 自動切替",
+  "version": "1.0.0",
+  "description": "東部生コン業務システムの入力欄で、業者名などは全角かな、日付や量などは半角英数への切替を促すヒントを送ります(初回のみ)。ユーザーが手動で切り替えた後はそれを尊重します。",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://tobunamakon.vercel.app/*",
+        "https://*.tobunamakon.vercel.app/*",
+        "http://localhost:5173/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
