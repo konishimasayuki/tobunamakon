@@ -1323,7 +1323,7 @@ function Chips({ options, value, multi, multiStr, onChange, big }) {
 }
 
 // 固定枠＋分割＋文字自動リサイズの動的マス群（時間 / 備考 / ドライバー連絡 共通）
-function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel, minSize = 7 }) {
+function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, addLabel, minSize = 7, dataIme }) {
   const refs = useRef([])
   const composingRef = useRef(false)   // IME変換中フラグ
   const refit = () => requestAnimationFrame(() => {
@@ -1353,6 +1353,7 @@ function DenpyoGrid({ items, onChange, cols = 2, max = Infinity, height = 90, ad
               ref={el => { refs.current[i] = el }}
               className={it.important ? 'is-imp' : ''}
               value={it.text}
+              data-ime={dataIme}
               onCompositionStart={() => { composingRef.current = true }}
               onCompositionEnd={e => { composingRef.current = false; update(i, { text: e.target.value }); requestAnimationFrame(() => fitText(refs.current[i], minSize)) }}
               onChange={e => update(i, { text: e.target.value })}
@@ -1861,7 +1862,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
                 <div className="lbl" style={redIf('times')}>時 間</div>
-                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" minSize={14} />
+                <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" minSize={14} dataIme="ascii" />
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <button type="button" onClick={() => setAmPm('AM')} style={ampmBtnStyle(ampmActive('AM'))}>AM</button>
                   <button type="button" onClick={() => setAmPm('PM')} style={ampmBtnStyle(ampmActive('PM'))}>PM</button>
@@ -1955,7 +1956,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                         onClick={() => setVal('placements', on ? (form.placements || []).filter(x => x !== o) : [...(form.placements || []), o])}>{o}</span>
                     })}
                   </div>
-                  <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" style={{ marginTop: 2, padding: '2px 6px', fontSize: 12 }} />
+                  <input className="unload-input" value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" data-ime="kana" style={{ marginTop: 2, padding: '2px 6px', fontSize: 12 }} />
                 </div>
               </div>
               <div className="cell" style={{ flex: '0 0 18%', minWidth: 0 }}>
@@ -2058,17 +2059,17 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                           <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
                             <div className="hgcol">
                               <div className="hgnote-spacer" />
-                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} onCompositionEnd={e => setMixCell(ri, 0, e.target.value, false)} />
+                              <input className="hg" data-ime="ascii" inputMode="numeric" maxLength={2} value={r.parts[0] || ''} onChange={onHg(ri, 0)} onCompositionEnd={e => setMixCell(ri, 0, e.target.value, false)} />
                             </div>
                             <span className="hgsep">-</span>
                             <div className="hgcol">
-                              <input className="hgnote" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
-                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} onCompositionEnd={e => setMixCell(ri, 1, e.target.value, false)} />
+                              <input className="hgnote" data-ime="kana" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} />
+                              <input className="hg" data-ime="ascii" inputMode="numeric" maxLength={2} value={r.parts[1] || ''} onChange={onHg(ri, 1)} onCompositionEnd={e => setMixCell(ri, 1, e.target.value, false)} />
                             </div>
                             <span className="hgsep">-</span>
                             <div className="hgcol">
                               <div className="hgnote-spacer" />
-                              <input className="hg" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} onCompositionEnd={e => setMixCell(ri, 2, e.target.value, false)} />
+                              <input className="hg" data-ime="ascii" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} onCompositionEnd={e => setMixCell(ri, 2, e.target.value, false)} />
                             </div>
                           </div>
                           {ri > 0 && (
@@ -2117,7 +2118,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                       const inStyle = (s) => ({ width: boxW, maxWidth: '100%', fontSize: isRange ? (big(s) ? 26 : 22) : (big(s) ? 36 : 30), ...(editChanged.includes('volume') ? { fontWeight: 700, color: '#c81e1e' } : volNumStyle(s)) })
                       // 量の特記入力（配合の特記=hgnote と同じ見た目：数値の真上に赤い破線の小さなラベル）
                       const noteInput = (w) => (
-                        <input className="vol-note" value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
+                        <input className="vol-note" data-ime="kana" value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
                           style={{ width: w, maxWidth: '100%', fontSize: 10, fontWeight: 700, textAlign: 'center', color: '#c81e1e', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', background: 'transparent', fontFamily: 'inherit', padding: '0 0 1px', marginBottom: 2 }} />
                       )
                       // 〜/?/+a ボタンは「特記」と同じ高さ（上段）に固定。〜（範囲）押下で数字入力幅が変わっても位置は動かない
@@ -2144,13 +2145,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                           {/* 下段: ×スロット / 数値入力 / m³ */}
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                             <span style={{ width: 22, flexShrink: 0 }} />
-                            <input type="text" inputMode="decimal" style={inStyle(vFrom)} value={vFrom}
+                            <input type="text" inputMode="decimal" data-ime="ascii" style={inStyle(vFrom)} value={vFrom}
                               onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
                               onCompositionEnd={e => setFrom(e.target.value, false)} />
                             {isRange && (
                               <>
                                 <span style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>〜</span>
-                                <input type="text" inputMode="decimal" style={inStyle(vTo)} value={vTo}
+                                <input type="text" inputMode="decimal" data-ime="ascii" style={inStyle(vTo)} value={vTo}
                                   onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
                                   onCompositionEnd={e => setTo(e.target.value, false)} />
                               </>
@@ -2186,7 +2187,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             <div className="band">
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
                 <div className="lbl" style={redIf('notes')}>備 考</div>
-                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" />
+                <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" dataIme="kana" />
               </div>
               <div className="cell" style={{ flex: '0 0 auto', minWidth: 210 }}>
                 <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>メッセージ追加</div>
@@ -4073,7 +4074,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {form.times.map((t, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input value={t.text} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inp, flex: 1 }} />
+                <input value={t.text} onChange={e => setTime(i, e.target.value)} placeholder="例: 08:00 / 午前" style={{ ...inp, flex: 1 }} data-ime="ascii" inputMode="text" />
                 {form.times.length > 1 && <button type="button" onClick={() => delTime(i)} style={smallBtn}>×</button>}
               </div>
             ))}
@@ -4175,10 +4176,10 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
                       {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#101828', paddingBottom: 11 }}>-</span>}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {i === 1
-                          ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記"
+                          ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記" data-ime="kana"
                               style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
                           : <div style={{ height: 16 }} />}
-                        <input value={r.parts[i] || ''} inputMode="numeric" placeholder="00"
+                        <input value={r.parts[i] || ''} inputMode="numeric" data-ime="ascii" placeholder="00"
                           onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
                           onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
                           style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #d4dbe5', borderRadius: 11, padding: '12px 4px', fontFamily: 'inherit', color: '#101828', marginTop: 4 }} />
@@ -4218,17 +4219,17 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
             return (
               <div key={idx} style={{ marginTop: idx ? 8 : 0 }}>
                 {/* 量の特記（数値の上に小さく赤・破線下線） */}
-                <input value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記"
+                <input value={form[nKey] || ''} onChange={e => setVal(nKey, e.target.value)} placeholder="特記" data-ime="kana"
                   style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', fontWeight: 700, textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit', marginBottom: 4 }} />
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input value={vFrom} inputMode="decimal" placeholder="0"
+                  <input value={vFrom} inputMode="decimal" data-ime="ascii" placeholder="0"
                     onChange={e => setFrom(e.target.value, e.nativeEvent?.isComposing)}
                     onCompositionEnd={e => setFrom(e.target.value, false)}
                     style={{ ...inp, flex: 1, fontSize: big(vFrom) ? 22 : 16, fontWeight: big(vFrom) ? 700 : 400 }} />
                   {isRange && (
                     <>
                       <span style={{ fontSize: 18, fontWeight: 700, color: '#101828', flex: '0 0 auto' }}>〜</span>
-                      <input value={vTo} inputMode="decimal" placeholder="0"
+                      <input value={vTo} inputMode="decimal" data-ime="ascii" placeholder="0"
                         onChange={e => setTo(e.target.value, e.nativeEvent?.isComposing)}
                         onCompositionEnd={e => setTo(e.target.value, false)}
                         style={{ ...inp, flex: 1, fontSize: big(vTo) ? 22 : 16, fontWeight: big(vTo) ? 700 : 400 }} />
@@ -4299,7 +4300,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
               return <div key={t} onClick={() => setVal('placements', on ? form.placements.filter(x => x !== t) : [...(form.placements || []), t])} style={{ ...chip(on), flex: '1 1 calc(50% - 4px)' }}>{t}</div>
             })}
           </div>
-          <input value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" style={{ ...inp, marginTop: 8 }} />
+          <input value={unloadText()} onChange={e => setUnload(e.target.value)} placeholder="自由入力（備考に出力）" data-ime="kana" style={{ ...inp, marginTop: 8 }} />
         </div>
         <div>
           <label style={lbl}>メッセージ追加（備考に出力）</label>
@@ -4321,7 +4322,7 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
       <div style={card}>
         <div>
           <label style={lbl}>備考（改行で段落）</label>
-          <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={3} style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
+          <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={3} style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} data-ime="kana" />
         </div>
         <div>
           <label style={lbl}>連絡先</label>
