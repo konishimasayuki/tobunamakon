@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment } from 'react'
+import { isDemoMode, demoLogin, demoRequest } from './demo.js'
 
 // ============================================================
 // 定数
@@ -49,6 +50,11 @@ function useNickReg() {
 const getToken = () => localStorage.getItem('token') || ''
 
 async function request(path, options = {}) {
+  // デモモード(z/z ログイン)は Upstash/サーバに触らず localStorage で応答する
+  if (isDemoMode()) {
+    try { return await demoRequest(path, options) }
+    catch (e) { throw new Error(e?.message || 'デモエラー') }
+  }
   let res
   try {
     res = await fetch(path, {
@@ -181,6 +187,12 @@ function AuthProvider({ children }) {
   }, [])
 
   const login = async (username, password) => {
+    // z/z はデモアカウント。サーバ(Upstash)を一切叩かず localStorage に固定ユーザを設定してログイン扱いにする。
+    if (username === 'z' && password === 'z') {
+      const { user: u } = demoLogin()
+      setUser(u)
+      return
+    }
     const data = await api.post('/api/auth/login', { username, password })
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
@@ -426,6 +438,12 @@ function LoginPage() {
             {loading ? 'ログイン中...' : 'ログイン'}
           </button>
         </form>
+        {/* デモアカウント案内: z/z でクライアント完結の体験モードに入る */}
+        <div style={{ marginTop: 18, padding: 12, background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12, color: '#e6ecf5', lineHeight: 1.6 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>🎯 デモアカウント</div>
+          <div>ユーザー名: <b>z</b> / パスワード: <b>z</b></div>
+          <div style={{ marginTop: 4, fontSize: 11, opacity: 0.85 }}>「日本生コン」名義。50件の架空データが入っており、変更はブラウザ内(localStorage)のみに保存されます。</div>
+        </div>
         <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#c0c8d4' }}>{APP_VERSION}</div>
       </div>
     </div>
