@@ -438,12 +438,6 @@ function LoginPage() {
             {loading ? 'ログイン中...' : 'ログイン'}
           </button>
         </form>
-        {/* デモアカウント案内: z/z でクライアント完結の体験モードに入る */}
-        <div style={{ marginTop: 18, padding: 12, background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12, color: '#e6ecf5', lineHeight: 1.6 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>🎯 デモアカウント</div>
-          <div>ユーザー名: <b>z</b> / パスワード: <b>z</b></div>
-          <div style={{ marginTop: 4, fontSize: 11, opacity: 0.85 }}>「日本生コン」名義。50件の架空データが入っており、変更はブラウザ内(localStorage)のみに保存されます。</div>
-        </div>
         <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#c0c8d4' }}>{APP_VERSION}</div>
       </div>
     </div>
