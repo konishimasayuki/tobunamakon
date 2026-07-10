@@ -2563,14 +2563,14 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     e.preventDefault()
     setError('')
     if (!form.date || !form.companyName) { setError('日付と業者名は必須です'); return }
-    // キャンセル伝票の復元経由で開いた伝票を更新するときのみ、日付の確認を挟む
-    if (editing && restoreMode) {
-      if (!window.confirm(`この日付（${form.date}）で復元してもいいですか？`)) return
-    }
     setSaveConfirm(true)
   }
   // 実際の保存処理（確認モーダルで「はい」を押したら走る）
   const doSave = async () => {
+    // キャンセル伝票の復元経由の更新は、プレビューの「更新」を押した時に日付を確認する
+    if (editing && restoreMode) {
+      if (!window.confirm(`この日付（${form.date}）で復元してもいいですか？`)) { setSaveConfirm(false); return }
+    }
     setSaveConfirm(false)
     setError('')
     setSaving(true)
@@ -4867,7 +4867,7 @@ function SeikonOutputPage({ isPopup }) {
   // テーブル用の行: 配合は1つにつき1行に分ける。数量(2種)は先頭行の数量セル内で改行表示する
   const tableRows = []
   rows.forEach(s => {
-    const mixes = mixRowsOfShip(s).filter(r => r.code)   // {code, note=配合の特記}
+    const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)   // {code, note=配合の特記}。数字が無く特記のみの行も残す
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     // 数量は値ごとに特記(volumeNote)を持たせる
@@ -4876,6 +4876,12 @@ function SeikonOutputPage({ isPopup }) {
     for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
 
+  // 配合セルの中身：数字があれば「特記(小・上) + 数字」。
+  // 数字が無く特記だけのときは、特記を数字の位置に数字と同じ大きさで表示する。
+  const mixCell = (r) => r.mix
+    ? <>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></>
+    : <div style={{ whiteSpace: 'normal' }}>{r.mixNote || ''}</div>
+
   // 1行を描画。配合の2行目以降（!primary）は配合のみ（その他は空）
   const renderRow = (r, key) => {
     const s = r.s
@@ -4883,7 +4889,7 @@ function SeikonOutputPage({ isPopup }) {
       return (
         <tr key={key}>
           <td></td><td></td><td></td><td></td>
-          <td className="seikon-mix">{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></td>
+          <td className="seikon-mix">{mixCell(r)}</td>
           <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
         </tr>
       )
@@ -4907,7 +4913,7 @@ function SeikonOutputPage({ isPopup }) {
         <td style={red(chg('siteName'))}>{s.siteName || ''}</td>
         <td className="seikon-datsu" style={red(chg('pourLocation'))}>{s.pourLocation || ''}</td>
         <td className="seikon-veh" style={red(chg('vehicleType', 'vehicleFree'))}>{vf.veh ? <div style={{ fontSize: vfVehFont(vf.veh, 12), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: chg('vehicleFree') ? '#c81e1e' : '#1b4ea8' }}>{vf.veh}</div> : null}<div>{vehicleLabel(s) || ''}</div></td>
-        <td className="seikon-mix" style={red(chg('mixCode', 'mix0', 'mix1', 'mix2', 'mixnote'))}>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></td>
+        <td className="seikon-mix" style={red(chg('mixCode', 'mix0', 'mix1', 'mix2', 'mixnote'))}>{mixCell(r)}</td>
         <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400, ...red(chg('cementType')) }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center', ...red(chg('volume')) }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></div>) : ''}</td>
         <td style={{ textAlign: 'center', ...red(chg('times') || timeImp, true) }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
