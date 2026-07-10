@@ -33,7 +33,8 @@
 
 ## 未対応 / 保留
 - **時刻の並び順改良**: `1300` や `13-13:30` を 13:00 として扱う（現状はコロン必須・`13-13:30`は終わり側を拾う）。未実装。
-- **IME 全角かな**: `ime-mode` は Firefox のみ有効。Chrome/iOS は不可（Web標準で強制不可）。代替案＝ローマ字→かな自動変換 等。
+- **IME 全角かな（ブラウザ単体）**: `ime-mode` は Firefox のみ有効。Chrome/iOS は不可（Web標準で強制不可）。
+  - → **解決策を実装済み**: `browser-extension/` に **Native Messaging 方式の Windows 常駐ホスト** を追加。拡張機能→`background.js`→`tobu-ime-host.exe`(C#/IMM32) で **Chrome/Edge の IME を実際に切替**（全角かな⇄半角英数）。`install.bat`(Windows同梱 csc でその場ビルド＆登録)。拡張IDは `key` 固定=`boldmmjiahdcnocjlfpmillongehdogk`（ホスト許可リストと一致）。**スマホ/iOS は引き続き不可**。
 - 生コン出荷予定表(SeikonOutputPage)のCSVは販売大臣向けに「担当」を含む（表示は担当連絡先=現場連絡先で担当名は出さない）。
 
 ## ⚠️ 既知の注意・運用メモ

@@ -5911,28 +5911,30 @@ function SettingsPage() {
 
       {/* 拡張機能ダウンロード */}
       <div style={box}>
-        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🧩 IME 自動切替 拡張機能（Windows/Chrome・Edge）</h3>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🧩 IME 自動切替（Windows/Chrome・Edge）</h3>
         <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
-          出荷登録の入力欄で、フィールドに応じて IME モード（かな / 半角英数）のヒントを送るブラウザ拡張機能です。
-          <br />初回フォーカス時のみヒントを送ります。ユーザーが手動で IME を切り替えた後は上書きしません。
+          入力欄にフォーカスすると、フィールドに応じて IME を<b>自動で切り替え</b>ます（業者名・現場名などは全角かな / 日付・量などは半角英数）。
+          <br />拡張機能に加え <b>Windows 常駐ホスト（同梱の <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>install.bat</code>）</b>を導入すると、IME が<b>実際に</b>切り替わります。未導入時はヒントのみ（従来動作）。
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <a href="/tobu-ime-ext.zip" download style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, display: 'inline-block', textDecoration: 'none' }}>📥 拡張機能をダウンロード (ZIP)</a>
+          <a href="/tobu-ime-ext.zip" download style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, display: 'inline-block', textDecoration: 'none' }}>📥 一式をダウンロード (ZIP)</a>
         </div>
         <details style={{ marginTop: 10 }}>
-          <summary style={{ fontSize: 13, fontWeight: 700, color: '#1a4d8f', cursor: 'pointer' }}>▶ インストール手順（Chrome / Edge）</summary>
+          <summary style={{ fontSize: 13, fontWeight: 700, color: '#1a4d8f', cursor: 'pointer' }}>▶ 導入手順（Windows / Chrome・Edge）</summary>
           <ol style={{ fontSize: 12.5, color: '#3a4a5c', lineHeight: 1.8, marginTop: 8, paddingLeft: 22 }}>
-            <li>ダウンロードした ZIP を任意の場所に展開する</li>
-            <li>ブラウザのアドレスバーに <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>chrome://extensions</code>（Edge は <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>edge://extensions</code>）と入力</li>
+            <li>ダウンロードした ZIP を任意の場所に展開する（<b>展開後にフォルダを移動しない</b>）</li>
+            <li>フォルダ内の <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>install.bat</code> を<b>ダブルクリック</b>（ホストをその場でビルド＆登録。追加インストール不要）</li>
+            <li>ブラウザで <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>chrome://extensions</code>（Edge は <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>edge://extensions</code>）を開く</li>
             <li>右上の「デベロッパーモード」を <b>ON</b> にする</li>
             <li>「パッケージ化されていない拡張機能を読み込む」ボタンで、展開したフォルダを選択</li>
-            <li>拡張機能一覧に「東部生コン IME 自動切替」が表示されれば完了</li>
+            <li>入力欄を移動して IME が自動で切り替われば完了（切り替わらない時は拡張の「更新」かブラウザ再起動）</li>
           </ol>
         </details>
         <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
           ⚠ 対象: 全角かな = 業者名 / 商社名 / 現場名 / 現場住所 / 車種補足 / 打設箇所 / 荷下ろし / 特記 / 備考<br />
           ⚠ 対象: 半角英数 = 受注日 / 日付 / 時間 / 配合 / 量 / 連絡先 / 現場連絡先<br />
-          ※ Web の制約により IME モードを「必ず」切り替えることは保証できません（ベストエフォート）。
+          ※ 常駐ホストは Windows のみ。Microsoft IME で最も安定します（環境により効きが異なる場合あり）。<br />
+          ※ スマホ/iPad は非対応（ホスト未導入時のヒントのみ）。
         </div>
       </div>
 
@@ -6050,6 +6052,9 @@ function Layout({ children, activeTab, onTabChange }) {
 
   const closeSidebar = () => setOpen(false)
 
+  // デモ（z/z ログイン）では会社名を「日本生コン」に差し替える。本番は「東部生コン」。
+  const coName = isDemoMode() ? '日本生コン' : '東部生コン'
+
   const handleTab = (id) => {
     onTabChange(id)
     closeSidebar()
@@ -6071,7 +6076,7 @@ function Layout({ children, activeTab, onTabChange }) {
         <div style={S.sideHead}>
           <div style={{ fontSize: 26 }}>🏗</div>
           <div>
-            <div style={S.coName}>東部生コン</div>
+            <div style={S.coName}>{coName}</div>
             <div style={S.syName}>業務管理システム</div>
           </div>
         </div>
@@ -6100,7 +6105,7 @@ function Layout({ children, activeTab, onTabChange }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ fontSize: 26 }}>🏗</div>
               <div>
-                <div style={S.coName}>東部生コン</div>
+                <div style={S.coName}>{coName}</div>
                 <div style={S.syName}>業務管理システム</div>
               </div>
             </div>
