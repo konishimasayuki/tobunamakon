@@ -1,0 +1,9 @@
+{
+  "name": "com.tobu.ime",
+  "description": "Tobu IME switch native host",
+  "path": "tobu-ime-host.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://boldmmjiahdcnocjlfpmillongehdogk/"
+  ]
+}

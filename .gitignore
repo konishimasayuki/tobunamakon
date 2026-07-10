@@ -21,3 +21,6 @@ npm-debug.log*
 
 # Vercel
 .vercel
+
+# IME native host build artifact (built locally by install.bat)
+browser-extension/tobu-ime-host.exe
