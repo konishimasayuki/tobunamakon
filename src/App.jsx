@@ -2282,7 +2282,7 @@ function openPdfViewer(id) {
   w.document.close()
 }
 
-function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, isPopup }) {
+function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, pendingRestore, onRestoreConsumed, isPopup }) {
   const isMobile = useIsMobile()
   const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
   const [form, setForm]             = useState({ ...emptyShipForm })
@@ -2300,6 +2300,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [picked, setPicked] = useState(null)   // 一覧でシングルクリックして色が変わっている行（ダブルクリックで選択）
   const [editing, setEditing]       = useState(null)
   const [editChanged, setEditChanged] = useState([])
+  const [restoreMode, setRestoreMode] = useState(false)   // キャンセル伝票の復元経由で編集中か（更新時に日付確認を出す）
   const [page, setPage]             = useState(0)
   const [mapKey, setMapKey]         = useState(0)   // 別伝票を開いた/リセット時にSiteMapを再マウント（描画モード解除＋新住所で再描画）
   const topRef = useRef(null)
@@ -2504,6 +2505,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     setEditChanged(Array.isArray(s.changedFields) ? s.changedFields : [])
     setForm(toForm(s))
     setError('')
+    setRestoreMode(false)   // 通常の編集開始では復元確認は出さない（復元経由の時だけ後段でtrueにする）
     setMapKey(k => k + 1)   // 描画モード中でも地図を作り直して新しい伝票の位置・矢印で再描画する
     requestAnimationFrame(() => topRef.current?.scrollTo({ top: 0, behavior: 'smooth' }))
   }
@@ -2518,7 +2520,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   useEffect(() => {
     if (pendingEditId && shipments.length) {
       const s = shipments.find(x => x.id === pendingEditId)
-      if (s) { startEdit(s); onPendingConsumed && onPendingConsumed() }
+      if (s) {
+        startEdit(s)
+        // キャンセル伝票の「復元する」経由で開いた場合は、更新時に日付確認を出すため印を立てる
+        if (pendingRestore) { setRestoreMode(true); onRestoreConsumed && onRestoreConsumed() }
+        onPendingConsumed && onPendingConsumed()
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditId, shipments])
@@ -2556,6 +2563,10 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     e.preventDefault()
     setError('')
     if (!form.date || !form.companyName) { setError('日付と業者名は必須です'); return }
+    // キャンセル伝票の復元経由で開いた伝票を更新するときのみ、日付の確認を挟む
+    if (editing && restoreMode) {
+      if (!window.confirm(`この日付（${form.date}）で復元してもいいですか？`)) return
+    }
     setSaveConfirm(true)
   }
   // 実際の保存処理（確認モーダルで「はい」を押したら走る）
@@ -2574,6 +2585,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         setShipments(ss => sortShip(ss.map(s => s.id === updated.id ? updated : s)))
         setEditing(null)
         setEditChanged([])
+        setRestoreMode(false)      // 復元の更新は完了。以降の新規登録では確認を出さない
         setForm({ ...emptyShipForm })
         setMapKey(k => k + 1)      // 更新後は地図を作り直し（描画モードを解除して初期状態へ）
         notifyShipmentsChanged()   // 他タブ（出荷予定表）に更新を通知
@@ -2590,11 +2602,12 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     finally { setSaving(false) }
   }
 
-  const handleReset = () => { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
+  const handleReset = () => { setEditing(null); setEditChanged([]); setRestoreMode(false); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
   // コピーして複製：今のフォーム内容を新規扱いにする（保存すると新しい伝票になる。PDF添付は引き継がない）
   const handleDuplicate = () => {
     setEditing(null)
     setEditChanged([])
+    setRestoreMode(false)   // 複製は新規扱い。復元確認は出さない
     // 複製と分かるよう現場名に「 コピー」を付ける。PDF添付は引き継がない。受注日は本日（新規作成日）に
     setForm(f => ({ ...f, orderDate: localToday(), siteName: ((f.siteName || '') + ' コピー').trim(), pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
     setMapKey(k => k + 1)
@@ -2610,7 +2623,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       setDeleteConfirm(null)
       setShipments(ss => ss.filter(s => s.id !== id))
       // 削除した伝票を編集中だった場合は入力フォームをクリア（新規状態に戻す）
-      if (editing === id) { setEditing(null); setEditChanged([]); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
+      if (editing === id) { setEditing(null); setEditChanged([]); setRestoreMode(false); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
       setPicked(p => p === id ? null : p)
     } catch (e) { alert('エラー: ' + e.message) }
   }
@@ -6184,6 +6197,8 @@ function AppInner() {
   const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : view === 'assign' ? 'assign' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
+  // キャンセル伝票の「復元する」経由で編集を開いたか（＝更新時に日付確認を出す）
+  const [pendingRestore, setPendingRestore] = useState(false)
   // 準備中（パスワード保護）タブ。セッション中はアンロック状態を保持
   const LOCKED_TABS = ['shipreport', 'driverreport']
   const [unlocked, setUnlocked] = useState({})
@@ -6207,14 +6222,14 @@ function AppInner() {
   let page = activeTab === 'dashboard' ? <DashboardPage />
     : activeTab === 'customers' ? <CustomersPage />
     : activeTab === 'employees' ? <EmployeesPage />
-    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} isPopup={isPopup} />
+    : activeTab === 'shipments' ? <ShipmentsPage editTarget={editTarget} onEditConsumed={() => setEditTarget(null)} pendingEditId={pendingEditId} onPendingConsumed={() => setPendingEditId('')} pendingRestore={pendingRestore} onRestoreConsumed={() => setPendingRestore(false)} isPopup={isPopup} />
     : activeTab === 'schedule' ? <SchedulePage isPopup={isPopup} onEditShipment={(s) => { setEditTarget(s); setActiveTab('shipments') }} />
     : activeTab === 'weekly' ? <WeeklySchedulePage />
     : activeTab === 'seikon' ? (notPC && !isPopup
       ? <div style={{ padding: 24, color: '#6b7a8d' }}>生コン出荷予定表出力はパソコンからご利用ください。</div>
       : <SeikonOutputPage isPopup={isPopup} />)
     : activeTab === 'assign' ? <AssignPage isPopup={isPopup} />
-    : activeTab === 'cancel' ? <CancelPage onRestoreEdit={(id) => { setPendingEditId(id); setActiveTab('shipments') }} />
+    : activeTab === 'cancel' ? <CancelPage onRestoreEdit={(id) => { setPendingEditId(id); setPendingRestore(true); setActiveTab('shipments') }} />
     : activeTab === 'shipreport' ? <ShipReportPage />
     : activeTab === 'driverreport' ? <DriverReportPage />
     : activeTab === 'settings' ? <SettingsPage />
