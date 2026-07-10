@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "東部生コン IME 自動切替",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "業務システムの入力欄で、業者名などは全角かな、日付や量などは半角英数へ IME を自動で切り替えます。Windows 常駐ホスト(tobu-ime-host.exe)と連携すると実際に切り替わります。未導入時はヒントのみ(ベストエフォート)。",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx/yKw5rfiSbya/W0Se+PbDZpAlUJNBzch1prheW24Wl9qBf4FmY+WnNKB0X1PGqfo1rABgdx+4jWtt37nY5v7gpN1yk7P9vL4AprWlloqtXcLy/4uMmcAOT0h9Ugvn5U51OugJdlMnm1k79oMQ25lKlQZQC6oYU1n8pjmhzBW48lMuXjEenwxiYl+EaHOuuBYCBOvVKO7D47wdpLstDZMpJpjnjgqbRJEMc5naxTPXGKa77NM6VefN3NrImqFLjPLUAnbcWY3SbOVeTVQr2L/L5EyUMQolcdWvXozT4RuK1qChnAOAGCetPv162rkbEeN7fUV9Z78JYkFgIlMHzYRwIDAQAB",
   "icons": {
