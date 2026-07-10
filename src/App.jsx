@@ -3318,7 +3318,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
     }
     if (opts.multiline) {
       const rows = Math.max(1, (v.match(/\n/g) || []).length + 1)
-      return <textarea {...common} className={cls + ' sc-ta'} rows={rows} />
+      // 入力中に改行を足したら、その場で行数を増やしてセクションを1行分高くする
+      // （uncontrolled のため通常は再描画されず伸びない。改行削除時も追従して縮める）
+      const grow = (e) => {
+        const el = e.currentTarget
+        const n = Math.max(1, (el.value.match(/\n/g) || []).length + 1)
+        if (el.rows !== n) { el.rows = n; fitOne(el) }
+      }
+      return <textarea {...common} className={cls + ' sc-ta'} rows={rows} onInput={grow} />
     }
     return <input {...common} className={cls} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); e.currentTarget.blur() } }} />
   }
