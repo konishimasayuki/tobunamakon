@@ -11,13 +11,35 @@ import { v4 as uuidv4 } from 'uuid'
 
 const INDEX_KEY = 'debug:threads'   // sorted set: score=updatedAt(ms)
 const KEY = (id: string) => `debug:thread:${id}`
-const MAX_IMG = 3 * 1024 * 1024  // 3MB
+const MAX_IMG = 3 * 1024 * 1024      // 1枚あたり 3MB
+const MAX_IMAGES = 8                  // 1投稿あたりの枚数上限
+const MAX_TOTAL = 3 * 1024 * 1024     // 1投稿の画像合計(デコード後)上限。Vercelのボディ上限(約4.5MB)対策
 
 function sizeOfDataUrl(s: string): number {
   if (!s) return 0
   const i = s.indexOf(',')
   const b64 = i >= 0 ? s.slice(i + 1) : s
   return Math.floor(b64.length * 3 / 4)
+}
+
+// 新形式 images[] を優先。旧形式 image(単一)しか無ければ配列化。string以外/空は除去し枚数上限で切る。
+function normalizeImages(images: any, legacy: any): string[] {
+  let arr: string[] = []
+  if (Array.isArray(images)) arr = images.filter((x) => typeof x === 'string' && x)
+  else if (typeof legacy === 'string' && legacy) arr = [legacy]
+  return arr.slice(0, MAX_IMAGES)
+}
+
+// 画像配列の検証。問題があればエラーメッセージ、無ければ null。
+function validateImages(arr: string[]): string | null {
+  let total = 0
+  for (const s of arr) {
+    const sz = sizeOfDataUrl(s)
+    if (sz > MAX_IMG) return `画像が大きすぎます（1枚あたり最大 ${MAX_IMG / 1024 / 1024}MB）`
+    total += sz
+  }
+  if (total > MAX_TOTAL) return `画像の合計が大きすぎます（合計 ${Math.round(MAX_TOTAL / 1024 / 1024)}MB まで）。枚数を減らしてください`
+  return null
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -59,19 +81,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 新規スレッド作成 (POST /api/debug)
   if (req.method === 'POST' && !id) {
     try {
-      const { title, body, image } = req.body || {}
-      if (!String(title || '').trim() && !String(body || '').trim() && !image) {
+      const { title, body, image, images } = req.body || {}
+      const imgs = normalizeImages(images, image)
+      if (!String(title || '').trim() && !String(body || '').trim() && !imgs.length) {
         return res.status(400).json({ error: 'タイトル・本文・画像のいずれかは必須です' })
       }
-      if (image && sizeOfDataUrl(image) > MAX_IMG) {
-        return res.status(400).json({ error: `画像が大きすぎます（最大 ${MAX_IMG / 1024 / 1024}MB）` })
-      }
+      const verr = validateImages(imgs)
+      if (verr) return res.status(400).json({ error: verr })
       const now = new Date().toISOString()
       const thread = {
         id: uuidv4(),
         title: String(title || '').slice(0, 200),
         body: String(body || '').slice(0, 5000),
-        image: image || '',
+        image: '',            // 旧形式は未使用（表示は images を優先。既存スレッドの image は温存）
+        images: imgs,
         author: { id: user.id, name: user.username },
         createdAt: now,
         updatedAt: now,
@@ -88,20 +111,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 返信追加 (POST /api/debug?id=...)
   if (req.method === 'POST' && id) {
     try {
-      const { body, image } = req.body || {}
-      if (!String(body || '').trim() && !image) {
+      const { body, image, images } = req.body || {}
+      const imgs = normalizeImages(images, image)
+      if (!String(body || '').trim() && !imgs.length) {
         return res.status(400).json({ error: '本文または画像が必要です' })
       }
-      if (image && sizeOfDataUrl(image) > MAX_IMG) {
-        return res.status(400).json({ error: `画像が大きすぎます（最大 ${MAX_IMG / 1024 / 1024}MB）` })
-      }
+      const verr = validateImages(imgs)
+      if (verr) return res.status(400).json({ error: verr })
       const raw = await redis.get<any>(KEY(id as string))
       if (!raw) return res.status(404).json({ error: 'スレッドが見つかりません' })
       const t = typeof raw === 'string' ? JSON.parse(raw) : raw
       const reply = {
         id: uuidv4(),
         body: String(body || '').slice(0, 5000),
-        image: image || '',
+        image: '',            // 表示は images を優先
+        images: imgs,
         author: { id: user.id, name: user.username },
         createdAt: new Date().toISOString(),
       }

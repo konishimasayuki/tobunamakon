@@ -313,8 +313,8 @@ export async function demoRequest(rawPath, options = {}) {
   if (path === '/api/debug') {
     if (method === 'GET' && !q.id) return Object.values(db.debug).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
     if (method === 'GET' && q.id) return db.debug[q.id] || null
-    if (method === 'POST' && !q.id) { const id = uuid(); const now = new Date().toISOString(); const t = { id, title: body.title || '', body: body.body || '', image: body.image || '', author: { id: USER.id, name: USER.username }, createdAt: now, updatedAt: now, replies: [] }; db.debug[id] = t; save(db); return t }
-    if (method === 'POST' && q.id) { const t = db.debug[q.id]; if (!t) throw new Error('見つかりません'); const now = new Date().toISOString(); t.replies.push({ id: uuid(), body: body.body || '', image: body.image || '', author: { id: USER.id, name: USER.username }, createdAt: now }); t.updatedAt = now; save(db); return t }
+    if (method === 'POST' && !q.id) { const id = uuid(); const now = new Date().toISOString(); const imgs = Array.isArray(body.images) ? body.images : (body.image ? [body.image] : []); const t = { id, title: body.title || '', body: body.body || '', image: '', images: imgs, author: { id: USER.id, name: USER.username }, createdAt: now, updatedAt: now, replies: [] }; db.debug[id] = t; save(db); return t }
+    if (method === 'POST' && q.id) { const t = db.debug[q.id]; if (!t) throw new Error('見つかりません'); const now = new Date().toISOString(); const imgs = Array.isArray(body.images) ? body.images : (body.image ? [body.image] : []); t.replies.push({ id: uuid(), body: body.body || '', image: '', images: imgs, author: { id: USER.id, name: USER.username }, createdAt: now }); t.updatedAt = now; save(db); return t }
     if (method === 'DELETE' && q.id) { delete db.debug[q.id]; save(db); return { ok: true } }
   }
 
