@@ -1,52 +1,52 @@
 @echo off
-chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 echo ============================================
-echo   東部生コン IME 自動切替 ホスト インストール
+echo   Tobu IME switch  -  Host installer
 echo ============================================
 echo.
 
-rem --- .NET Framework の csc.exe を探す（Windows 同梱・追加インストール不要） ---
+rem --- Find the .NET Framework csc.exe (built into Windows 10/11) ---
 set "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if not exist "%CSC%" set "CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe"
 if not exist "%CSC%" (
-  echo [エラー] .NET Framework の csc.exe が見つかりません。
-  echo         Windows の .NET Framework 4.x が必要です。
+  echo [ERROR] .NET Framework csc.exe was not found.
+  echo         .NET Framework 4.x is required.
   goto :fail
 )
 
-echo [1/3] ホストをコンパイルしています...
+echo [1/3] Compiling host ...
 "%CSC%" /nologo /target:winexe /out:"%~dp0tobu-ime-host.exe" "%~dp0TobuImeHost.cs"
 if errorlevel 1 goto :fail
 if not exist "%~dp0tobu-ime-host.exe" goto :fail
-echo       -^> tobu-ime-host.exe を作成しました。
+echo       ok: tobu-ime-host.exe created.
 
-echo [2/3] Chrome にネイティブホストを登録しています...
+echo [2/3] Registering native host for Chrome ...
 reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.tobu.ime" /ve /t REG_SZ /d "%~dp0com.tobu.ime.json" /f >nul 2>&1
 
-echo [3/3] Edge にネイティブホストを登録しています...
+echo [3/3] Registering native host for Edge ...
 reg add "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.tobu.ime" /ve /t REG_SZ /d "%~dp0com.tobu.ime.json" /f >nul 2>&1
 
 echo.
 echo ============================================
-echo   インストール完了！
+echo   Installation complete.
 echo ============================================
 echo.
-echo 次にブラウザ側の拡張機能を読み込んでください:
-echo   1) chrome://extensions （Edge は edge://extensions）を開く
-echo   2) 右上「デベロッパーモード」を ON
-echo   3)「パッケージ化されていない拡張機能を読み込む」で
-echo      このフォルダ（%~dp0）を選択
+echo Next: load the browser extension.
+echo   1) Open  chrome://extensions   (Edge: edge://extensions)
+echo   2) Turn ON "Developer mode" (top-right)
+echo   3) Click "Load unpacked" and select THIS folder:
+echo      %~dp0
 echo.
-echo   ※ 既に読み込み済みの場合は、拡張機能の「更新」ボタンを押すか
-echo      ブラウザを再起動してください。
+echo   If it is already loaded, click the extension's Reload
+echo   button or restart the browser.
 echo.
 goto :end
 
 :fail
 echo.
-echo [失敗] インストールを中止しました。
+echo [FAILED] Installation was aborted.
 :end
-pause
+echo Press any key to close...
+pause >nul
 endlocal
