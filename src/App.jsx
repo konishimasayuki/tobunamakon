@@ -6050,6 +6050,9 @@ function Layout({ children, activeTab, onTabChange }) {
 
   const closeSidebar = () => setOpen(false)
 
+  // デモ（z/z ログイン）では会社名を「日本生コン」に差し替える。本番は「東部生コン」。
+  const coName = isDemoMode() ? '日本生コン' : '東部生コン'
+
   const handleTab = (id) => {
     onTabChange(id)
     closeSidebar()
@@ -6071,7 +6074,7 @@ function Layout({ children, activeTab, onTabChange }) {
         <div style={S.sideHead}>
           <div style={{ fontSize: 26 }}>🏗</div>
           <div>
-            <div style={S.coName}>東部生コン</div>
+            <div style={S.coName}>{coName}</div>
             <div style={S.syName}>業務管理システム</div>
           </div>
         </div>
@@ -6100,7 +6103,7 @@ function Layout({ children, activeTab, onTabChange }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ fontSize: 26 }}>🏗</div>
               <div>
-                <div style={S.coName}>東部生コン</div>
+                <div style={S.coName}>{coName}</div>
                 <div style={S.syName}>業務管理システム</div>
               </div>
             </div>
