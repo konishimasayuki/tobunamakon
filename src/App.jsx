@@ -4881,11 +4881,18 @@ function SeikonOutputPage({ isPopup }) {
     for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
 
+  // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる
+  const mixSpans = (code) => String(code || '').split('-').map((p, i) => (
+    <Fragment key={i}>
+      {i > 0 && <span style={{ margin: '0 0.16em' }}>-</span>}
+      {p === '' ? <span style={{ display: 'inline-block', minWidth: '0.5em' }} /> : <span>{p}</span>}
+    </Fragment>
+  ))
   // 配合セルの中身：数字があれば「特記(小・上) + 数字」。
   // 数字が無く特記だけのときは、特記を数字の位置に数字と同じ大きさで表示する。
   const mixCell = (r) => r.mix
-    ? <>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></>
-    : <div style={{ whiteSpace: 'normal', letterSpacing: 'normal' }}>{r.mixNote || ''}</div>
+    ? <>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{mixSpans(r.mix)}</div></>
+    : <div style={{ whiteSpace: 'normal' }}>{r.mixNote || ''}</div>
 
   // 1行を描画。配合の2行目以降（!primary）は配合のみ（その他は空）
   const renderRow = (r, key) => {
@@ -4936,13 +4943,15 @@ function SeikonOutputPage({ isPopup }) {
           <div className="seikon-test">{testAbbr}</div>
         </td>
         <td style={{ textAlign: 'center' }}>{(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}</td>
-        <td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleDen(s.id)}>{denSet.has(s.id) ? '✔' : ''}</td>
+        <td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleDen(s.id)} title="電話連絡済みチェック">
+          <span style={{ display: 'inline-block', width: 15, height: 15, border: '1.5px solid #444', borderRadius: 3, lineHeight: '12px', fontSize: 12, fontWeight: 800, color: '#0f3060', boxSizing: 'border-box', verticalAlign: 'middle' }}>{denSet.has(s.id) ? '✓' : ''}</span>
+        </td>
         <td></td>
       </tr>
     )
   }
 
-  const ROWS = 22   // 件数が少ない日でも余分な2ページ目を出さず1枚に収める（22行なら A4横1ページに収まる）
+  const ROWS = 20   // 空白の埋め行で2ページ目が出ないよう余裕を持たせる（A4横1ページに確実に収める）
   const blanks = Math.max(0, ROWS - tableRows.length)
   const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '摘要', '特記', '地図', '電', 'メモ']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
