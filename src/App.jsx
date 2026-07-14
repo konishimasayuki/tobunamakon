@@ -1858,13 +1858,13 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <input className="f" type="date" value={form.date} onChange={set('date')} required />
               </div>
               <div className="cell" style={{ flex: '0 0 36%' }}>
-                <div className="lbl" style={redIf('companyName')}>業 者 名</div>
+                <div className="lbl">業 者 名</div>
                 <KanaCombo value={form.companyName} onChange={handleCompanyInput}
                   onPick={o => setForm(f => ({ ...f, companyId: o.id || '', companyName: o.label }))}
                   options={companyComboOptions} placeholder="入力して検索（ひらがな可）" style={redIf('companyName')} required />
               </div>
               <div className="cell" style={{ flex: 1 }}>
-                <div className="lbl" style={redIf('tradingCompany')}>商 社 名</div>
+                <div className="lbl">商 社 名</div>
                 <KanaCombo value={form.tradingCompany} onChange={set('tradingCompany')}
                   onPick={o => setVal('tradingCompany', o.label)}
                   options={tradingComboOptions} placeholder="入力して選択（ひらがな可）" style={redIf('tradingCompany')} />
@@ -1873,7 +1873,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             {/* 2段: 時間 / 現場名 */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 24%' }}>
-                <div className="lbl" style={redIf('times')}>時 間</div>
+                <div className="lbl">時 間</div>
                 <DenpyoGrid items={form.times} onChange={v => setVal('times', v)} cols={1} max={2} height={48} addLabel="＋ 時間を追加" minSize={14} dataIme="ascii" />
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <button type="button" onClick={() => setAmPm('AM')} style={ampmBtnStyle(ampmActive('AM'))}>AM</button>
@@ -1883,7 +1883,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
               <div className="cell stack" style={{ flex: 1, padding: 0 }}>
                 <div className="subrow">
                   <div className="cell" style={{ flex: 1 }}>
-                    <div className="lbl" style={redIf('siteName')}>現 場 名</div>
+                    <div className="lbl">現 場 名</div>
                     {/* 現場名は従来どおり1行・自動縮小（FitField）。IMEは全角かな（PC対応ブラウザのみ） */}
                     <FitField value={form.siteName} onChange={set('siteName')} lang="ja" dataIme="kana" style={{ ...redIf('siteName'), imeMode: 'active' }} />
                   </div>
@@ -1899,7 +1899,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             {/* 3段: 車種 / 打設箇所 / 試験 / 特記 / 荷下ろし / PDF（セメント種・受信確認は外し、荷下ろしを4段から移動） */}
             <div className="band">
               <div className="cell" style={{ flex: '0 0 22%', minWidth: 0 }}>
-                <div className="lbl" style={{ ...redIf('vehicleType'), textAlign: 'center' }}>車 種</div>
+                <div className="lbl" style={{ textAlign: 'center' }}>車 種</div>
                 <div className="btn-mid" style={{ gap: 4 }}>
                   {/* 車種チップは横並びで縦をコンパクトに */}
                   <div style={{ display: 'flex', justifyContent: 'center', gap: 4, flexWrap: 'nowrap' }}>
@@ -1916,7 +1916,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
               <div className="cell" style={{ flex: '0 0 16%', minWidth: 0 }}>
-                <div className="lbl sm" style={redIf('pourLocation')}>打 設 箇 所</div>
+                <div className="lbl sm">打 設 箇 所</div>
                 <div className="btn-mid">
                   {!form.pourFree ? (
                     <select className="f pour-sel" style={{ ...redIf('pourLocation'), fontSize: 16, textAlign: 'center', textAlignLast: 'center' }} value={form.pourLocation}
@@ -2031,7 +2031,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
               <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
                 {/* 「配合」ラベル + モード切替（数値/モルタル/ドライテック）を横並びに */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                  <div className="lbl" style={{ marginBottom: 0, flex: '0 0 auto', ...redIf('mixCode') }}>配 合</div>
+                  <div className="lbl" style={{ marginBottom: 0, flex: '0 0 auto' }}>配 合</div>
                   <div style={{ flex: 1, display: 'flex', gap: 3 }}>
                     {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => (
                       <button key={m} type="button"
@@ -2191,14 +2191,14 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 <input className="f" type="text" value={form.orderContact} onChange={set('orderContact')} data-ime="ascii" inputMode="tel" />
               </div>
               <div className="cell" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em', ...redIf('siteContact') }}>現 場 連 絡 先</div>
+                <div className="lbl" style={{ marginBottom: 0, fontSize: 11, letterSpacing: '.08em' }}>現 場 連 絡 先</div>
                 <input className="f" style={redIf('siteContact')} type="text" value={form.siteContact} onChange={set('siteContact')} data-ime="ascii" inputMode="tel" />
               </div>
             </div>
             {/* 6段: 備考 ＋ メッセージ追加 */}
             <div className="band">
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                <div className="lbl" style={redIf('notes')}>備 考</div>
+                <div className="lbl">備 考</div>
                 <DenpyoGrid items={form.notes} onChange={v => setVal('notes', sortNotes(v))} cols={1} max={3 + (form.notes || []).filter(n => n && (n.kind === 'unload' || n.kind === 'msg')).length} height={90} addLabel="＋ 段落を追加" dataIme="kana" />
               </div>
               <div className="cell" style={{ flex: '0 0 auto', minWidth: 210 }}>
@@ -2223,7 +2223,7 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
             {/* 7段: 担当ドライバー */}
             <div className="band">
               <div className="cell" style={{ flex: 1, minWidth: 0 }}>
-                <div className="lbl" style={{ ...redIf('drivers'), fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
+                <div className="lbl" style={{ fontSize: 11, letterSpacing: '.06em' }}>担当ドライバー</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 3 }}>
                   {form.drivers.map((d, i) => (
                     <span key={d.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #1b4ea8', background: '#e8f0ff', color: '#1b4ea8', borderRadius: 5, padding: '2px 6px', fontSize: 13 }}>
@@ -2644,7 +2644,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   })()
 
   // カタカナ→ひらがな正規化。業者名・商社名は顧客マスタのカナ（companyNameKana）も検索対象にする
-  const toHira = kanaToHira
+  // さらに全角の英数字・記号(！-～ / U+FF01-FF5E)を半角へ畳み、半角・全角どちらの入力でもヒットさせる
+  const toHira = (str) => kanaToHira(String(str ?? '').replace(/[！-～]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)))
   const kanaOfCompany = (s) => { const c = customers.find(c => c.id === s.companyId) || customers.find(c => c.companyName === s.companyName); return c ? (c.companyNameKana || '') : '' }
   const kanaOfTrading = (s) => { if (!s.tradingCompany) return ''; const c = customers.find(c => c.companyName === s.tradingCompany); return c ? (c.companyNameKana || '') : '' }
   // 日付を色々な表記で検索できるように（例: 6/4・06/04・6月4日・6-4）
@@ -4777,6 +4778,10 @@ function SeikonOutputPage({ isPopup }) {
   const addRest = (n) => { const t = String(n ?? '').trim(); if (t && !restNames.includes(t)) saveRest([...restNames, t].join(' ')) }
   const removeRest = (n) => saveRest(restNames.filter(x => x !== n).join(' '))
   const presentCount = Math.max(0, presentDefault - restNames.length)   // 出社数＝デフォルト－休みの人数
+  // [電]列：電話連絡済みチェック。日付ごとに localStorage 保存（seikon_rest_ と同流儀。印刷別ウィンドウにも共有）
+  const [denSet, setDenSet] = useState(() => new Set())
+  useEffect(() => { try { setDenSet(new Set(JSON.parse(localStorage.getItem('seikon_den_' + date) || '[]'))) } catch { setDenSet(new Set()) } }, [date])
+  const toggleDen = (id) => setDenSet(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); try { localStorage.setItem('seikon_den_' + date, JSON.stringify([...next])) } catch { /* noop */ } return next })
   const inAmPm = (s) => { if (ampm === 'both') return true; const m = timeToMin(firstTimeOf(s)); return ampm === 'AM' ? m < 720 : m >= 720 }
   // all は日付索引で表示日ぶんのみ取得済み。日付変更中も前日の表示を残すため date 判定はしない（AM/PMのみ）
   const rows = all.filter(s => inAmPm(s))
@@ -4804,8 +4809,8 @@ function SeikonOutputPage({ isPopup }) {
 
   const d = new Date(date)
   const reiwa = isNaN(d.getTime()) ? '' : `令和${d.getFullYear() - 2018}年${d.getMonth() + 1}月${d.getDate()}日${WD[d.getDay()]}曜日`
-  // 帳票タイトル用の日付（曜日なし・スペース区切り）。例: 令和　8年　6月　6日
-  const titleDate = isNaN(d.getTime()) ? '' : `令和　${d.getFullYear() - 2018}年　${d.getMonth() + 1}月　${d.getDate()}日`
+  // 帳票タイトル用の日付（曜日付き・スペース区切り）。例: 令和　8年　6月　6日（土）
+  const titleDate = isNaN(d.getTime()) ? '' : `令和　${d.getFullYear() - 2018}年　${d.getMonth() + 1}月　${d.getDate()}日（${WD[d.getDay()]}）`
 
   // 印刷：別ウィンドウ（サイドバー無し）で開き、読み込み後に自動で印刷ダイアログ（A4縦）
   const openPrint = () => {
@@ -4871,7 +4876,7 @@ function SeikonOutputPage({ isPopup }) {
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     // 数量は値ごとに特記(volumeNote)を持たせる
-    const vols = [{ v: v1, note: (s.volumeNote || '').trim() }, { v: v2, note: (s.volumeNote2 || '').trim() }].filter(x => x.v)
+    const vols = [{ v: v1, note: (s.volumeNote || '').trim() }, { v: v2, note: (s.volumeNote2 || '').trim() }].filter(x => x.v || x.note)
     const n = Math.max(1, mixes.length)
     for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
@@ -4890,53 +4895,56 @@ function SeikonOutputPage({ isPopup }) {
         <tr key={key}>
           <td></td><td></td><td></td><td></td>
           <td className="seikon-mix">{mixCell(r)}</td>
-          <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+          <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
         </tr>
       )
     }
     const ts = timesArr(s)
-    const tekiyo1 = [notesOf(s), placementsOf(s)].filter(Boolean).join(' / ')   // 備考 ＋ 荷下ろし
+    const noteItems = (Array.isArray(s.notes) ? s.notes : []).map(n => ({ text: String((n && n.text != null) ? n.text : n ?? '').trim(), important: !!(n && n.important) })).filter(x => x.text)   // 備考（！強調フラグを保持）
+    const placeStr = placementsOf(s)   // 荷下ろし
     const vf = vfPlace(s.vehicleFree)   // 車両自由入力の配置（全角=上段／半角=電話の右）
     const tags = tagsOf(s)   // 出荷登録の特記（領/追）
     const testAbbr = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')   // 試験 現/工（区切りなし）
     const isB = String(s.cementType || '').trim() === 'B'
-    // 編集・修正された箇所は赤文字（保存済み changedFields を参照）。時間・備考はさらに太字で強調
-    const cf = Array.isArray(s.changedFields) ? s.changedFields : []
-    const chg = (...keys) => keys.some(k => cf.includes(k))
-    const chgNote = cf.some(k => k === 'notes' || /^note\d+$/.test(k))
+    // 生コン出荷予定表出力では「変更箇所の赤」は付けない（黒字のまま）。赤は「！」強調のみ。青字・値ベースの赤は各所で維持。
     const timeImp = Array.isArray(s.times) && s.times.some(t => t && t.important)   // 時間の「！」
-    const noteImp = Array.isArray(s.notes) && s.notes.some(n => n && n.important)    // 備考の「！」
     const red = (on, bold) => on ? { color: '#c81e1e', ...(bold ? { fontWeight: 800 } : {}) } : undefined
     return (
       <tr key={key}>
-        <td className="seikon-comp" style={red(chg('companyName'))}>{s.companyName || ''}</td>
-        <td style={red(chg('siteName'))}>{s.siteName || ''}</td>
-        <td className="seikon-datsu" style={red(chg('pourLocation'))}>{s.pourLocation || ''}</td>
-        <td className="seikon-veh" style={red(chg('vehicleType', 'vehicleFree'))}>{vf.veh ? <div style={{ fontSize: vfVehFont(vf.veh, 12), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: chg('vehicleFree') ? '#c81e1e' : '#1b4ea8' }}>{vf.veh}</div> : null}<div>{vehicleLabel(s) || ''}</div></td>
-        <td className="seikon-mix" style={red(chg('mixCode', 'mix0', 'mix1', 'mix2', 'mixnote'))}>{mixCell(r)}</td>
-        <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400, ...red(chg('cementType')) }}>{s.cementType || ''}</td>
-        <td style={{ textAlign: 'center', ...red(chg('volume')) }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></div>) : ''}</td>
-        <td style={{ textAlign: 'center', ...red(chg('times') || timeImp, true) }}>{ts.length ? ts.map((t, i) => <div key={i}>{t}</div>) : null}</td>
+        <td className="seikon-comp">{s.companyName || ''}</td>
+        <td>{s.siteName || ''}</td>
+        <td className="seikon-datsu">{s.pourLocation || ''}</td>
+        <td className="seikon-veh">{vf.veh ? <div style={{ fontSize: vfVehFont(vf.veh, 12), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8' }}>{vf.veh}</div> : null}<div>{vehicleLabel(s) || ''}</div></td>
+        <td className="seikon-mix">{mixCell(r)}</td>
+        <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400 }}>{s.cementType || ''}</td>
+        <td style={{ textAlign: 'center' }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.v ? <>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></> : <div style={{ whiteSpace: 'normal' }}>{x.note || ''}</div>}</div>) : ''}</td>
+        <td style={{ textAlign: 'center', ...red(timeImp, true) }}>{ts.length ? ts.map((t, i) => <div key={i} style={/[^0-9:：]/.test(t) ? { fontSize: 11 } : undefined}>{t}</div>) : null}</td>
         <td className="seikon-tekiyo">
-          <div style={red(chgNote || chg('placements') || noteImp, true)}>{tekiyo1}</div>
-          <div className="seikon-phone" style={red(chg('siteContact', 'vehicleFree'))}>
+          <div>
+            {noteItems.map((n, i) => (
+              <Fragment key={i}>{i > 0 ? ' / ' : ''}<span style={n.important ? { color: '#c81e1e', fontWeight: 800 } : undefined}>{n.text}</span></Fragment>
+            ))}
+            {placeStr ? (noteItems.length ? ' / ' : '') + placeStr : ''}
+          </div>
+          <div className="seikon-phone">
             <span style={{ display: 'inline-block', minWidth: s.siteContact ? '13ch' : 0 }}>{s.siteContact || ''}</span>
             {vf.over ? <span style={{ fontWeight: 700 }}>{vf.over}</span> : null}
           </div>
         </td>
         <td className="seikon-toku">
-          <div className="seikon-toku-tag" style={red(chg('noteTags'))}>{tags}</div>
-          <div className="seikon-test" style={red(chg('testTags'))}>{testAbbr}</div>
+          <div className="seikon-toku-tag">{tags}</div>
+          <div className="seikon-test">{testAbbr}</div>
         </td>
         <td style={{ textAlign: 'center' }}>{(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}</td>
+        <td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleDen(s.id)}>{denSet.has(s.id) ? '✔' : ''}</td>
         <td></td>
       </tr>
     )
   }
 
-  const ROWS = 23
+  const ROWS = 22   // 件数が少ない日でも余分な2ページ目を出さず1枚に収める（22行なら A4横1ページに収まる）
   const blanks = Math.max(0, ROWS - tableRows.length)
-  const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '摘要', '特記', '地図', 'メモ']
+  const cols = ['業者名', '現場名', '打設', '車輌', '配合', '種', '数量', '時間', '摘要', '特記', '地図', '電', 'メモ']
   const ampmBtn = (on) => ({ border: on ? '2px solid #0f3060' : '1.5px solid #bbb', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 6, padding: '6px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' })
 
   return (
@@ -4983,11 +4991,11 @@ function SeikonOutputPage({ isPopup }) {
           </span>
         </div>
         <table className="seikon-table">
-          {/* 列: 業者名10 / 現場名18 / 打設4 / 車輌6(↑+2) / 配合13 / 種3 / 数量8 / 時間6 / 摘要15(↓-2) / 特記4 / 地図4 / メモ9 */}
+          {/* 列: 業者名10 / 現場名18 / 打設4 / 車輌6 / 配合13 / 種3 / 数量8 / 時間6 / 摘要15 / 特記4 / 地図4 / 電4 / メモ5 */}
           <colgroup>
             <col style={{ width: '10%' }} /><col style={{ width: '18%' }} /><col style={{ width: '4%' }} /><col style={{ width: '6%' }} />
             <col style={{ width: '13%' }} /><col style={{ width: '3%' }} /><col style={{ width: '8%' }} /><col style={{ width: '6%' }} />
-            <col style={{ width: '15%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} /><col style={{ width: '9%' }} />
+            <col style={{ width: '15%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} /><col style={{ width: '4%' }} /><col style={{ width: '5%' }} />
           </colgroup>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
@@ -5228,7 +5236,7 @@ function DenpyoView({ s, changedFields = [] }) {
     const red = isRed(...keys)
     return (
       <div className="cell" style={{ flex }}>
-        <div className="lbl" style={red ? { color: '#c81e1e' } : undefined}>{label}</div>
+        <div className="lbl">{label}</div>
         <div style={{ fontSize: 15, color: red ? '#c81e1e' : '#111', fontWeight: red ? 700 : undefined, minHeight: 18, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>
       </div>
     )
@@ -5422,6 +5430,11 @@ function AssignPage({ isPopup }) {
   const [loading, setLoading] = useState(true)
   const [assignTarget, setAssignTarget] = useState(null)
   const [addrTarget, setAddrTarget] = useState(null)
+  // ドライバーへの伝達事項（当日ドライバー全員あての連絡メモ・日付単位で localStorage 保存）
+  const msgKey = 'assign_msg_' + date
+  const [driverMsg, setDriverMsg] = useState('')
+  useEffect(() => { try { setDriverMsg(localStorage.getItem('assign_msg_' + date) || '') } catch { setDriverMsg('') } }, [date])
+  const saveDriverMsg = (v) => { setDriverMsg(v); try { localStorage.setItem(msgKey, v) } catch { /* noop */ } }
   // 表示日だけを取得（日付索引で当日ぶんのみ＝読み取り削減）。ポーリング/通知から最新日付を参照するためref併用
   const dateRef = useRef(date); dateRef.current = date
   const load = useCallback(async () => {
@@ -5493,6 +5506,15 @@ function AssignPage({ isPopup }) {
         )}
         {/* 別ウィンドウ（共有）は閉じるボタンを置かない（ブラウザのタブ/ウィンドウで閉じる） */}
       </div>
+      {/* ドライバーへの伝達事項：ヘッダーと一覧の間（中央の余白）に当日ドライバー全員あての連絡メモ */}
+      {!isPopup && (
+        <div style={{ background: '#fffdf5', border: '1px solid #e8d9a8', borderRadius: 10, padding: '10px 14px', margin: '0 0 12px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#8a6d1f', marginBottom: 6 }}>📢 ドライバーへの伝達事項（{date}）</div>
+          <textarea value={driverMsg} onChange={e => saveDriverMsg(e.target.value)} rows={2}
+            placeholder="当日ドライバー全員への連絡事項（例：本日◯◯現場は入口変更 / 積み込み順は…）"
+            style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #d4dbe5', borderRadius: 8, padding: '8px 10px', fontSize: 14, fontFamily: 'inherit', resize: 'vertical' }} />
+        </div>
+      )}
       {loading ? <div style={{ color: '#6b7a8d' }}>読み込み中...</div>
         : rows.length === 0 ? <div style={{ color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
           : (
