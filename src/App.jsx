@@ -4885,7 +4885,7 @@ function SeikonOutputPage({ isPopup }) {
   // 数字が無く特記だけのときは、特記を数字の位置に数字と同じ大きさで表示する。
   const mixCell = (r) => r.mix
     ? <>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{padMix(r.mix)}</div></>
-    : <div style={{ whiteSpace: 'normal' }}>{r.mixNote || ''}</div>
+    : <div style={{ whiteSpace: 'normal', letterSpacing: 'normal' }}>{r.mixNote || ''}</div>
 
   // 1行を描画。配合の2行目以降（!primary）は配合のみ（その他は空）
   const renderRow = (r, key) => {
@@ -5433,7 +5433,7 @@ function AssignPage({ isPopup }) {
   // ドライバーへの伝達事項（当日ドライバー全員あての連絡メモ・日付単位で localStorage 保存）
   const msgKey = 'assign_msg_' + date
   const [driverMsg, setDriverMsg] = useState('')
-  useEffect(() => { try { setDriverMsg(localStorage.getItem('assign_msg_' + date) || '') } catch { setDriverMsg('') } }, [date])
+  useEffect(() => { try { setDriverMsg(localStorage.getItem(msgKey) || '') } catch { setDriverMsg('') } }, [msgKey])
   const saveDriverMsg = (v) => { setDriverMsg(v); try { localStorage.setItem(msgKey, v) } catch { /* noop */ } }
   // 表示日だけを取得（日付索引で当日ぶんのみ＝読み取り削減）。ポーリング/通知から最新日付を参照するためref併用
   const dateRef = useRef(date); dateRef.current = date
