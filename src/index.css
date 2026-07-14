@@ -307,7 +307,7 @@ input, textarea, select { font-family: inherit; }
 /* 車両は文字を5pt大きく */
 .seikon-table td.seikon-veh { font-size:15px; font-weight:700; text-align:center; white-space:nowrap; }
 /* 配合は本文より8pt大きく・中央揃え・折り返さない */
-.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; }
+.seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; letter-spacing:0.08em; }
 .seikon-table td.seikon-mix > div { white-space:nowrap; }
 /* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
 .seikon-table td.seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; }
@@ -316,7 +316,7 @@ input, textarea, select { font-family: inherit; }
 .seikon-tekiyo > div:first-child { border-bottom:1px dotted #bbb; padding-bottom:1px; margin-bottom:1px; }
 .seikon-tekiyo .seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; color:#1a4d8f; }
 /* 配合の特記・数量の特記：数値の上に赤い小さな字 */
-.seikon-table td.seikon-mix .seikon-mnote { font-size:9px; font-weight:700; color:#c81e1e; line-height:1.1; white-space:normal; }
+.seikon-table td.seikon-mix .seikon-mnote { font-size:9px; font-weight:700; color:#c81e1e; line-height:1.1; white-space:normal; letter-spacing:normal; }
 .seikon-qnote { font-size:9px; font-weight:700; color:#c81e1e; line-height:1.1; }
 /* 特記列：上=出荷登録の特記(領/追)／下=試験(現/工)。狭く2段 */
 .seikon-table td.seikon-toku { text-align:center; font-size:11px; line-height:1.4; }
@@ -352,4 +352,6 @@ input, textarea, select { font-family: inherit; }
   .seikon-table td { height:7.2mm; }
   .seikon-tekiyo > div { min-height:0; line-height:1.1; }
   .seikon-table tr, .seikon-table td { page-break-inside:avoid; }
+  /* 「休み」名前欄が未記入のとき、例(placeholder)を印刷しない */
+  .seikon-title .st-rest input::placeholder { color:transparent !important; opacity:0 !important; }
 }
