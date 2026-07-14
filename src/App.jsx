@@ -4884,7 +4884,7 @@ function SeikonOutputPage({ isPopup }) {
   // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる
   const mixSpans = (code) => String(code || '').split('-').map((p, i) => (
     <Fragment key={i}>
-      {i > 0 && <span style={{ margin: '0 0.16em' }}>-</span>}
+      {i > 0 && <span style={{ margin: '0 0.28em' }}>-</span>}
       {p === '' ? <span style={{ display: 'inline-block', minWidth: '0.5em' }} /> : <span>{p}</span>}
     </Fragment>
   ))
