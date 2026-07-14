@@ -31,6 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (Array.isArray(body.mapArrows)) patch.mapArrows = body.mapArrows
       if (body.mapReceived !== undefined) patch.mapReceived = !!body.mapReceived
       if (body.faxReceived !== undefined) patch.faxReceived = !!body.faxReceived
+      if (body.driverNote !== undefined) patch.driverNote = String(body.driverNote || '')   // ドライバーへの伝達事項（伝票別）。changed には積まない＝赤ハイライト対象外
       const prevCf = Array.isArray((existing as any).changedFields) ? (existing as any).changedFields : []
       const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
       const updated = { ...existing, ...patch, changedFields, updatedAt: new Date().toISOString() }
