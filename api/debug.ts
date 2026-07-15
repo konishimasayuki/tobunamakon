@@ -119,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 返信追加 (POST /api/debug?id=...)
   if (req.method === 'POST' && id) {
     try {
-      const { body, image, images } = req.body || {}
+      const { body, image, images, authorName } = req.body || {}
       const imgs = normalizeImages(images, image)
       if (!String(body || '').trim() && !imgs.length) {
         return res.status(400).json({ error: '本文または画像が必要です' })
@@ -129,12 +129,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const raw = await redis.get<any>(KEY(id as string))
       if (!raw) return res.status(404).json({ error: 'スレッドが見つかりません' })
       const t = typeof raw === 'string' ? JSON.parse(raw) : raw
+      const replyName = String(authorName || '').trim().slice(0, 40) || user.username   // 未入力ならログインユーザー名（adminのまま）
       const reply = {
         id: uuidv4(),
         body: String(body || '').slice(0, 5000),
         image: '',            // 表示は images を優先
         images: imgs,
-        author: { id: user.id, name: user.username },
+        author: { id: user.id, name: replyName },
         createdAt: new Date().toISOString(),
       }
       t.replies = Array.isArray(t.replies) ? t.replies : []
