@@ -5825,6 +5825,7 @@ function DebugPage() {
 function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
   const [body, setBody] = useState('')
   const [imgs, setImgs] = useState([])
+  const [name, setName] = useState('')   // 返信者名（未入力はログインユーザー名＝adminのまま）
   const [posting, setPosting] = useState(false)
   const isOwner = thread.author && user && thread.author.id === user.id
   const canDelete = isOwner || user?.role === 'admin'
@@ -5833,8 +5834,8 @@ function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
     if (debugTooBig(imgs)) { alert('画像の合計が大きすぎます。枚数を減らしてください'); return }
     setPosting(true)
     try {
-      const t = await api.post('/api/debug?id=' + encodeURIComponent(thread.id), { body, images: imgs })
-      setBody(''); setImgs([])
+      const t = await api.post('/api/debug?id=' + encodeURIComponent(thread.id), { body, images: imgs, authorName: name })
+      setBody(''); setImgs([])   // 名前は次の返信でも使えるよう残す
       onPosted(t)
     } catch (e) { alert('返信エラー: ' + (e?.message || e)) }
     finally { setPosting(false) }
@@ -5869,6 +5870,12 @@ function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
       {/* 返信フォーム */}
       <div style={{ background: '#fff', border: '1px solid #dde3ed', borderRadius: 10, padding: 14, marginTop: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#475467', marginBottom: 6 }}>💬 返信を投稿</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: '#6b7a8d' }}>名前</span>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={40}
+            placeholder={'未入力は ' + (user?.username || 'admin')}
+            style={{ width: 200, boxSizing: 'border-box', fontSize: 13, padding: '5px 8px', border: '1.5px solid #d4dbe5', borderRadius: 6, fontFamily: 'inherit' }} />
+        </div>
         <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="本文を入力（誰でも返信できます）" style={{ width: '100%', boxSizing: 'border-box', fontSize: 14, padding: '8px 10px', border: '1.5px solid #d4dbe5', borderRadius: 8, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1.5px solid #cdd5e0', background: '#fff', color: '#3a4a5c', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📷 スクショ添付（複数可）
