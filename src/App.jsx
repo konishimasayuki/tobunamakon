@@ -5690,7 +5690,12 @@ function DebugPage() {
     catch (e) { alert('取得エラー: ' + (e?.message || e)) }
     finally { setLoading(false) }
   }
-  useEffect(() => { reload() }, [])   // 初回のみ。自動更新なし
+  // 初回のみ取得（自動更新なし）。URL に ?thread=xxx があれば、そのスレッドを開いた状態にする
+  //   （チャットの「デバッグ依頼」通知リンクから、該当スレッドへ直接飛べるようにする）。
+  useEffect(() => {
+    reload()
+    try { const tid = new URLSearchParams(window.location.search).get('thread'); if (tid) setOpenId(tid) } catch { /* noop */ }
+  }, [])
   const opened = openId ? threads.find(t => t.id === openId) : null
 
   // 複数画像対応：選んだ画像を縮小して現在の配列に追記（枚数上限あり）
@@ -6296,9 +6301,12 @@ function AppInner() {
   const initialEditId = params.get('editShipment') || ''
   const view = params.get('view') || ''
   const isPopup = params.get('popup') === '1'
+  // ?tab=xxx（既知タブ）があればそのタブで開く（チャットのデバッグ依頼リンク等の deep-link 用）
+  const tabParam = params.get('tab') || ''
+  const validTab = tabParam && TABS.some(t => t.id === tabParam) ? tabParam : ''
   // 別ウィンドウ（ログイン不要）：出荷予定表(掲示板)・配送臨時割り当て・担当者振替
   const isBoard = isPopup && (view === 'schedule' || view === 'assign' || view === 'assigndriver') && !initialEditId
-  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : view === 'assign' ? 'assign' : 'dashboard'))
+  const [activeTab, setActiveTab] = useState(initialEditId ? 'shipments' : validTab ? validTab : (view === 'schedule' ? 'schedule' : view === 'seikon' ? 'seikon' : view === 'assign' ? 'assign' : 'dashboard'))
   const [editTarget, setEditTarget] = useState(null)
   const [pendingEditId, setPendingEditId] = useState(initialEditId)
   // キャンセル伝票の「復元する」経由で編集を開いたか（＝更新時に日付確認を出す）
