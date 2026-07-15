@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { redis } from './_redis'
 import { requireAuth } from './_auth'
 import { v4 as uuidv4 } from 'uuid'
-import { notifyKonichat, baseUrlFrom } from './_konichat'
+import { notifyKonichat } from './_konichat'
 
 // デバッグ依頼用の掲示板:
 //   ・スレッド = 親投稿(title + body + image + author + createdAt) + replies[]
@@ -103,13 +103,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       await redis.set(KEY(thread.id), JSON.stringify(thread))
       await redis.zadd(INDEX_KEY, { score: Date.now(), member: thread.id })
-      // スーパーコニチャットの「デバック依頼」チャンネルへ転送（画像は送らない・失敗しても投稿は成功扱い）
+      // スーパーコニチャットの「デバック依頼」チャンネルへ転送（テキストのみ・失敗しても投稿は成功扱い）
       await notifyKonichat({
         kind: 'thread',
         title: thread.title,
         body: thread.body,
         authorName: thread.author?.name || '匿名',
-        url: `${baseUrlFrom(req)}/?tab=debug&thread=${encodeURIComponent(thread.id)}`,
       })
       return res.status(201).json(thread)
     } catch (e) {
@@ -149,7 +148,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         threadTitle: t.title,
         body: reply.body,
         authorName: reply.author?.name || '匿名',
-        url: `${baseUrlFrom(req)}/?tab=debug&thread=${encodeURIComponent(id as string)}`,
       })
       return res.status(201).json(t)
     } catch (e) {
