@@ -5439,18 +5439,24 @@ function AssignPage({ isPopup }) {
   const [loading, setLoading] = useState(true)
   const [assignTarget, setAssignTarget] = useState(null)
   const [addrTarget, setAddrTarget] = useState(null)
-  // ドライバーへの伝達事項（伝票ごと）。各行で編集し blur 時に ?assign=1 で保存（担当割当と同経路・赤ハイライト対象外）
-  const saveDriverNote = async (s, text) => {
+  // ドライバーへの伝達事項＝出荷登録の「備考」と共通。備考を表示し、編集すると備考(notes)へ反映する。
+  const notesText = (s) => (Array.isArray(s.notes) ? s.notes : []).map(n => (n && n.text != null) ? n.text : n).map(x => String(x ?? '')).filter(x => x.trim()).join('\n')
+  const saveAssignNotes = async (s, text) => {
     const v = String(text || '')
-    if (v === (s.driverNote || '')) return
-    setAll(prev => prev.map(x => x.id === s.id ? { ...x, driverNote: v } : x))   // 楽観更新
-    try { await api.put('/api/shipments/' + s.id + '?assign=1', { driverNote: v }); notifyShipmentsChanged() }
+    if (v.trim() === notesText(s).trim()) return   // 変更なし
+    const prev = Array.isArray(s.notes) ? s.notes : []
+    const notes = v.split('\n').map(x => x.trim()).filter(Boolean).map(t => {
+      const m = prev.find(n => ((n && n.text != null) ? n.text : n) === t)   // 既存の「！」強調は文字一致で温存
+      return { text: t, important: !!(m && m.important) }
+    })
+    setAll(prevAll => prevAll.map(x => x.id === s.id ? { ...x, notes } : x))   // 楽観更新
+    try { await api.put('/api/shipments/' + s.id + '?assign=1', { notes }); notifyShipmentsChanged() }
     catch (e) { alert('伝達事項の保存に失敗しました: ' + (e?.message || e)) }
   }
-  // 各行の伝達事項ボックス（伝票別・操作ボタンの左側の余白に配置）
+  // 各行の伝達事項ボックス（出荷登録の備考と共通・操作ボタンの左側の余白に配置）
   const driverNoteBox = (s, extra) => (
-    <textarea key={s.id + '_dn_' + (s.driverNote || '')} defaultValue={s.driverNote || ''} rows={2}
-      onBlur={e => saveDriverNote(s, e.target.value)} placeholder="ドライバーへの伝達事項"
+    <textarea key={s.id + '_dn_' + (s.updatedAt || '')} defaultValue={notesText(s)} rows={2}
+      onBlur={e => saveAssignNotes(s, e.target.value)} placeholder="ドライバーへの伝達事項（出荷登録の備考と共通）"
       style={{ boxSizing: 'border-box', border: '1.5px solid #e8d9a8', background: '#fffef7', borderRadius: 8, padding: '6px 8px', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', color: '#3a2f00', ...extra }} />
   )
   // 表示日だけを取得（日付索引で当日ぶんのみ＝読み取り削減）。ポーリング/通知から最新日付を参照するためref併用
