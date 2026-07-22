@@ -275,6 +275,9 @@ function shipmentBubble(s: any): any {
   const mixNotes = asArr(s.mixNotes).map((x: any) => String(x || '').trim())
   const notesArr = asArr(s.notes).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
   const notesImp = asArr(s.notes).some((n: any) => n && typeof n === 'object' && n.important)   // 備考の「！」
+  // 備考の「強調部分」（！指定＝配送割り当ての伝達事項）。住所の下に大きく赤で出してドライバーに伝える
+  const impNotes = asArr(s.notes).filter((n: any) => n && typeof n === 'object' && n.important)
+    .map((n: any) => String(n.text || '').trim()).filter(Boolean)
   const driverMsgArr = asArr(s.driverMessages).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
   const addr = String(s.siteAddress || '').replace(/（緯度経度:[^）]*）/g, '').trim()
   const mapUrl = mapsUrlOf(s)
@@ -356,6 +359,18 @@ function shipmentBubble(s: any): any {
   }
   contents.push(sep())
   contents.push(row('住所', addr || ''))
+  // 住所の下に「伝達事項」＝備考の強調部分（！）を赤・フォント2倍で表示（ドライバーへの注意喚起）
+  if (impNotes.length) {
+    contents.push({
+      type: 'box', layout: 'vertical', margin: 'md', paddingAll: '12px', cornerRadius: '8px',
+      backgroundColor: '#fff0f0', borderWidth: '2px', borderColor: '#c0392b',
+      contents: [
+        { type: 'text', text: '伝達事項', size: 'sm', weight: 'bold', color: '#c0392b' },
+        // フォントサイズ2倍・赤太字（備考の通常表示 sm=14px に対して約2倍の 28px）
+        { type: 'text', text: impNotes.join(' / '), size: '28px', weight: 'bold', color: '#c0392b', wrap: true, margin: 'sm' },
+      ],
+    })
+  }
 
   const bubble: any = {
     type: 'bubble', size: 'mega',
