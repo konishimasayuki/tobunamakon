@@ -2998,6 +2998,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [ampm, setAmpm] = useState('both')   // 表示の絞り込み（'both' | 'AM' | 'PM'）
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
+  // [電]列：電話連絡済みチェック。生コン出力と同じ localStorage キー(seikon_den_<date>)で共有
+  const [denSet, setDenSet] = useState(() => new Set())
+  useEffect(() => { try { setDenSet(new Set(JSON.parse(localStorage.getItem('seikon_den_' + date) || '[]'))) } catch { setDenSet(new Set()) } }, [date])
+  const toggleDen = (id) => setDenSet(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); try { localStorage.setItem('seikon_den_' + date, JSON.stringify([...next])) } catch { /* noop */ } return next })
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3892,43 +3896,44 @@ function SchedulePage({ onEditShipment, isPopup }) {
       ) : (() => {
         const inner = (<>
         <table>
-          {/* 列構成: 時間 / 業者+商社 / 現場 / 打設 / 車種(7%) / 配合 / 数量 / 種(3%) / 担当 / 備考+連絡先(16%) / 特記(2.5%) / 地図(2.5%) / (編集) */}
+          {/* 生コン準拠の列: 業者名+商社 / 現場名 / 打設 / 車種 / 配合 / 種 / 数量 / 時間 / 担当 / 備考+連絡先 / 特記 / 地図 / 電 / (編集) */}
           <colgroup>
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '4%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '11%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '5%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '7%' }} />
             <col style={{ width: '3%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '9%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '15%' }} />
             <col style={{ width: '2.5%' }} />
             <col style={{ width: '2.5%' }} />
+            <col style={{ width: '3%' }} />
             {!isPopup && <col style={{ width: '7%' }} />}
           </colgroup>
           <thead>
             <tr>
-              <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th>
               <th className="th-tight">打設</th>
               <th className="th-tight">車種</th>
               <th>配合</th>
-              <th>数量</th>
               <th className="th-tight">種</th>
+              <th>数量</th>
+              <th>時間</th>
               <th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               <th className="th-tight">特記</th>
               <th className="th-tight">地図</th>
+              <th className="th-tight">電</th>
               {!isPopup && <th className="th-tight">編集</th>}
             </tr>
           </thead>
           <tbody>
             {rows.map(s => (
               <tr key={s.id}>
-                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
@@ -3946,8 +3951,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   )}
                   {cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}
                 </td>
-                <td className="sc-nowrap">{cellMix(s, { center: true, small: true })}</td>
-                <td className="sc-nowrap">{cellVolume(s)}</td>
+                <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 {/* 種: 1つだけ=従来どおり / 2つあれば縦並び（B/N など） */}
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{(() => {
                   const ct = (v) => v === 'B'
@@ -3966,6 +3970,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   }
                   return ct(c1)
                 })()}</td>
+                <td className="sc-nowrap">{cellVolume(s)}</td>
+                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 {/* 備考: 領追インラインは特記列に統合したので noTags で抑制 */}
                 <td>{cellNotes(s, { plain: true, noVf: true, noTags: true })}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
@@ -3984,6 +3990,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
                 <td style={{ textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }}>
                   {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}
+                </td>
+                {/* 電: 電話連絡済みチェック（生コン出力と共有） */}
+                <td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleDen(s.id)} title="電話連絡済みチェック">
+                  <span style={{ display: 'inline-block', width: 15, height: 15, border: '1.5px solid #444', borderRadius: 3, lineHeight: '12px', fontSize: 12, fontWeight: 800, color: '#0f3060', boxSizing: 'border-box', verticalAlign: 'middle' }}>{denSet.has(s.id) ? '✓' : ''}</span>
                 </td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
