@@ -273,8 +273,6 @@ function shipmentBubble(s: any): any {
   const times = Array.isArray(s.times) ? s.times.map((t: any) => (t && t.text != null ? t.text : t)).filter(Boolean) : []
   const placements = asArr(s.placements).filter(Boolean)
   const mixNotes = asArr(s.mixNotes).map((x: any) => String(x || '').trim())
-  const notesArr = asArr(s.notes).map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
-  const notesImp = asArr(s.notes).some((n: any) => n && typeof n === 'object' && n.important)   // 備考の「！」
   // 備考の「強調部分」（！指定＝配送割り当ての伝達事項）。住所の下に大きく赤で出してドライバーに伝える
   const impNotes = asArr(s.notes).filter((n: any) => n && typeof n === 'object' && n.important)
     .map((n: any) => String(n.text || '').trim()).filter(Boolean)
@@ -345,7 +343,10 @@ function shipmentBubble(s: any): any {
   contents.push(sep())
   contents.push(row('連絡先', String(s.orderContact || '')))
   contents.push(row('現場連絡先', String(s.siteContact || '')))
-  if (notesArr.length) contents.push(row('備考', notesArr.join(' / '), notesImp ? { color: '#c0392b', bold: true } : {}))
+  // 備考は「強調なし」だけをここに表示。強調(！)付きは住所の下の「伝達事項」で大きく赤で出すため重複させない
+  const plainNotes = asArr(s.notes).filter((n: any) => !(n && typeof n === 'object' && n.important))
+    .map((n: any) => String((n && n.text != null) ? n.text : n)).filter(Boolean)
+  if (plainNotes.length) contents.push(row('備考', plainNotes.join(' / ')))
   // ドライバーへの連絡：見落とし防止のため赤字・太字で強調（黄色帯で囲う）
   if (driverMsgArr.length) {
     contents.push({
