@@ -309,6 +309,9 @@ input, textarea, select { font-family: inherit; }
 /* 配合は本文より8pt大きく・中央揃え・折り返さない */
 .seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; }
 .seikon-table td.seikon-mix > div { white-space:nowrap; }
+/* 配合の桁組み（画面）：「-」の左右と空きセクションだけ少し余白。数字同士は詰める */
+.seikon-table td.seikon-mix .sk-mixdash { margin:0 0.28em; }
+.seikon-table td.seikon-mix .sk-mixgap { display:inline-block; min-width:0.5em; }
 /* 担当連絡先：電話番号は1行（折り返さず、はみ出さないよう小さめ） */
 .seikon-table td.seikon-phone { white-space:nowrap; overflow:hidden; text-overflow:clip; font-size:11px; }
 /* 摘要：上=備考(＋荷下ろし)／下=現場連絡先 */
@@ -342,6 +345,9 @@ input, textarea, select { font-family: inherit; }
   .seikon-table th { font-size:13px; }
   .seikon-table td.seikon-veh { font-size:16px; white-space:nowrap; }
   .seikon-table td.seikon-mix { font-size:22px; }
+  /* 印刷時の配合：各数字の右に空白を作る。それ以外(-の左右)の余白は消す */
+  .seikon-table td.seikon-mix .sk-mixnum { padding-right:0.45em; }
+  .seikon-table td.seikon-mix .sk-mixdash { margin:0; }
   .seikon-table td.seikon-phone, .seikon-tekiyo .seikon-phone { font-size:9px; white-space:nowrap; }
   .seikon-table td.seikon-tekiyo { font-size:10px; }
   .seikon-table td.seikon-toku { font-size:9px; line-height:1.3; }

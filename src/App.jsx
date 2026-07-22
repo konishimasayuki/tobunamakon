@@ -4903,11 +4903,12 @@ function SeikonOutputPage({ isPopup }) {
     for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
 
-  // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる
+  // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる（画面）。
+  // 印刷時は各数字の右に空白を作り、それ以外(-の左右)の余白は消す（sk-mix* クラスでCSS制御）
   const mixSpans = (code) => String(code || '').split('-').map((p, i) => (
     <Fragment key={i}>
-      {i > 0 && <span style={{ margin: '0 0.28em' }}>-</span>}
-      {p === '' ? <span style={{ display: 'inline-block', minWidth: '0.5em' }} /> : <span>{p}</span>}
+      {i > 0 && <span className="sk-mixdash">-</span>}
+      {p === '' ? <span className="sk-mixgap" /> : <span className="sk-mixnum">{p}</span>}
     </Fragment>
   ))
   // 配合セルの中身：数字があれば「特記(小・上) + 数字」。
