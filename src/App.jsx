@@ -2974,6 +2974,16 @@ function diffChangedFields(orig, next) {
   return changed
 }
 
+// 出荷予定表 大型モニター(4K)表示：表示倍率（端末ごと・localStorage）。設定画面で 通常/4K を切替＋倍率調整。
+const SCHED4K_ON = 'sched4kOn', SCHED4K_SCALE = 'sched4kScale'
+function read4kScale() {
+  try {
+    if (localStorage.getItem(SCHED4K_ON) !== '1') return 1
+    const v = parseFloat(localStorage.getItem(SCHED4K_SCALE))
+    return (Number.isFinite(v) && v >= 1 && v <= 3) ? v : 1.4
+  } catch { return 1 }
+}
+
 function SchedulePage({ onEditShipment, isPopup }) {
   // 出荷予定表: スマホ(<768px)は1件=1カードの縦リスト。
   // iPad(768〜1024) と PC(>=1025) は従来テーブル＋セル直接編集。
@@ -2998,6 +3008,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [ampm, setAmpm] = useState('both')   // 表示の絞り込み（'both' | 'AM' | 'PM'）
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
+  // 大型モニター(4K)表示倍率（端末ごと・localStorage）。設定画面での切替/調整を反映
+  const [scale4k, setScale4k] = useState(read4kScale)
+  useEffect(() => {
+    const on = () => setScale4k(read4kScale())
+    window.addEventListener('sched4kchange', on)
+    window.addEventListener('storage', on)   // 別タブ/別ウィンドウでの変更も反映
+    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('storage', on) }
+  }, [])
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3892,32 +3910,32 @@ function SchedulePage({ onEditShipment, isPopup }) {
       ) : (() => {
         const inner = (<>
         <table>
-          {/* 列構成: 時間 / 業者+商社 / 現場 / 打設 / 車種(7%) / 配合 / 数量 / 種(3%) / 担当 / 備考+連絡先(16%) / 特記(2.5%) / 地図(2.5%) / (編集) */}
+          {/* 生コン準拠の列: 業者名+商社 / 現場名 / 打設 / 車種 / 配合 / 種 / 数量 / 時間 / 担当 / 備考+連絡先 / 特記 / 地図 / 電 / (編集) */}
           <colgroup>
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '4%' }} />
             <col style={{ width: '7%' }} />
             <col style={{ width: '11%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '5%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '7%' }} />
             <col style={{ width: '3%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '9%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '15%' }} />
             <col style={{ width: '2.5%' }} />
             <col style={{ width: '2.5%' }} />
             {!isPopup && <col style={{ width: '7%' }} />}
           </colgroup>
           <thead>
             <tr>
-              <th>時間</th>
               <th><div>業者名</div><div>商社</div></th>
               <th>現場名</th>
               <th className="th-tight">打設</th>
               <th className="th-tight">車種</th>
               <th>配合</th>
-              <th>数量</th>
               <th className="th-tight">種</th>
+              <th>数量</th>
+              <th>時間</th>
               <th>担当</th>
               <th><div>備考</div><div>現場連絡先</div></th>
               <th className="th-tight">特記</th>
@@ -3928,7 +3946,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <tbody>
             {rows.map(s => (
               <tr key={s.id}>
-                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
                 <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
                 <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
@@ -3946,8 +3963,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   )}
                   {cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}
                 </td>
-                <td className="sc-nowrap">{cellMix(s, { center: true, small: true })}</td>
-                <td className="sc-nowrap">{cellVolume(s)}</td>
+                <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
                 {/* 種: 1つだけ=従来どおり / 2つあれば縦並び（B/N など） */}
                 <td className="sc-nowrap" style={{ textAlign: 'center' }}>{(() => {
                   const ct = (v) => v === 'B'
@@ -3966,6 +3982,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   }
                   return ct(c1)
                 })()}</td>
+                <td className="sc-nowrap">{cellVolume(s)}</td>
+                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
                 {/* 備考: 領追インラインは特記列に統合したので noTags で抑制 */}
                 <td>{cellNotes(s, { plain: true, noVf: true, noTags: true })}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
@@ -4019,16 +4037,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
         )}
         </>)
-        if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
+        // 4K表示: inner を zoom で拡大（表は width:100% のままなので列幅は画面いっぱい・文字だけ拡大）
+        const scaled = (node) => scale4k !== 1
+          ? <div style={{ zoom: scale4k }}>{node}</div>
+          : node
+        if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{scaled(inner)}</div>
         // 別ウィンドウ:
         //   ・PC幅(>=880)では画面いっぱいに表示
         //   ・スマホ幅(<880)では FitToWidth による縮小だと地図など右端の列が見切れるため、
         //     横スクロール可能にして全列を読めるようにする
         return popupNarrow
           ? <div className="schedule popup-view" style={{ padding: '4px 0 24px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <div style={{ minWidth: 760 }}>{inner}</div>
+              <div style={{ minWidth: 760 }}>{scaled(inner)}</div>
             </div>
-          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{inner}</div>
+          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner)}</div>
       })()}
       {editModal && (
         <ScheduleEditModal
@@ -4881,11 +4903,12 @@ function SeikonOutputPage({ isPopup }) {
     for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
 
-  // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる
+  // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる（画面）。
+  // 印刷時は各数字の右に空白を作り、それ以外(-の左右)の余白は消す（sk-mix* クラスでCSS制御）
   const mixSpans = (code) => String(code || '').split('-').map((p, i) => (
     <Fragment key={i}>
-      {i > 0 && <span style={{ margin: '0 0.28em' }}>-</span>}
-      {p === '' ? <span style={{ display: 'inline-block', minWidth: '0.5em' }} /> : <span>{p}</span>}
+      {i > 0 && <span className="sk-mixdash">-</span>}
+      {p === '' ? <span className="sk-mixgap" /> : <span className="sk-mixnum">{p}</span>}
     </Fragment>
   ))
   // 配合セルの中身：数字があれば「特記(小・上) + 数字」。
@@ -5916,6 +5939,14 @@ function SettingsPage() {
   const [pdfDate, setPdfDate] = useState(() => localToday())
   const [backupBusy, setBackupBusy] = useState(false)
   const fileRef = useRef(null)
+  // 出荷予定表 大型モニター(4K)表示（端末ごと・localStorage）
+  const [k4On, setK4On] = useState(() => { try { return localStorage.getItem(SCHED4K_ON) === '1' } catch { return false } })
+  const [k4Scale, setK4Scale] = useState(() => { try { const v = parseFloat(localStorage.getItem(SCHED4K_SCALE)); return (Number.isFinite(v) && v >= 1 && v <= 3) ? v : 1.4 } catch { return 1.4 } })
+  const saveK4 = (on, scale) => {
+    setK4On(on); setK4Scale(scale)
+    try { localStorage.setItem(SCHED4K_ON, on ? '1' : '0'); localStorage.setItem(SCHED4K_SCALE, String(scale)) } catch { /* noop */ }
+    try { window.dispatchEvent(new Event('sched4kchange')) } catch { /* noop */ }
+  }
 
   // 全データ（伝票・顧客・従業員）を1ファイル(JSON)でダウンロード
   const downloadBackup = async () => {
@@ -5998,6 +6029,34 @@ function SettingsPage() {
   return (
     <div style={RPT.wrap}>
       <h2 style={{ margin: '0 0 16px', color: '#1a2332' }}>⚙️ 設定</h2>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🖥 出荷予定表の大型モニター(4K)表示</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          55インチなどの大型モニター（別ウィンドウ＝ボード表示）向けに、出荷予定表の文字を拡大します。<b>この端末のブラウザにだけ</b>保存されます（事務所PCは通常のまま）。
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+          <button type="button" onClick={() => saveK4(false, k4Scale)}
+            style={{ border: k4On ? '1.5px solid #bbb' : '2px solid #0f3060', background: k4On ? '#fff' : '#0f3060', color: k4On ? '#3a4a5c' : '#fff', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>通常</button>
+          <button type="button" onClick={() => saveK4(true, k4Scale)}
+            style={{ border: k4On ? '2px solid #0f3060' : '1.5px solid #bbb', background: k4On ? '#0f3060' : '#fff', color: k4On ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>4K（大型モニター）</button>
+        </div>
+        {k4On && (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#475467', marginBottom: 6 }}>文字サイズ：{Math.round(k4Scale * 100)}%</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => saveK4(true, Math.max(1, Math.round((k4Scale - 0.1) * 100) / 100))} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>−</button>
+              <input type="range" min="1" max="2.5" step="0.05" value={k4Scale}
+                onChange={e => saveK4(true, parseFloat(e.target.value))}
+                style={{ flex: '1 1 220px', maxWidth: 340 }} />
+              <button type="button" onClick={() => saveK4(true, Math.min(2.5, Math.round((k4Scale + 0.1) * 100) / 100))} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>＋</button>
+            </div>
+            <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
+              ※ 変更は出荷予定表・別ウィンドウ（ボード）に即反映されます。4Kモニターは 130〜180% が目安です。
+            </div>
+          </div>
+        )}
+      </div>
 
       <div style={box}>
         <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>LINE API設定</h3>
