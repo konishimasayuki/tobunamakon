@@ -3615,6 +3615,18 @@ function SchedulePage({ onEditShipment, isPopup }) {
     )
   }
 
+  // 荷下ろし(placements)：出荷登録の内容を備考列に表示（生コン予定表の摘要と同様）。
+  // 表では読み取り専用（編集は✏️フォームで）。変更フラグが立っていれば赤、通常は青。
+  const placeLine = (s, opts = {}) => {
+    const p = (Array.isArray(s.placements) ? s.placements : []).filter(Boolean)
+    if (!p.length) return null
+    return (
+      <div className="sc-place" style={{ fontSize: opts.big ? undefined : 11, color: isChanged(s, 'placements') ? '#c81e1e' : '#1a6a9f', fontWeight: 700, lineHeight: 1.25, whiteSpace: 'normal' }}>
+        荷下ろし：{p.join('・')}
+      </div>
+    )
+  }
+
   // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
   // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
   const cellDrivers = (s, opts = {}) => {
@@ -3882,6 +3894,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   </span></div>
                   {/* 備考（横並び）: 領追は特記行・vehicleFree は車種に統合したので noTags + noVf */}
                   <div className="sc-row"><span className="sc-lbl">備考</span><span className="sc-val">{cellNotes(s, { plain: true, noTags: true, noVf: true })}</span></div>
+                  {/* 荷下ろし（出荷登録の内容を反映） */}
+                  {(Array.isArray(s.placements) ? s.placements : []).filter(Boolean).length > 0 && (
+                    <div className="sc-row"><span className="sc-lbl">荷下ろし</span><span className="sc-val">{placeLine(s, { big: true })}</span></div>
+                  )}
                   {/* 現場連絡先 */}
                   <div className="sc-row"><span className="sc-lbl">現場連絡先</span><span className="sc-val">{cell(s, 'siteContact', '現場連絡先')}</span></div>
                   <div className="sc-card-actions">
@@ -3985,8 +4001,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 <td className="sc-nowrap">{cellVolume(s)}</td>
                 <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
                 <td>{cellDrivers(s, { big: true })}</td>
-                {/* 備考: 領追インラインは特記列に統合したので noTags で抑制 */}
-                <td>{cellNotes(s, { plain: true, noVf: true, noTags: true })}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
+                {/* 備考: 領追インラインは特記列に統合したので noTags で抑制。荷下ろしは備考の下に読み取り専用で表示（生コン予定表と同様） */}
+                <td>{cellNotes(s, { plain: true, noVf: true, noTags: true })}{placeLine(s)}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
                 {/* 特記: 上=領/追(赤太字)、下=現/工(testTags の TP を除く略表記) */}
                 <td className="sc-nowrap" style={{ textAlign: 'center', padding: '2px 2px' }}>{(() => {
                   const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
