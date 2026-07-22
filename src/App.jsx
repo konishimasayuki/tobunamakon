@@ -3797,6 +3797,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
+          <button type="button" onClick={openScheduleWindow}
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
           {compact && ampmButtons}
         </div>
         {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
