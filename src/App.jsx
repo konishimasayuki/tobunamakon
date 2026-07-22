@@ -2998,10 +2998,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [ampm, setAmpm] = useState('both')   // 表示の絞り込み（'both' | 'AM' | 'PM'）
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
-  // [電]列：電話連絡済みチェック。生コン出力と同じ localStorage キー(seikon_den_<date>)で共有
-  const [denSet, setDenSet] = useState(() => new Set())
-  useEffect(() => { try { setDenSet(new Set(JSON.parse(localStorage.getItem('seikon_den_' + date) || '[]'))) } catch { setDenSet(new Set()) } }, [date])
-  const toggleDen = (id) => setDenSet(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); try { localStorage.setItem('seikon_den_' + date, JSON.stringify([...next])) } catch { /* noop */ } return next })
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3801,8 +3797,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
-          <button type="button" onClick={openScheduleWindow}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
           {compact && ampmButtons}
         </div>
         {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
@@ -3910,7 +3904,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <col style={{ width: '15%' }} />
             <col style={{ width: '2.5%' }} />
             <col style={{ width: '2.5%' }} />
-            <col style={{ width: '3%' }} />
             {!isPopup && <col style={{ width: '7%' }} />}
           </colgroup>
           <thead>
@@ -3927,7 +3920,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
               <th><div>備考</div><div>現場連絡先</div></th>
               <th className="th-tight">特記</th>
               <th className="th-tight">地図</th>
-              <th className="th-tight">電</th>
               {!isPopup && <th className="th-tight">編集</th>}
             </tr>
           </thead>
@@ -3990,10 +3982,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
                 <td style={{ textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }}>
                   {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}
-                </td>
-                {/* 電: 電話連絡済みチェック（生コン出力と共有） */}
-                <td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleDen(s.id)} title="電話連絡済みチェック">
-                  <span style={{ display: 'inline-block', width: 15, height: 15, border: '1.5px solid #444', borderRadius: 3, lineHeight: '12px', fontSize: 12, fontWeight: 800, color: '#0f3060', boxSizing: 'border-box', verticalAlign: 'middle' }}>{denSet.has(s.id) ? '✓' : ''}</span>
                 </td>
                 {!isPopup && (
                   <td style={{ textAlign: 'center' }}>
