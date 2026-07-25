@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment, Component } from 'react'
 import { isDemoMode, demoLogin, demoRequest } from './demo.js'
 
 // ============================================================
@@ -4528,7 +4528,8 @@ const driversOf = (s) => Array.isArray(s.drivers) ? s.drivers.map(dispDriverName
 function useShipments(query = '') {
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
-  useEffect(() => { api.get('/api/shipments' + (query || '')).then(setAll).catch(e => console.error(e)).finally(() => setLoading(false)) }, [query])
+  // APIが配列以外（エラーオブジェクト等）を返しても all は必ず配列に保つ（.filter/.map で全画面ブランクになるのを防ぐ）
+  useEffect(() => { api.get('/api/shipments' + (query || '')).then(d => setAll(Array.isArray(d) ? d : [])).catch(e => console.error(e)).finally(() => setLoading(false)) }, [query])
   return { all, loading }
 }
 
@@ -4796,11 +4797,11 @@ function SeikonOutputPage({ isPopup }) {
   const [ampm, setAmpm] = useState(urlAmpm)   // 'both' | 'AM' | 'PM'
   const { all, loading } = useShipments('?date=' + encodeURIComponent(date))   // その日だけ日付索引で取得
   const [customers, setCustomers] = useState([])
-  useEffect(() => { api.get('/api/customers').then(setCustomers).catch(() => { /* noop */ }) }, [])
+  useEffect(() => { api.get('/api/customers').then(d => setCustomers(Array.isArray(d) ? d : [])).catch(() => { /* noop */ }) }, [])
   const custCode = (s) => { const c = customers.find(c => c.id === s.companyId); return c ? (c.customerCode || '') : '' }
   // 休みの呼び名を選択して追加するためのドライバー一覧
   const [drivers, setDrivers] = useState([])
-  useEffect(() => { api.get('/api/employees?drivers=1').then(setDrivers).catch(() => { /* noop */ }) }, [])
+  useEffect(() => { api.get('/api/employees?drivers=1').then(d => setDrivers(Array.isArray(d) ? d : [])).catch(() => { /* noop */ }) }, [])
   const nickList = [...new Set(drivers.map(dispDriverName).map(x => String(x ?? '').trim()).filter(Boolean))]
   // 出社/休み：出社数のデフォルトを保存し、当日 欄に入れた休みの呼び名の数だけ引く
   const PRESENT_KEY = 'seikon_present_default'
@@ -6435,9 +6436,31 @@ function AppInner() {
   }
 
   // 別ウィンドウ（ポップアップ）はサイドバー無しでその画面だけ表示
-  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff', boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top)' }}>{page}</div>
+  if (isPopup) return <div className="popup-print-root" style={{ height: '100dvh', overflow: 'auto', background: '#fff', boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top)' }}><ErrorBoundary key={'p_' + activeTab}>{page}</ErrorBoundary></div>
 
-  return <Layout activeTab={activeTab} onTabChange={setActiveTab}>{page}</Layout>
+  return <Layout activeTab={activeTab} onTabChange={setActiveTab}><ErrorBoundary key={activeTab}>{page}</ErrorBoundary></Layout>
+}
+
+// 画面描画中の例外で真っ白（全画面ブランク）にならないための境界。
+// エラー時はサイドバーを残したままエラーメッセージを表示し、原因究明のため内容を出す。
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { err: null } }
+  static getDerivedStateFromError(err) { return { err } }
+  componentDidCatch(err, info) { try { console.error('画面エラー:', err, info) } catch { /* noop */ } }
+  render() {
+    if (this.state.err) {
+      const e = this.state.err
+      const msg = String((e && e.message) || e || '不明なエラー')
+      return (
+        <div style={{ padding: 24, color: '#333' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#c0392b', marginBottom: 8 }}>この画面の表示中にエラーが発生しました</div>
+          <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>日付やタブを切り替えるか、ページを再読み込みしてお試しください。改善しない場合は、下のメッセージをそのままお知らせください。</div>
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, background: '#f6f7f9', border: '1px solid #e3e8ef', borderRadius: 6, padding: 12, color: '#c0392b' }}>{msg}</pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 export default function App() {
