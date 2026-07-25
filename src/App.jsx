@@ -2630,7 +2630,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
   // 商社名プルダウン候補：既存出荷で入力された商社名を重複なしで集める
   const tradingOptions = Array.from(new Set(
-    shipments.map(s => (s.tradingCompany || '').trim()).filter(Boolean)
+    shipments.map(s => String(s.tradingCompany || '').trim()).filter(Boolean)
   )).sort()
   // 業者名・商社名のカナ付き候補（ひらがな/カタカナで絞り込み可能）
   const companyComboOptions = customers.map(c => ({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }))
@@ -3045,7 +3045,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     const seen = new Set()
     const out = []
     customers.forEach(c => { if (c.companyName && !seen.has(c.companyName)) { seen.add(c.companyName); out.push({ id: c.id, label: c.companyName, kana: c.companyNameKana || '' }) } })
-    Array.from(new Set(all.map(s => (s.tradingCompany || '').trim()).filter(Boolean))).sort()
+    Array.from(new Set(all.map(s => String(s.tradingCompany || '').trim()).filter(Boolean))).sort()
       .forEach(t => { if (t && !seen.has(t)) { seen.add(t); out.push({ label: t, kana: '' }) } })
     return out
   })()
@@ -4915,7 +4915,7 @@ function SeikonOutputPage({ isPopup }) {
     const v1 = volOne(s.volume, s.volumePlusA, s.volumeUncertain)
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     // 数量は値ごとに特記(volumeNote)を持たせる
-    const vols = [{ v: v1, note: (s.volumeNote || '').trim() }, { v: v2, note: (s.volumeNote2 || '').trim() }].filter(x => x.v || x.note)
+    const vols = [{ v: v1, note: String(s.volumeNote || '').trim() }, { v: v2, note: String(s.volumeNote2 || '').trim() }].filter(x => x.v || x.note)
     const n = Math.max(1, mixes.length)
     for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
   })
