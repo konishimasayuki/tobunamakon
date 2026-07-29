@@ -2099,17 +2099,27 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                         </div>
                         {/* 種類ごとの入力 */}
                         {kind === 'mortar' ? (
-                          <div style={{ display: 'flex', gap: 6, padding: '4px 2px' }}>
-                            {['1:1', '1:2', '1:3', '1:4'].map(mc => {
-                              const on = r.code === mc
-                              return (
-                                <button key={mc} type="button" onClick={() => setMixRowMortar(ri, mc)}
-                                  style={{ flex: 1, height: 40, border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 6, fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{mc}</button>
-                              )
-                            })}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {/* モルタルでも特記（メモ）を入力できる */}
+                            <input type="text" data-ime="kana" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)}
+                              style={{ width: '70%', alignSelf: 'center', fontSize: 11, fontWeight: 700, textAlign: 'center', color: '#c81e1e', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', background: 'transparent', padding: '0 0 1px', fontFamily: 'inherit' }} />
+                            <div style={{ display: 'flex', gap: 6, padding: '0 2px' }}>
+                              {['1:1', '1:2', '1:3', '1:4'].map(mc => {
+                                const on = r.code === mc
+                                return (
+                                  <button key={mc} type="button" onClick={() => setMixRowMortar(ri, mc)}
+                                    style={{ flex: 1, height: 40, border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 6, fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{mc}</button>
+                                )
+                              })}
+                            </div>
                           </div>
                         ) : kind === 'dry' ? (
-                          <div style={{ textAlign: 'center', fontSize: two ? 22 : 28, fontWeight: 800, color: '#111', letterSpacing: '0.08em', padding: '8px 0' }}>ドライテック</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {/* ドライテックでも特記（メモ）を入力できる */}
+                            <input type="text" data-ime="kana" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)}
+                              style={{ width: '70%', alignSelf: 'center', fontSize: 11, fontWeight: 700, textAlign: 'center', color: '#c81e1e', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', background: 'transparent', padding: '0 0 1px', fontFamily: 'inherit' }} />
+                            <div style={{ textAlign: 'center', fontSize: two ? 22 : 28, fontWeight: 800, color: '#111', letterSpacing: '0.08em', padding: '4px 0' }}>ドライテック</div>
+                          </div>
                         ) : (
                           <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
                             <div className="hgcol">
@@ -3488,30 +3498,31 @@ function SchedulePage({ onEditShipment, isPopup }) {
           {editRows.map((r, ri) => {
             const kind = r.kind
             const codeChanged = isChanged(s, 'mixCode')
-            if (kind === 'dry') {
-              return <div key={ri} style={{ textAlign: 'center', fontSize: two ? 14 : 16, fontWeight: 800, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>ドライテック</div>
-            }
-            if (kind === 'mortar') {
-              const x = String(r.code || '').split(':')[1] || ''
-              return (
-                <div key={ri} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                  <span style={{ fontSize: codeFont, fontWeight: 800, color: codeChanged ? '#c81e1e' : '#111' }}>1:</span>
-                  <input type="text" inputMode="numeric" maxLength={2}
-                    key={'m' + ri + (codeChanged ? '_c' : '')} defaultValue={x}
-                    onBlur={(e) => setSchedMixMortarNum(s, ri, e.target.value)}
-                    style={{ width: '1.5em', textAlign: 'center', fontSize: codeFont, fontWeight: 800, border: 'none', borderBottom: '1px solid #cbd3df', outline: 'none', background: 'transparent', color: codeChanged ? '#c81e1e' : '#111', fontFamily: 'inherit', padding: 0 }} />
-                </div>
-              )
-            }
-            // 数値：特記（上）＋ 数字（下）
+            const x = String(r.code || '').split(':')[1] || ''
+            // 特記（メモ）は全種類共通で上に表示・編集できる
+            const noteEl = (
+              <input type="text" key={'n' + ri + (isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2') ? '_c' : '')} defaultValue={r.note || ''} placeholder="特記"
+                onBlur={(e) => setSchedMixNote(s, ri, e.target.value)}
+                style={{ width: '90%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: 0, fontFamily: 'inherit' }} />
+            )
             return (
-              <div key={ri} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                <input type="text" key={'n' + ri + (isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2') ? '_c' : '')} defaultValue={r.note || ''} placeholder="特記"
-                  onBlur={(e) => setSchedMixNote(s, ri, e.target.value)}
-                  style={{ width: '90%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: 0, fontFamily: 'inherit' }} />
-                <input type="text" key={'c' + ri + (codeChanged ? '_c' : '')} defaultValue={mixDisplay(mixCodeOf(r.parts))} placeholder="00-00-00"
-                  onBlur={(e) => setSchedMixNum(s, ri, e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: codeChanged ? '#c81e1e' : '#111', fontFamily: 'inherit', fontSize: codeFont, lineHeight: 1.1 }} />
+              <div key={ri} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', marginTop: ri > 0 ? 3 : 0 }}>
+                {noteEl}
+                {kind === 'dry' ? (
+                  <div style={{ textAlign: 'center', fontSize: two ? 14 : 16, fontWeight: 800, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>ドライテック</div>
+                ) : kind === 'mortar' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                    <span style={{ fontSize: codeFont, fontWeight: 800, color: codeChanged ? '#c81e1e' : '#111' }}>1:</span>
+                    <input type="text" inputMode="numeric" maxLength={2}
+                      key={'m' + ri + (codeChanged ? '_c' : '')} defaultValue={x}
+                      onBlur={(e) => setSchedMixMortarNum(s, ri, e.target.value)}
+                      style={{ width: '1.5em', textAlign: 'center', fontSize: codeFont, fontWeight: 800, border: 'none', borderBottom: '1px solid #cbd3df', outline: 'none', background: 'transparent', color: codeChanged ? '#c81e1e' : '#111', fontFamily: 'inherit', padding: 0 }} />
+                  </div>
+                ) : (
+                  <input type="text" key={'c' + ri + (codeChanged ? '_c' : '')} defaultValue={mixDisplay(mixCodeOf(r.parts))} placeholder="00-00-00"
+                    onBlur={(e) => setSchedMixNum(s, ri, e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: codeChanged ? '#c81e1e' : '#111', fontFamily: 'inherit', fontSize: codeFont, lineHeight: 1.1 }} />
+                )}
               </div>
             )
           })}
@@ -4266,17 +4277,27 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
                   {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} title="この配合を削除" style={{ ...smallBtn, flex: '0 0 auto', minWidth: 44 }}>×</button>}
                 </div>
                 {kind === 'mortar' ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
-                    {['1:1', '1:2', '1:3', '1:4'].map(mc => {
-                      const on = r.code === mc
-                      return (
-                        <button key={mc} type="button" onClick={() => setMixRowMortar(ri, mc)}
-                          style={{ height: 52, border: on ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 11, fontSize: 19, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{mc}</button>
-                      )
-                    })}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* モルタルでも特記（メモ）を入力できる */}
+                    <input type="text" data-ime="kana" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 700, textAlign: 'center', color: '#c0392b', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 4px', fontFamily: 'inherit' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+                      {['1:1', '1:2', '1:3', '1:4'].map(mc => {
+                        const on = r.code === mc
+                        return (
+                          <button key={mc} type="button" onClick={() => setMixRowMortar(ri, mc)}
+                            style={{ height: 52, border: on ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 11, fontSize: 19, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{mc}</button>
+                        )
+                      })}
+                    </div>
                   </div>
                 ) : kind === 'dry' ? (
-                  <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 26, fontWeight: 800, color: '#111', letterSpacing: '0.1em', border: '1.5px solid #d4dbe5', borderRadius: 11, background: '#fff' }}>ドライテック</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* ドライテックでも特記（メモ）を入力できる */}
+                    <input type="text" data-ime="kana" placeholder="特記" value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 700, textAlign: 'center', color: '#c0392b', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 4px', fontFamily: 'inherit' }} />
+                    <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 26, fontWeight: 800, color: '#111', letterSpacing: '0.1em', border: '1.5px solid #d4dbe5', borderRadius: 11, background: '#fff' }}>ドライテック</div>
+                  </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
                     {[0, 1, 2].map(i => (
