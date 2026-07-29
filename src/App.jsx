@@ -3300,14 +3300,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('保存に失敗しました: ' + e.message); throw e }
   }
 
-  // 出荷予定表インライン編集：配合を「行ごとに種類（数値/モルタル/ドライテック）」を保ったまま保存（値崩れ防止）
+  // 出荷予定表インライン編集：配合の「追加・種類変更」はしない（出荷登録で設定）。
+  // 数値の数字・特記、モルタルの右の数字だけを、種類を保ったまま編集して保存する（値崩れ防止）。
   const saveMixRows = (s, rows) => saveStructured(s, syncMixOut(rows), ['mixCode'])
-  const setSchedMixKind = (s, ri, kind) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].kind = kind; if (kind === 'dry') rows[ri].code = 'ドライテック'; else if (kind === 'mortar') { if (!/^1:[1-4]$/.test(rows[ri].code || '')) rows[ri].code = '' } else rows[ri].code = ''; saveMixRows(s, rows) }
-  const setSchedMixMortar = (s, ri, code) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].kind = 'mortar'; rows[ri].code = code; saveMixRows(s, rows) }
-  const setSchedMixNum = (s, ri, raw) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].kind = 'num'; const p = String(raw).split(/[-　 ]/); rows[ri].parts = [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()]; saveMixRows(s, rows) }
-  const setSchedMixNote = (s, ri, v) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].note = v; saveMixRows(s, rows) }
-  const addSchedMixRow = (s) => { const rows = editableMixRows(s); if (rows.length >= 2) return; rows.push(emptyMixRow()); saveMixRows(s, rows) }
-  const delSchedMixRow = (s, ri) => { let rows = editableMixRows(s); rows = rows.filter((_, i) => i !== ri); if (!rows.length) rows = [emptyMixRow()]; saveMixRows(s, rows) }
+  const setSchedMixNum = (s, ri, raw) => { const rows = editableMixRows(s); if (!rows[ri]) return; const p = String(raw).split(/[-　 ]/); rows[ri].parts = [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()]; saveMixRows(s, rows) }
+  const setSchedMixNote = (s, ri, v) => { const rows = editableMixRows(s); if (!rows[ri]) return; rows[ri].note = v; saveMixRows(s, rows) }
+  const setSchedMixMortarNum = (s, ri, raw) => { const rows = editableMixRows(s); if (!rows[ri]) return; const x = z2h(String(raw)).replace(/[^0-9]/g, '').slice(0, 2); rows[ri].code = '1:' + x; saveMixRows(s, rows) }
 
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
 
@@ -3480,58 +3478,43 @@ function SchedulePage({ onEditShipment, isPopup }) {
     // 配合モード判定（mortar/dry/num）
     const mode = s.mixMode || (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
     if (inlineEdit) {
-      // 配合ごとに種類（数値/モルタル/ドライテック）を選んで編集。種類を保ったまま保存するので値崩れしない
+      // 出荷予定表では「配合の追加・種類変更」はしない（出荷登録で設定）。
+      // 数値＝数字と特記、モルタル＝右の数字だけを編集できる。ドライテックは表示のみ。
       const editRows = editableMixRows(s)
       const two = editRows.length > 1
-      const numCodeStyle = { fontSize: two ? 15 : 19, lineHeight: 1.1 }
+      const codeFont = two ? 16 : 20
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: two ? 3 : 0, lineHeight: 1.1 }}>
           {editRows.map((r, ri) => {
             const kind = r.kind
-            const codeChanged = isChanged(s, 'mixCode') || isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2')
-            return (
-              <div key={ri} style={{ borderTop: ri > 0 ? '1px dashed #d7dee8' : 'none', paddingTop: ri > 0 ? 2 : 0 }}>
-                {/* 種類切替（数/モ/ド）＋2行目以降は削除× */}
-                <div style={{ display: 'flex', gap: 1, marginBottom: 1 }}>
-                  {[['num', '数'], ['mortar', 'モ'], ['dry', 'ド']].map(([m, lab]) => (
-                    <button key={m} type="button" onClick={() => setSchedMixKind(s, ri, m)}
-                      style={{ flex: 1, border: kind === m ? '1px solid #0f3060' : '1px solid #cdd5e0', background: kind === m ? '#0f3060' : '#fff', color: kind === m ? '#fff' : '#607089', borderRadius: 3, fontSize: 9, fontWeight: 700, lineHeight: 1.5, cursor: 'pointer', padding: 0 }}>{lab}</button>
-                  ))}
-                  {ri > 0 && (
-                    <button type="button" onClick={() => delSchedMixRow(s, ri)} title="この配合を削除"
-                      style={{ flex: '0 0 auto', border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 3, fontSize: 9, fontWeight: 700, lineHeight: 1.5, cursor: 'pointer', padding: '0 4px' }}>×</button>
-                  )}
+            const codeChanged = isChanged(s, 'mixCode')
+            if (kind === 'dry') {
+              return <div key={ri} style={{ textAlign: 'center', fontSize: two ? 14 : 16, fontWeight: 800, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>ドライテック</div>
+            }
+            if (kind === 'mortar') {
+              const x = String(r.code || '').split(':')[1] || ''
+              return (
+                <div key={ri} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                  <span style={{ fontSize: codeFont, fontWeight: 800, color: codeChanged ? '#c81e1e' : '#111' }}>1:</span>
+                  <input type="text" inputMode="numeric" maxLength={2}
+                    key={'m' + ri + (codeChanged ? '_c' : '')} defaultValue={x}
+                    onBlur={(e) => setSchedMixMortarNum(s, ri, e.target.value)}
+                    style={{ width: '1.5em', textAlign: 'center', fontSize: codeFont, fontWeight: 800, border: 'none', borderBottom: '1px solid #cbd3df', outline: 'none', background: 'transparent', color: codeChanged ? '#c81e1e' : '#111', fontFamily: 'inherit', padding: 0 }} />
                 </div>
-                {/* 種類別の入力 */}
-                {kind === 'mortar' ? (
-                  <div style={{ display: 'flex', gap: 2 }}>
-                    {['1:1', '1:2', '1:3', '1:4'].map(mc => {
-                      const on = r.code === mc
-                      return (
-                        <button key={mc} type="button" onClick={() => setSchedMixMortar(s, ri, mc)}
-                          style={{ flex: 1, border: on ? '1.5px solid #1b4ea8' : '1px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 3, fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: '2px 0' }}>{mc}</button>
-                      )
-                    })}
-                  </div>
-                ) : kind === 'dry' ? (
-                  <div style={{ textAlign: 'center', fontSize: two ? 13 : 15, fontWeight: 800, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>ドライテック</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                    <input type="text" key={'n' + ri + (isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2') ? '_c' : '')} defaultValue={r.note || ''} placeholder="特記"
-                      onBlur={(e) => setSchedMixNote(s, ri, e.target.value)}
-                      style={{ width: '90%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: 0, fontFamily: 'inherit' }} />
-                    <input type="text" key={'c' + ri + (codeChanged ? '_c' : '')} defaultValue={mixDisplay(mixCodeOf(r.parts))} placeholder="00-00-00"
-                      onBlur={(e) => setSchedMixNum(s, ri, e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: isChanged(s, 'mixCode') ? '#c81e1e' : '#111', fontFamily: 'inherit', ...numCodeStyle }} />
-                  </div>
-                )}
+              )
+            }
+            // 数値：特記（上）＋ 数字（下）
+            return (
+              <div key={ri} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                <input type="text" key={'n' + ri + (isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2') ? '_c' : '')} defaultValue={r.note || ''} placeholder="特記"
+                  onBlur={(e) => setSchedMixNote(s, ri, e.target.value)}
+                  style={{ width: '90%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: 0, fontFamily: 'inherit' }} />
+                <input type="text" key={'c' + ri + (codeChanged ? '_c' : '')} defaultValue={mixDisplay(mixCodeOf(r.parts))} placeholder="00-00-00"
+                  onBlur={(e) => setSchedMixNum(s, ri, e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: codeChanged ? '#c81e1e' : '#111', fontFamily: 'inherit', fontSize: codeFont, lineHeight: 1.1 }} />
               </div>
             )
           })}
-          {editRows.length < 2 && (
-            <button type="button" onClick={() => addSchedMixRow(s)}
-              style={{ alignSelf: 'center', marginTop: 1, border: '1px dashed #b9c4d4', background: '#f7f9fc', color: '#3a4a5c', borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: 'pointer', padding: '1px 8px' }}>＋配合</button>
-          )}
         </div>
       )
     }
