@@ -1043,7 +1043,7 @@ function volNumStyle(v) {
   return { fontWeight: 400, color: '#111' }
 }
 // 量を表示する共通レンダラ。unit=true で m³ を付与。値が無ければ fallback を返す。量の特記(volumeNote)があれば数値の前に小さく表示
-function VolNum({ s, unit = false, sep = ' / ', fallback = null, stacked = false, red = false, redSegs = null, redNotes = null }) {
+function VolNum({ s, unit = false, sep = ' / ', fallback = null, stacked = false, red = false, redSegs = null, redNotes = null, preview = false }) {
   // oi=元の段の位置（0=volume, 1=volume2）。段ごとの赤(redSegs/redNotes)は oi で判定する
   const segs = [[s.volume, s.volumePlusA, s.volumeUncertain, s.volumeNote], [s.volume2, s.volumePlusA2, s.volumeUncertain2, s.volumeNote2]]
     .map(([v, a, u, note], oi) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { oi, num: b, note: String(note || '').trim(), text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
@@ -1052,7 +1052,8 @@ function VolNum({ s, unit = false, sep = ' / ', fallback = null, stacked = false
   // red=true（全体赤）／redSegs[oi]（段別赤）のとき、値の色を赤で上書きする（volNumStyle の色より優先）
   const isRedVal = (oi) => red || (Array.isArray(redSegs) && !!redSegs[oi])
   const isRedNote = (oi) => red || (Array.isArray(redNotes) && !!redNotes[oi])
-  const numStyle = (num, oi) => isRedVal(oi) ? { ...volNumStyle(num), color: '#c81e1e' } : volNumStyle(num)
+  // preview=更新プレビュー: 「3桁は赤」等の値ベースの色は使わず、変更した段だけ赤・それ以外は黒にする
+  const numStyle = (num, oi) => isRedVal(oi) ? { fontWeight: 700, color: '#c81e1e' } : (preview ? { color: '#111' } : volNumStyle(num))
   // stacked: 特記を数字の上に小さく表示（横幅を抑える）
   if (stacked) {
     return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}<span style={{ display: 'inline-block', textAlign: 'center', verticalAlign: 'bottom' }}>{seg.note ? <span style={{ display: 'block', fontSize: '.68em', color: isRedNote(seg.oi) ? '#c81e1e' : '#0f3060', lineHeight: 1.1 }}>{seg.note}</span> : null}<span style={numStyle(seg.num, seg.oi)}>{seg.text}</span></span></Fragment>))}</>
@@ -5393,7 +5394,7 @@ function DenpyoView({ s, changedFields = [] }) {
           {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—', 'testTags')}
         </div>
         <div className="band">
-          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" redSegs={[isRed('volume0'), isRed('volume1')]} redNotes={[isRed('volumenote0'), isRed('volumenote1')]} />)}
+          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" preview redSegs={[isRed('volume0'), isRed('volume1')]} redNotes={[isRed('volumenote0'), isRed('volumenote1')]} />)}
           {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—', 'placements')}
           {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—', 'noteTags')}
         </div>
