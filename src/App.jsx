@@ -1143,6 +1143,26 @@ function mixRowsOfShip(s) {
   return [{ code, note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
 }
 
+// 伝票を「編集可能な配合行（kind/parts/code/note）」に変換。旧データ（モルタル/ドライテックが mixCode 単独）も
+// 先頭行に種類/コードを補って読み込む。出荷登録フォームの読込・出荷予定表のインライン編集で共用する。
+function editableMixRows(s) {
+  const mode0 = (s.mixMode === 'mortar' || s.mixMode === 'dry' || s.mixMode === 'num') ? s.mixMode
+    : (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
+  if (Array.isArray(s.mixRows) && s.mixRows.length) {
+    return s.mixRows.map((r, i) => {
+      const kind = (r.kind === 'mortar' || r.kind === 'dry' || r.kind === 'num') ? r.kind : (i === 0 ? mode0 : 'num')
+      const code = r.code || (i === 0 && (kind === 'mortar' || kind === 'dry') ? String(s.mixCode || '') : '')
+      return { kind, parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], code, note: r.note || '' }
+    })
+  }
+  return [{
+    kind: mode0,
+    parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''],
+    code: (mode0 === 'mortar' || mode0 === 'dry') ? String(s.mixCode || '') : '',
+    note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '',
+  }]
+}
+
 const emptyShipForm = {
   date: localToday(),
   orderDate: localToday(),   // 受注日（作成日。読み取り専用で変更不可）
@@ -1744,25 +1764,8 @@ function shipmentToForm(s) {
     mixCode: s.mixCode || '',
     specialNote: s.specialNote || '',
     mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
-    // 配合の復元。行ごとに種類(kind)/コード(code)を保持。旧データ（モルタル/ドライテックが mixCode 単独）も
-    // 先頭行に kind/code を補って読み込む（編集で種類が消えないように）。
-    mixRows: (() => {
-      const mode0 = (s.mixMode === 'mortar' || s.mixMode === 'dry' || s.mixMode === 'num') ? s.mixMode
-        : (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
-      if (Array.isArray(s.mixRows) && s.mixRows.length) {
-        return s.mixRows.map((r, i) => {
-          const kind = (r.kind === 'mortar' || r.kind === 'dry' || r.kind === 'num') ? r.kind : (i === 0 ? mode0 : 'num')
-          const code = r.code || (i === 0 && (kind === 'mortar' || kind === 'dry') ? String(s.mixCode || '') : '')
-          return { kind, parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], code, note: r.note || '' }
-        })
-      }
-      return [{
-        kind: mode0,
-        parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''],
-        code: (mode0 === 'mortar' || mode0 === 'dry') ? String(s.mixCode || '') : '',
-        note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '',
-      }]
-    })(),
+    // 配合の復元。行ごとに種類(kind)/コード(code)を保持（旧データも先頭行に補う）。出荷予定表の編集と共通ロジック。
+    mixRows: editableMixRows(s),
     mixMode: (s.mixMode === 'mortar' || s.mixMode === 'dry' || s.mixMode === 'num') ? s.mixMode
       : (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num')),
     cementType: s.cementType || '',
@@ -3297,6 +3300,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
     } catch (e) { alert('保存に失敗しました: ' + e.message); throw e }
   }
 
+  // 出荷予定表インライン編集：配合を「行ごとに種類（数値/モルタル/ドライテック）」を保ったまま保存（値崩れ防止）
+  const saveMixRows = (s, rows) => saveStructured(s, syncMixOut(rows), ['mixCode'])
+  const setSchedMixKind = (s, ri, kind) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].kind = kind; if (kind === 'dry') rows[ri].code = 'ドライテック'; else if (kind === 'mortar') { if (!/^1:[1-4]$/.test(rows[ri].code || '')) rows[ri].code = '' } else rows[ri].code = ''; saveMixRows(s, rows) }
+  const setSchedMixMortar = (s, ri, code) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].kind = 'mortar'; rows[ri].code = code; saveMixRows(s, rows) }
+  const setSchedMixNum = (s, ri, raw) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].kind = 'num'; const p = String(raw).split(/[-　 ]/); rows[ri].parts = [(p[0] || '').trim(), (p[1] || '').trim(), (p[2] || '').trim()]; saveMixRows(s, rows) }
+  const setSchedMixNote = (s, ri, v) => { const rows = editableMixRows(s); while (rows.length <= ri) rows.push(emptyMixRow()); rows[ri].note = v; saveMixRows(s, rows) }
+  const addSchedMixRow = (s) => { const rows = editableMixRows(s); if (rows.length >= 2) return; rows.push(emptyMixRow()); saveMixRows(s, rows) }
+  const delSchedMixRow = (s, ri) => { let rows = editableMixRows(s); rows = rows.filter((_, i) => i !== ri); if (!rows.length) rows = [emptyMixRow()]; saveMixRows(s, rows) }
+
   const weekday = (() => { const d = new Date(date); return isNaN(d) ? '' : '日月火水木金土'[d.getDay()] })()
 
   // ===== セル文字の自動リサイズ（見切れたら改行ではなくフォントを縮小して収める）=====
@@ -3468,57 +3480,70 @@ function SchedulePage({ onEditShipment, isPopup }) {
     // 配合モード判定（mortar/dry/num）
     const mode = s.mixMode || (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
     if (inlineEdit) {
-      if (mode === 'num') {
-        // 数値モード: 行ごとに「特記(上) / 配合(下)」を縦に並べる（数量2段表示と同じ流儀）
-        const rowsSrc = (Array.isArray(s.mixRows) && s.mixRows.length) ? s.mixRows : [{ parts: ['', '', ''], note: '' }]
-        const hasRow1 = rowsSrc.length > 1 || (rowsSrc[1] && (rowsSrc[1].note || (rowsSrc[1].parts || []).some(p => p && String(p).trim())))
-        // small オプションのとき: フォント / 行間 / padding を詰めて高さを縮める
-        const codeStyle = opts.small ? { fontSize: 13, lineHeight: 1.1, padding: '0 2px' } : undefined
-        const noteInput = (field) => {
-          const changed = isChanged(s, field) || isChanged(s, 'mixCode')
-          return (
-            <input type="text"
-              key={field + '_e' + (changed ? '_c' : '')}
-              defaultValue={getVal(s, field)}
-              placeholder="特記"
-              onBlur={(e) => saveField(s, field, e.target.value)}
-              style={{ width: '80%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: '0 2px 0', fontFamily: 'inherit' }} />
-          )
-        }
-        const renderCode = (field) => {
-          if (!opts.small) return editCell(s, field, { ...opts })
-          // small モード: editCell の big を外して style override
-          const sub = { ...opts }
-          delete sub.big
-          const el = editCell(s, field, sub)
-          return el ? <span style={codeStyle}>{el}</span> : el
-        }
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0, lineHeight: 1.1 }}>
-            {/* 1行目 */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-              {noteInput('mixnote')}
-              {renderCode('mixCode0')}
-            </div>
-            {/* 2行目（存在時のみ） */}
-            {hasRow1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', marginTop: 1 }}>
-                {noteInput('mixnote2')}
-                {renderCode('mixCode1')}
+      // 配合ごとに種類（数値/モルタル/ドライテック）を選んで編集。種類を保ったまま保存するので値崩れしない
+      const editRows = editableMixRows(s)
+      const two = editRows.length > 1
+      const numCodeStyle = { fontSize: two ? 15 : 19, lineHeight: 1.1 }
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {editRows.map((r, ri) => {
+            const kind = r.kind
+            const codeChanged = isChanged(s, 'mixCode') || isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2')
+            return (
+              <div key={ri} style={{ borderTop: ri > 0 ? '1px dashed #d7dee8' : 'none', paddingTop: ri > 0 ? 2 : 0 }}>
+                {/* 種類切替（数/モ/ド）＋2行目以降は削除× */}
+                <div style={{ display: 'flex', gap: 1, marginBottom: 1 }}>
+                  {[['num', '数'], ['mortar', 'モ'], ['dry', 'ド']].map(([m, lab]) => (
+                    <button key={m} type="button" onClick={() => setSchedMixKind(s, ri, m)}
+                      style={{ flex: 1, border: kind === m ? '1px solid #0f3060' : '1px solid #cdd5e0', background: kind === m ? '#0f3060' : '#fff', color: kind === m ? '#fff' : '#607089', borderRadius: 3, fontSize: 9, fontWeight: 700, lineHeight: 1.5, cursor: 'pointer', padding: 0 }}>{lab}</button>
+                  ))}
+                  {ri > 0 && (
+                    <button type="button" onClick={() => delSchedMixRow(s, ri)} title="この配合を削除"
+                      style={{ flex: '0 0 auto', border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 3, fontSize: 9, fontWeight: 700, lineHeight: 1.5, cursor: 'pointer', padding: '0 4px' }}>×</button>
+                  )}
+                </div>
+                {/* 種類別の入力 */}
+                {kind === 'mortar' ? (
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {['1:1', '1:2', '1:3', '1:4'].map(mc => {
+                      const on = r.code === mc
+                      return (
+                        <button key={mc} type="button" onClick={() => setSchedMixMortar(s, ri, mc)}
+                          style={{ flex: 1, border: on ? '1.5px solid #1b4ea8' : '1px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 3, fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: '2px 0' }}>{mc}</button>
+                      )
+                    })}
+                  </div>
+                ) : kind === 'dry' ? (
+                  <div style={{ textAlign: 'center', fontSize: two ? 13 : 15, fontWeight: 800, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>ドライテック</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                    <input type="text" key={'n' + ri + (isChanged(s, ri === 0 ? 'mixnote' : 'mixnote2') ? '_c' : '')} defaultValue={r.note || ''} placeholder="特記"
+                      onBlur={(e) => setSchedMixNote(s, ri, e.target.value)}
+                      style={{ width: '90%', alignSelf: 'center', fontSize: 9, lineHeight: 1, fontWeight: 700, color: '#c81e1e', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', background: 'transparent', outline: 'none', padding: 0, fontFamily: 'inherit' }} />
+                    <input type="text" key={'c' + ri + (codeChanged ? '_c' : '')} defaultValue={mixDisplay(mixCodeOf(r.parts))} placeholder="00-00-00"
+                      onBlur={(e) => setSchedMixNum(s, ri, e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: isChanged(s, 'mixCode') ? '#c81e1e' : '#111', fontFamily: 'inherit', ...numCodeStyle }} />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )
-      }
-      return editCell(s, 'mixCode', { ...opts })
+            )
+          })}
+          {editRows.length < 2 && (
+            <button type="button" onClick={() => addSchedMixRow(s)}
+              style={{ alignSelf: 'center', marginTop: 1, border: '1px dashed #b9c4d4', background: '#f7f9fc', color: '#3a4a5c', borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: 'pointer', padding: '1px 8px' }}>＋配合</button>
+          )}
+        </div>
+      )
     }
     const cls = 'sc-mixcode' + (opts.big ? ' big' : '') + (opts.center ? ' center' : '') + (opts.small ? ' sc-mixcode-small' : '')
-    if (mode === 'dry') {
+    // 1行だけのモルタル/ドライテックは従来のバッジ表示を維持。2行（混在）は下のループで行ごとに表示
+    const singleRow = editableMixRows(s).length <= 1
+    if (singleRow && mode === 'dry') {
       return (
         <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', fontSize: 14, fontWeight: 800, letterSpacing: '.04em', whiteSpace: 'nowrap' }}>ドライテック</span>
       )
     }
-    if (mode === 'mortar') {
+    if (singleRow && mode === 'mortar') {
       return (
         <span ref={fitRef} className={cls} style={{ pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.15 }}>
           <span style={{ fontSize: 10, color: '#7a5d00', background: '#fff8e1', border: '1px solid #f0d089', borderRadius: 3, padding: '0 4px', fontWeight: 700, letterSpacing: '.05em', marginBottom: 2 }}>モルタル</span>
