@@ -309,6 +309,10 @@ input, textarea, select { font-family: inherit; }
 /* 配合は本文より8pt大きく・中央揃え・折り返さない */
 .seikon-table td.seikon-mix { font-size:22px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; }
 .seikon-table td.seikon-mix > div { white-space:nowrap; }
+/* 配合が2種のときはセル内で2段表示（フォントを少し小さくして行に収める） */
+.seikon-table td.seikon-mix .seikon-mixrow { white-space:nowrap; }
+.seikon-table td.seikon-mix .seikon-mixrow.two { font-size:16px; line-height:1.15; }
+.seikon-table td.seikon-mix .seikon-mixrow.two + .seikon-mixrow.two { margin-top:1px; }
 /* 配合の桁組み（画面）：「-」の左右と空きセクションだけ少し余白。数字同士は詰める */
 .seikon-table td.seikon-mix .sk-mixdash { margin:0 0.28em; }
 .seikon-table td.seikon-mix .sk-mixgap { display:inline-block; min-width:0.5em; }

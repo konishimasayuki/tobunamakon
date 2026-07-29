@@ -1043,16 +1043,22 @@ function volNumStyle(v) {
   return { fontWeight: 400, color: '#111' }
 }
 // 量を表示する共通レンダラ。unit=true で m³ を付与。値が無ければ fallback を返す。量の特記(volumeNote)があれば数値の前に小さく表示
-function VolNum({ s, unit = false, sep = ' / ', fallback = null, stacked = false }) {
+function VolNum({ s, unit = false, sep = ' / ', fallback = null, stacked = false, red = false, redSegs = null, redNotes = null, preview = false }) {
+  // oi=元の段の位置（0=volume, 1=volume2）。段ごとの赤(redSegs/redNotes)は oi で判定する
   const segs = [[s.volume, s.volumePlusA, s.volumeUncertain, s.volumeNote], [s.volume2, s.volumePlusA2, s.volumeUncertain2, s.volumeNote2]]
-    .map(([v, a, u, note]) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { num: b, note: String(note || '').trim(), text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
+    .map(([v, a, u, note], oi) => { const b = (v == null ? '' : String(v)).trim(); return (!b && !a && !u) ? null : { oi, num: b, note: String(note || '').trim(), text: `${b}${unit && b ? 'm³' : ''}${a ? '+a' : ''}${u ? '?' : ''}` } })
     .filter(Boolean)
   if (!segs.length) return fallback
+  // red=true（全体赤）／redSegs[oi]（段別赤）のとき、値の色を赤で上書きする（volNumStyle の色より優先）
+  const isRedVal = (oi) => red || (Array.isArray(redSegs) && !!redSegs[oi])
+  const isRedNote = (oi) => red || (Array.isArray(redNotes) && !!redNotes[oi])
+  // preview=更新プレビュー: 「3桁は赤」等の値ベースの色は使わず、変更した段だけ赤・それ以外は黒にする
+  const numStyle = (num, oi) => isRedVal(oi) ? { fontWeight: 700, color: '#c81e1e' } : (preview ? { color: '#111' } : volNumStyle(num))
   // stacked: 特記を数字の上に小さく表示（横幅を抑える）
   if (stacked) {
-    return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}<span style={{ display: 'inline-block', textAlign: 'center', verticalAlign: 'bottom' }}>{seg.note ? <span style={{ display: 'block', fontSize: '.68em', color: '#0f3060', lineHeight: 1.1 }}>{seg.note}</span> : null}<span style={volNumStyle(seg.num)}>{seg.text}</span></span></Fragment>))}</>
+    return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}<span style={{ display: 'inline-block', textAlign: 'center', verticalAlign: 'bottom' }}>{seg.note ? <span style={{ display: 'block', fontSize: '.68em', color: isRedNote(seg.oi) ? '#c81e1e' : '#0f3060', lineHeight: 1.1 }}>{seg.note}</span> : null}<span style={numStyle(seg.num, seg.oi)}>{seg.text}</span></span></Fragment>))}</>
   }
-  return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}{seg.note ? <span style={{ fontSize: '.72em', color: '#0f3060', background: '#eef4ff', borderRadius: 4, padding: '0 4px', marginRight: 3 }}>{seg.note}</span> : ''}<span style={volNumStyle(seg.num)}>{seg.text}</span></Fragment>))}</>
+  return <>{segs.map((seg, i) => (<Fragment key={i}>{i > 0 ? sep : ''}{seg.note ? <span style={{ fontSize: '.72em', color: isRedNote(seg.oi) ? '#c81e1e' : '#0f3060', background: isRedNote(seg.oi) ? '#fdecec' : '#eef4ff', borderRadius: 4, padding: '0 4px', marginRight: 3 }}>{seg.note}</span> : ''}<span style={numStyle(seg.num, seg.oi)}>{seg.text}</span></Fragment>))}</>
 }
 
 // 車種表示: vehicleItems があれば車種名を「・」連結、無ければ vehicleType をそのまま（台数は表記しない）
@@ -2981,21 +2987,31 @@ function diffChangedFields(orig, next) {
   if (norm(orig.siteAddress) !== norm(next.siteAddress)) changed.push('siteAddress')
   if (norm(orig.vehicleType) !== norm(next.vehicleType)) changed.push('vehicleType')
   if (norm(orig.vehicleFree) !== norm(next.vehicleFree)) changed.push('vehicleFree')
-  // 配合：桁グループごとに比較（mix0/mix1/mix2）。1つでも違えば 'mixCode' も付与（旧表示の互換）
+  // 配合：先頭行の桁グループごとに比較（mix0/mix1/mix2＝出荷予定表の桁別赤で使用）
   const op = norm(orig.mixCode).split('-')
   const np = norm(next.mixCode).split('-')
-  let mixDiff = false
-  for (let i = 0; i < 3; i++) { if ((op[i] || '') !== (np[i] || '')) { changed.push('mix' + i); mixDiff = true } }
-  // 中央特記
-  const on = (Array.isArray(orig.mixNotes) ? orig.mixNotes : []).map(norm)
-  const nn = (Array.isArray(next.mixNotes) ? next.mixNotes : []).map(norm)
-  if ((on[1] || '') !== (nn[1] || '')) { changed.push('mixnote'); mixDiff = true }
-  if (mixDiff) changed.push('mixCode')
+  for (let i = 0; i < 3; i++) { if ((op[i] || '') !== (np[i] || '')) changed.push('mix' + i) }
+  // 配合の行ごとに比較。変わった部分だけ赤くできるよう、行のコードは mixrowN、特記は mixnote/mixnote2 を付与する。
+  const om = editableMixRows(orig)
+  const nm = editableMixRows(next)
+  const maxMix = Math.max(om.length, nm.length)
+  for (let i = 0; i < maxMix; i++) {
+    if (mixRowCode(om[i] || {}) !== mixRowCode(nm[i] || {})) changed.push('mixrow' + i)
+    if (norm((om[i] || {}).note) !== norm((nm[i] || {}).note)) changed.push(i === 0 ? 'mixnote' : ('mixnote' + (i + 1)))
+  }
+  // 配合のどこかが変われば全体フラグ 'mixCode'（出荷予定表の従来赤・互換用）
+  if (changed.some(k => /^mixrow\d/.test(k) || /^mix[0-2]$/.test(k) || k === 'mixnote' || /^mixnote\d/.test(k))) changed.push('mixCode')
   if (norm(orig.cementType) !== norm(next.cementType)) changed.push('cementType')
-  if (norm(orig.volume) !== norm(next.volume) || !!orig.volumeUncertain !== !!next.volumeUncertain
-    || !!orig.volumePlusA !== !!next.volumePlusA
-    || norm(orig.volume2) !== norm(next.volume2) || !!orig.volumeUncertain2 !== !!next.volumeUncertain2
-    || !!orig.volumePlusA2 !== !!next.volumePlusA2) changed.push('volume')
+  // 数量：段ごとに比較（volume0/volume1＝値、volumenote0/volumenote1＝特記）。変わった段だけ赤くできる。
+  const volSeg0 = norm(orig.volume) !== norm(next.volume) || !!orig.volumeUncertain !== !!next.volumeUncertain || !!orig.volumePlusA !== !!next.volumePlusA
+  const volSeg1 = norm(orig.volume2) !== norm(next.volume2) || !!orig.volumeUncertain2 !== !!next.volumeUncertain2 || !!orig.volumePlusA2 !== !!next.volumePlusA2
+  const volNote0 = norm(orig.volumeNote) !== norm(next.volumeNote)
+  const volNote1 = norm(orig.volumeNote2) !== norm(next.volumeNote2)
+  if (volSeg0) changed.push('volume0')
+  if (volSeg1) changed.push('volume1')
+  if (volNote0) changed.push('volumenote0')
+  if (volNote1) changed.push('volumenote1')
+  if (volSeg0 || volSeg1 || volNote0 || volNote1) changed.push('volume')   // 全体フラグ（互換用）
   const origPlace = Array.isArray(orig.placements) ? orig.placements : []
   const nextPlace = Array.isArray(next.placements) ? next.placements : []
   if (!eq(origPlace, nextPlace)) changed.push('placements')
@@ -4966,7 +4982,7 @@ function SeikonOutputPage({ isPopup }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  // テーブル用の行: 配合は1つにつき1行に分ける。数量(2種)は先頭行の数量セル内で改行表示する
+  // テーブル用の行: 1伝票=1行。配合(2種)も数量(2種)もセル内で2段表示する（別行に分割しない）
   const tableRows = []
   rows.forEach(s => {
     const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)   // {code, note=配合の特記}。数字が無く特記のみの行も残す
@@ -4974,8 +4990,7 @@ function SeikonOutputPage({ isPopup }) {
     const v2 = volOne(s.volume2, s.volumePlusA2, s.volumeUncertain2)
     // 数量は値ごとに特記(volumeNote)を持たせる
     const vols = [{ v: v1, note: String(s.volumeNote || '').trim() }, { v: v2, note: String(s.volumeNote2 || '').trim() }].filter(x => x.v || x.note)
-    const n = Math.max(1, mixes.length)
-    for (let k = 0; k < n; k++) tableRows.push({ s, mix: mixes[k]?.code || '', mixNote: mixes[k]?.note || '', vols: k === 0 ? vols : [], primary: k === 0 })
+    tableRows.push({ s, mixes, vols })
   })
 
   // 配合の表示：数字同士は詰め、「-」の左右と空きセクションだけ少し余白を広げる（画面）。
@@ -4986,24 +5001,24 @@ function SeikonOutputPage({ isPopup }) {
       {p === '' ? <span className="sk-mixgap" /> : <span className="sk-mixnum">{p}</span>}
     </Fragment>
   ))
-  // 配合セルの中身：数字があれば「特記(小・上) + 数字」。
+  // 配合セルの中身：配合が2種あればセル内で2段表示。各配合は「特記(小・上) + 数字」。
   // 数字が無く特記だけのときは、特記を数字の位置に数字と同じ大きさで表示する。
-  const mixCell = (r) => r.mix
-    ? <>{r.mixNote ? <div className="seikon-mnote">{r.mixNote}</div> : null}<div>{mixSpans(r.mix)}</div></>
-    : <div style={{ whiteSpace: 'normal' }}>{r.mixNote || ''}</div>
+  const mixCell = (mixes) => {
+    const list = Array.isArray(mixes) ? mixes : []
+    if (!list.length) return null
+    const two = list.length > 1
+    return list.map((m, i) => (
+      <div key={i} className={'seikon-mixrow' + (two ? ' two' : '')}>
+        {m.code
+          ? <>{m.note ? <div className="seikon-mnote">{m.note}</div> : null}<div>{mixSpans(m.code)}</div></>
+          : <div style={{ whiteSpace: 'normal' }}>{m.note || ''}</div>}
+      </div>
+    ))
+  }
 
-  // 1行を描画。配合の2行目以降（!primary）は配合のみ（その他は空）
+  // 1行を描画（1伝票=1行。配合・数量はセル内で2段表示）
   const renderRow = (r, key) => {
     const s = r.s
-    if (!r.primary) {
-      return (
-        <tr key={key}>
-          <td></td><td></td><td></td><td></td>
-          <td className="seikon-mix">{mixCell(r)}</td>
-          <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-        </tr>
-      )
-    }
     const ts = timesArr(s)
     const noteItems = (Array.isArray(s.notes) ? s.notes : []).map(n => ({ text: String((n && n.text != null) ? n.text : n ?? '').trim(), important: !!(n && n.important) })).filter(x => x.text)   // 備考（！強調フラグを保持）
     const placeStr = placementsOf(s)   // 荷下ろし
@@ -5020,7 +5035,7 @@ function SeikonOutputPage({ isPopup }) {
         <td>{s.siteName || ''}</td>
         <td className="seikon-datsu">{s.pourLocation || ''}</td>
         <td className="seikon-veh">{vf.veh ? <div style={{ fontSize: vfVehFont(vf.veh, 12), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8' }}>{vf.veh}</div> : null}<div>{vehicleLabel(s) || ''}</div></td>
-        <td className="seikon-mix">{mixCell(r)}</td>
+        <td className="seikon-mix">{mixCell(r.mixes)}</td>
         <td style={{ textAlign: 'center', fontWeight: isB ? 800 : 400 }}>{s.cementType || ''}</td>
         <td style={{ textAlign: 'center' }}>{r.vols.length ? r.vols.map((x, i) => <div key={i}>{x.v ? <>{x.note ? <div className="seikon-qnote">{x.note}</div> : null}<div>{x.v}</div></> : <div style={{ whiteSpace: 'normal' }}>{x.note || ''}</div>}</div>) : ''}</td>
         <td style={{ textAlign: 'center', ...red(timeImp, true) }}>{ts.length ? ts.map((t, i) => <div key={i} style={/[^0-9:：]/.test(t) ? { fontSize: 11 } : undefined}>{t}</div>) : null}</td>
@@ -5337,8 +5352,10 @@ function DenpyoView({ s, changedFields = [] }) {
   const times = (Array.isArray(s.times) ? s.times.map(t => (t && t.text != null) ? t.text : t) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const notes = (Array.isArray(s.notes) ? s.notes.map(n => (n && n.text != null) ? n.text : n) : []).map(x => String(x ?? '').trim()).filter(Boolean)
   const orderDate = String(s.orderDate || (s.createdAt ? String(s.createdAt).slice(0, 10) : '') || '').replace(/-/g, '/')
-  const mixes = mixRowsOfShip(s).filter(r => r.code || r.note)
+  // 配合は行ごとに元の位置(i)を保持（変わった行だけ赤くするため）
+  const mixList = editableMixRows(s).map((r, i) => ({ code: mixRowCode(r), note: String(r.note || '').trim(), i })).filter(x => x.code || x.note)
   const isRed = (...keys) => keys.some(k => changedFields.includes(k))
+  const partRed = (...keys) => isRed(...keys) ? { color: '#c81e1e', fontWeight: 700 } : undefined
   const cell = (label, flex, content, ...keys) => {
     const red = isRed(...keys)
     return (
@@ -5367,12 +5384,17 @@ function DenpyoView({ s, changedFields = [] }) {
         <div className="band">
           {cell('車 種', '0 0 16%', <>{vehicleLabel(s) || '—'}{s.vehicleFree ? <div style={{ fontSize: 12, color: isRed('vehicleFree') ? '#c81e1e' : '#1b4ea8', fontWeight: 700, marginTop: 2 }}>{s.vehicleFree}</div> : null}</>, 'vehicleType', 'vehicleFree')}
           {cell('打設箇所', '0 0 16%', s.pourLocation || '—', 'pourLocation')}
-          {cell('配 合', '1 1 0', mixes.length ? mixes.map((r, i) => <div key={i}>{r.code}{r.note ? `（${r.note}）` : ''}</div>) : '—', 'mixCode', 'mix0', 'mix1', 'mix2', 'mixnote')}
+          {cell('配 合', '1 1 0', mixList.length ? mixList.map(x => (
+            <div key={x.i}>
+              {x.code ? <span style={partRed('mixrow' + x.i)}>{x.code}</span> : null}
+              {x.note ? <span style={partRed(x.i === 0 ? 'mixnote' : ('mixnote' + (x.i + 1)))}>（{x.note}）</span> : null}
+            </div>
+          )) : '—')}
           {cell('セメント種', '0 0 12%', s.cementType || '—', 'cementType')}
           {cell('試 験', '0 0 14%', (s.testTags || []).join('・') || '—', 'testTags')}
         </div>
         <div className="band">
-          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" />, 'volume')}
+          {cell('数 量', '0 0 24%', <VolNum s={s} unit fallback="—" preview redSegs={[isRed('volume0'), isRed('volume1')]} redNotes={[isRed('volumenote0'), isRed('volumenote1')]} />)}
           {cell('荷下ろし', '1 1 0', (Array.isArray(s.placements) ? s.placements : []).join('・') || '—', 'placements')}
           {cell('特 記', '0 0 24%', (Array.isArray(s.noteTags) ? s.noteTags : []).join('・') || '—', 'noteTags')}
         </div>
