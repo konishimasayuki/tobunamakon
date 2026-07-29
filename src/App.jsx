@@ -1106,18 +1106,41 @@ function mixDisplay(code) {
   if (!s.includes('-')) return s
   return s.split('-').map(p => (p || '').trim() || '　').join('-')
 }
+// 配合1行の種類（'num'|'mortar'|'dry'）。未指定は数値扱い（旧データ互換）
+const mixRowKind = (r) => (r && (r.kind === 'mortar' || r.kind === 'dry') ? r.kind : 'num')
+// 配合1行の表示コード。dry=ドライテック / mortar=1:X(code) / num=3枠を'-'連結
+function mixRowCode(r) {
+  if (!r) return ''
+  const k = mixRowKind(r)
+  if (k === 'dry') return 'ドライテック'
+  if (k === 'mortar') return String(r.code || '').trim()
+  return mixCodeOf(r.parts)
+}
+// 配合1行に中身があるか（空行判定）
+function mixRowHasContent(r) {
+  if (!r) return false
+  const k = mixRowKind(r)
+  if (k === 'dry') return true
+  if (k === 'mortar') return !!String(r.code || '').trim()
+  return (Array.isArray(r.parts) ? r.parts : []).some(p => String(p ?? '').trim())
+}
+// 空の配合行
+const emptyMixRow = () => ({ kind: 'num', parts: ['', '', ''], code: '', note: '' })
+// フォームの mixRows を正規化（kind/parts/code/note を必ず持たせて複製）
+const normMixRows = (f) => (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [emptyMixRow()])
+  .map(r => ({ kind: mixRowKind(r), parts: [...(r.parts || ['', '', ''])], code: r.code || '', note: r.note || '' }))
+// mixRows から派生する互換フィールド（mixMode/mixCode/mixNotes は先頭行に同期）
+const syncMixOut = (rows) => { const r0 = rows[0] || emptyMixRow(); return { mixRows: rows, mixMode: mixRowKind(r0), mixCode: mixRowCode(r0), mixNotes: ['', r0.note || '', ''] } }
+
 function mixRowsOfShip(s) {
-  // モルタル(1:1〜1:4)・ドライテックは mixCode をそのまま1行として返す
-  // （mixRows は数値モード用の {parts:[],note} 形式しか持たないため、
-  //   モルタル/ドライテックでは mixCode を直接表示できるようフォールバックする）
+  const rows = Array.isArray(s.mixRows) ? s.mixRows : []
+  // 行ごとに種類/内容を持つ新形式があればそれを使う（数値・モルタル・ドライテック混在可）
+  if (rows.some(mixRowHasContent)) {
+    return rows.map(r => ({ code: mixRowCode(r), note: r.note || '' }))
+  }
+  // 旧形式フォールバック：mixCode 単独（モルタル/ドライテック/数値1行）
   const code = String(s.mixCode || '')
-  if (code === 'ドライテック' || /^1:[1-4]$/.test(code)) {
-    return [{ code, note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
-  }
-  if (Array.isArray(s.mixRows) && s.mixRows.length) {
-    return s.mixRows.map(r => ({ code: mixCodeOf(r.parts), note: r.note || '' }))
-  }
-  return [{ code: s.mixCode || '', note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
+  return [{ code, note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }]
 }
 
 const emptyShipForm = {
@@ -1135,7 +1158,7 @@ const emptyShipForm = {
   mixCode: '',
   specialNote: '',
   mixNotes: ['', '', ''],
-  mixRows: [{ parts: ['', '', ''], note: '' }],   // 配合の複数行。1行目を mixCode/mixNotes に同期
+  mixRows: [{ kind: 'num', parts: ['', '', ''], code: '', note: '' }],   // 配合の複数行（行ごとに種類 num/mortar/dry）。1行目を mixMode/mixCode/mixNotes に同期
   mixMode: 'num',   // 配合モード: 'num'=数値 / 'mortar'=モルタル(1:1〜1:4) / 'dry'=ドライテック
   cementType: '',
   cementType2: '',          // 2つ目のセメント種（2段目の配合に対応）
@@ -1721,9 +1744,25 @@ function shipmentToForm(s) {
     mixCode: s.mixCode || '',
     specialNote: s.specialNote || '',
     mixNotes: (Array.isArray(s.mixNotes) && s.mixNotes.length) ? [s.mixNotes[0] || '', s.mixNotes[1] || '', s.mixNotes[2] || ''] : [s.specialNote || '', '', ''],
-    mixRows: (Array.isArray(s.mixRows) && s.mixRows.length)
-      ? s.mixRows.map(r => ({ parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], note: r.note || '' }))
-      : [{ parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''], note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '' }],
+    // 配合の復元。行ごとに種類(kind)/コード(code)を保持。旧データ（モルタル/ドライテックが mixCode 単独）も
+    // 先頭行に kind/code を補って読み込む（編集で種類が消えないように）。
+    mixRows: (() => {
+      const mode0 = (s.mixMode === 'mortar' || s.mixMode === 'dry' || s.mixMode === 'num') ? s.mixMode
+        : (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num'))
+      if (Array.isArray(s.mixRows) && s.mixRows.length) {
+        return s.mixRows.map((r, i) => {
+          const kind = (r.kind === 'mortar' || r.kind === 'dry' || r.kind === 'num') ? r.kind : (i === 0 ? mode0 : 'num')
+          const code = r.code || (i === 0 && (kind === 'mortar' || kind === 'dry') ? String(s.mixCode || '') : '')
+          return { kind, parts: [r.parts?.[0] || '', r.parts?.[1] || '', r.parts?.[2] || ''], code, note: r.note || '' }
+        })
+      }
+      return [{
+        kind: mode0,
+        parts: [String(s.mixCode || '').split('-')[0] || '', String(s.mixCode || '').split('-')[1] || '', String(s.mixCode || '').split('-')[2] || ''],
+        code: (mode0 === 'mortar' || mode0 === 'dry') ? String(s.mixCode || '') : '',
+        note: (Array.isArray(s.mixNotes) ? s.mixNotes[1] : '') || '',
+      }]
+    })(),
     mixMode: (s.mixMode === 'mortar' || s.mixMode === 'dry' || s.mixMode === 'num') ? s.mixMode
       : (s.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(s.mixCode || '') ? 'mortar' : 'num')),
     cementType: s.cementType || '',
@@ -1783,12 +1822,14 @@ function makeDenpyoHandlers({ form, setForm, employees = [], companyComboOptions
   const set = (key) => (e) => { const v = e.target.value; const composing = e.nativeEvent?.isComposing; setForm(f => ({ ...f, [key]: composing ? v : z2h(v) })) }
   const setVal = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const handleCompanyInput = (e) => { const v = e.target.value; const o = companyComboOptions.find(o => o.label === v); setForm(f => ({ ...f, companyId: o?.id || '', companyName: v })) }
-  const syncMix = (rows) => { const r0 = rows[0] || { parts: ['', '', ''], note: '' }; return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] } }
-  const setMixCell = (row, i, v, raw) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2); return { ...f, ...syncMix(rows) } })
-  const setMixRowNote = (row, v) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].note = v; return { ...f, ...syncMix(rows) } })
-  const addMixRow = () => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); if (rows.length >= 2) return f; rows.push({ parts: ['', '', ''], note: '' }); return { ...f, ...syncMix(rows) } })
-  const delMixRow = (row) => setForm(f => { let rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); rows = rows.filter((_, idx) => idx !== row); if (!rows.length) rows = [{ parts: ['', '', ''], note: '' }]; return { ...f, ...syncMix(rows) } })
-  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [{ parts: ['', '', ''], note: '' }])
+  const syncMix = (rows) => syncMixOut(rows)
+  const setMixCell = (row, i, v, raw) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].kind = 'num'; rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2); return { ...f, ...syncMix(rows) } })
+  const setMixRowNote = (row, v) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].note = v; return { ...f, ...syncMix(rows) } })
+  const setMixRowKind = (row, kind) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].kind = kind; if (kind === 'dry') rows[row].code = 'ドライテック'; else if (kind === 'mortar') { if (!/^1:[1-4]$/.test(rows[row].code || '')) rows[row].code = '' } else rows[row].code = ''; return { ...f, ...syncMix(rows) } })
+  const setMixRowMortar = (row, code) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].kind = 'mortar'; rows[row].code = code; return { ...f, ...syncMix(rows) } })
+  const addMixRow = () => setForm(f => { const rows = normMixRows(f); if (rows.length >= 2) return f; rows.push(emptyMixRow()); return { ...f, ...syncMix(rows) } })
+  const delMixRow = (row) => setForm(f => { let rows = normMixRows(f); rows = rows.filter((_, idx) => idx !== row); if (!rows.length) rows = [emptyMixRow()]; return { ...f, ...syncMix(rows) } })
+  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [emptyMixRow()])
   const syncVeh = (items) => ({ vehicleItems: items, vehicleType: items.map(v => v.type).join('・') })
   const toggleVehItem = (type) => setForm(f => { const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []; const at = items.findIndex(v => v.type === type); if (at >= 0) items.splice(at, 1); else items.push({ type, qty: '1' }); items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type)); return { ...f, ...syncVeh(items) } })
   const setVehQty = (type, qty, composing) => setForm(f => { const items = (Array.isArray(f.vehicleItems) ? f.vehicleItems : []).map(v => v.type === type ? { ...v, qty: composing ? String(qty).slice(0, 2) : z2h(qty).replace(/[^0-9]/g, '').slice(0, 2) } : v); return { ...f, ...syncVeh(items) } })
@@ -1801,7 +1842,7 @@ function makeDenpyoHandlers({ form, setForm, employees = [], companyComboOptions
   const setUnload = (val) => setForm(f => { const notes = (Array.isArray(f.notes) ? f.notes : []).filter(n => !(n && n.kind === 'unload')); if (String(val).trim() !== '') notes.push({ text: val, important: false, kind: 'unload' }); return { ...f, notes: sortNotes(notes) } })
   const addDriver = (e) => { const emp = employees.find(emp => emp.id === e.target.value); if (!emp) return; setForm(f => f.drivers.some(d => d.id === emp.id) ? f : ({ ...f, drivers: [...f.drivers, { id: emp.id, name: emp.name }] })) }
   const removeDriver = (i) => setForm(f => ({ ...f, drivers: f.drivers.filter((_, idx) => idx !== i) }))
-  return { set, setVal, handleCompanyInput, syncMix, setMixCell, setMixRowNote, addMixRow, delMixRow, mixRowsOf, syncVeh, toggleVehItem, setVehQty, vehItems, toggleNoteTag, toggleTestTag, addNoteMessage, removeNoteMessage, unloadText, setUnload, addDriver, removeDriver }
+  return { set, setVal, handleCompanyInput, syncMix, setMixCell, setMixRowNote, setMixRowKind, setMixRowMortar, addMixRow, delMixRow, mixRowsOf, syncVeh, toggleVehItem, setVehQty, vehItems, toggleNoteTag, toggleTestTag, addNoteMessage, removeNoteMessage, unloadText, setUnload, addDriver, removeDriver }
 }
 
 // 出荷登録フォームの「伝票シート」本体（出荷登録ページとスマホ予定表の編集モーダルで共用）。
@@ -1813,12 +1854,14 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
   const redIf = (f) => editChanged.includes(f) ? { color: '#c81e1e' } : undefined
   const focusNextHg = (fromEl) => { const root = sheetRef.current; if (!root) return; const hgs = Array.from(root.querySelectorAll('input.hg')); const i = hgs.indexOf(fromEl); if (i >= 0 && i + 1 < hgs.length) hgs[i + 1].focus() }
   const handleCompanyInput = (e) => { const v = e.target.value; const o = companyComboOptions.find(o => o.label === v); setForm(f => ({ ...f, companyId: o?.id || '', companyName: v })) }
-  const syncMix = (rows) => { const r0 = rows[0] || { parts: ['', '', ''], note: '' }; return { mixRows: rows, mixCode: r0.parts.slice(0, 3).join('-'), mixNotes: [r0.parts[0] ? '' : '', r0.note || '', ''] } }
-  const setMixCell = (row, i, v, raw) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2); return { ...f, ...syncMix(rows) } })
-  const setMixRowNote = (row, v) => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); while (rows.length <= row) rows.push({ parts: ['', '', ''], note: '' }); rows[row].note = v; return { ...f, ...syncMix(rows) } })
-  const addMixRow = () => setForm(f => { const rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); if (rows.length >= 2) return f; rows.push({ parts: ['', '', ''], note: '' }); return { ...f, ...syncMix(rows) } })
-  const delMixRow = (row) => setForm(f => { let rows = (Array.isArray(f.mixRows) && f.mixRows.length ? f.mixRows : [{ parts: ['', '', ''], note: '' }]).map(r => ({ parts: [...(r.parts || ['', '', ''])], note: r.note || '' })); rows = rows.filter((_, idx) => idx !== row); if (!rows.length) rows = [{ parts: ['', '', ''], note: '' }]; return { ...f, ...syncMix(rows) } })
-  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [{ parts: ['', '', ''], note: '' }])
+  const syncMix = (rows) => syncMixOut(rows)
+  const setMixCell = (row, i, v, raw) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].kind = 'num'; rows[row].parts[i] = raw ? String(v).slice(0, 4) : z2h(v).replace(/\D/g, '').slice(0, 2); return { ...f, ...syncMix(rows) } })
+  const setMixRowNote = (row, v) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].note = v; return { ...f, ...syncMix(rows) } })
+  const setMixRowKind = (row, kind) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].kind = kind; if (kind === 'dry') rows[row].code = 'ドライテック'; else if (kind === 'mortar') { if (!/^1:[1-4]$/.test(rows[row].code || '')) rows[row].code = '' } else rows[row].code = ''; return { ...f, ...syncMix(rows) } })
+  const setMixRowMortar = (row, code) => setForm(f => { const rows = normMixRows(f); while (rows.length <= row) rows.push(emptyMixRow()); rows[row].kind = 'mortar'; rows[row].code = code; return { ...f, ...syncMix(rows) } })
+  const addMixRow = () => setForm(f => { const rows = normMixRows(f); if (rows.length >= 2) return f; rows.push(emptyMixRow()); return { ...f, ...syncMix(rows) } })
+  const delMixRow = (row) => setForm(f => { let rows = normMixRows(f); rows = rows.filter((_, idx) => idx !== row); if (!rows.length) rows = [emptyMixRow()]; return { ...f, ...syncMix(rows) } })
+  const mixRowsOf = () => (Array.isArray(form.mixRows) && form.mixRows.length ? form.mixRows : [emptyMixRow()])
   const onHg = (ri, i) => (e) => { const c = e.nativeEvent?.isComposing; setMixCell(ri, i, e.target.value, c); if (!c && z2h(e.target.value).replace(/\D/g, '').length >= 2) focusNextHg(e.target) }
   const syncVeh = (items) => ({ vehicleItems: items, vehicleType: items.map(v => v.type).join('・') })
   const toggleVehItem = (type) => setForm(f => { const items = Array.isArray(f.vehicleItems) ? [...f.vehicleItems] : []; const at = items.findIndex(v => v.type === type); if (at >= 0) items.splice(at, 1); else items.push({ type, qty: '1' }); items.sort((a, b) => VEHICLE_TYPES.indexOf(a.type) - VEHICLE_TYPES.indexOf(b.type)); return { ...f, ...syncVeh(items) } })
@@ -2029,45 +2072,42 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                 </div>
               </div>
               <div className="cell" style={{ flex: '0 0 44%', minWidth: 0 }}>
-                {/* 「配合」ラベル + モード切替（数値/モルタル/ドライテック）を横並びに */}
+                {/* 「配合」ラベル。種類（数値/モルタル/ドライテック）の切替は配合ごとに行う */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                   <div className="lbl" style={{ marginBottom: 0, flex: '0 0 auto' }}>配 合</div>
-                  <div style={{ flex: 1, display: 'flex', gap: 3 }}>
-                    {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => (
-                      <button key={m} type="button"
-                        onClick={() => setForm(f => {
-                          if (f.mixMode === m) return f
-                          if (m === 'dry') return { ...f, mixMode: 'dry', mixCode: 'ドライテック', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
-                          if (m === 'mortar') return { ...f, mixMode: 'mortar', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
-                          return { ...f, mixMode: 'num', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
-                        })}
-                        style={{ flex: 1, border: form.mixMode === m ? '1.5px solid #0f3060' : '1.5px solid #cdd5e0', background: form.mixMode === m ? '#0f3060' : '#fff', color: form.mixMode === m ? '#fff' : '#475467', borderRadius: 5, padding: '2px 4px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: '.04em', lineHeight: 1.3 }}>{label}</button>
-                    ))}
-                  </div>
                 </div>
-                {/* 数値/モルタル/ドライテックの3モードで配合エリアの高さが変わらないよう、最小高を統一(147px ≒ 数値モードの内容高) */}
-                <div className="btn-mid" style={{ minHeight: 147, justifyContent: 'center' }}>
-                {form.mixMode === 'mortar' ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '6px 14px' }}>
-                    {['1:1', '1:2', '1:3', '1:4'].map(r => {
-                      const on = form.mixCode === r
-                      return (
-                        <button key={r} type="button"
-                          onClick={() => setForm(f => ({ ...f, mixCode: r, mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }))}
-                          style={{ height: 44, border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 6, fontSize: 20, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{r}</button>
-                      )
-                    })}
-                  </div>
-                ) : form.mixMode === 'dry' ? (
-                  <div style={{ textAlign: 'center', fontSize: 32, fontWeight: 800, color: '#111', letterSpacing: '0.1em' }}>ドライテック</div>
-                ) : (() => {
-                  const rows = mixRowsOf()
-                  const two = rows.length > 1
-                  return (
-                    <>
-                    <div className={'mixwrap' + (two ? ' two' : ' one')}>
-                      {rows.map((r, ri) => (
-                        <div key={ri} className="mixrow">
+                {/* 配合ごとに種類を選べる（1つ目がモルタル/ドライテックでも2つ目を追加できる）。最小高は数値1行に合わせて統一 */}
+                <div className="btn-mid" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 6, minHeight: 147, paddingTop: 2 }}>
+                  {mixRowsOf().map((r, ri) => {
+                    const kind = mixRowKind(r)
+                    const two = mixRowsOf().length > 1
+                    return (
+                      <div key={ri} style={{ width: '100%', border: ri > 0 ? '1px dashed #dfe4ec' : 'none', borderRadius: 6, padding: ri > 0 ? '4px 5px 5px' : 0 }}>
+                        {/* 配合ごとの種類切替（＋2行目以降は削除×） */}
+                        <div style={{ display: 'flex', gap: 3, marginBottom: 3, alignItems: 'stretch' }}>
+                          {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => (
+                            <button key={m} type="button" onClick={() => setMixRowKind(ri, m)}
+                              style={{ flex: 1, border: kind === m ? '1.5px solid #0f3060' : '1.5px solid #cdd5e0', background: kind === m ? '#0f3060' : '#fff', color: kind === m ? '#fff' : '#475467', borderRadius: 5, padding: '2px 4px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: '.04em', lineHeight: 1.3 }}>{label}</button>
+                          ))}
+                          {ri > 0 && (
+                            <button type="button" onClick={() => delMixRow(ri)} title="この配合を削除"
+                              style={{ flex: '0 0 auto', border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 5, fontSize: 13, fontWeight: 700, lineHeight: 1, padding: '0 8px', cursor: 'pointer' }}>×</button>
+                          )}
+                        </div>
+                        {/* 種類ごとの入力 */}
+                        {kind === 'mortar' ? (
+                          <div style={{ display: 'flex', gap: 6, padding: '4px 2px' }}>
+                            {['1:1', '1:2', '1:3', '1:4'].map(mc => {
+                              const on = r.code === mc
+                              return (
+                                <button key={mc} type="button" onClick={() => setMixRowMortar(ri, mc)}
+                                  style={{ flex: 1, height: 40, border: on ? '2px solid #1b4ea8' : '1.5px solid #cdd5e0', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 6, fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{mc}</button>
+                              )
+                            })}
+                          </div>
+                        ) : kind === 'dry' ? (
+                          <div style={{ textAlign: 'center', fontSize: two ? 22 : 28, fontWeight: 800, color: '#111', letterSpacing: '0.08em', padding: '8px 0' }}>ドライテック</div>
+                        ) : (
                           <div className={'haigou3' + (two ? ' compact' : '')} style={redIf('mixCode')}>
                             <div className="hgcol">
                               <div className="hgnote-spacer" />
@@ -2084,20 +2124,14 @@ function DenpyoFields({ form, setForm, editChanged = [], editing = null, employe
                               <input className="hg" data-ime="ascii" inputMode="numeric" maxLength={2} value={r.parts[2] || ''} onChange={onHg(ri, 2)} onCompositionEnd={e => setMixCell(ri, 2, e.target.value, false)} />
                             </div>
                           </div>
-                          {ri > 0 && (
-                            <button type="button" onClick={() => delMixRow(ri)} title="行を削除"
-                              style={{ position: 'absolute', right: 4, bottom: 4, border: '1px solid #f0c0c0', background: '#fff0f0', color: '#c0392b', borderRadius: 4, fontSize: 12, lineHeight: 1, padding: '1px 5px', cursor: 'pointer' }}>×</button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {/* ＋追加ボタンは2行時も visibility:hidden で同じ高さを維持（フォーム全体の縦寸が動かないように） */}
-                    <button type="button" className="addrow"
-                      style={{ marginTop: 4, fontSize: 11, padding: '2px 8px', alignSelf: 'center', visibility: rows.length < 2 ? 'visible' : 'hidden', pointerEvents: rows.length < 2 ? 'auto' : 'none' }}
+                        )}
+                      </div>
+                    )
+                  })}
+                  {mixRowsOf().length < 2 && (
+                    <button type="button" className="addrow" style={{ marginTop: 2, fontSize: 11, padding: '2px 8px', alignSelf: 'center' }}
                       onClick={addMixRow}>＋ 配合を追加</button>
-                    </>
-                  )
-                })()}
+                  )}
                 </div>
               </div>
               {/* 量（ラベルなし。空いた縦スペースで2段表示を整える。荷下ろし subrow は3段へ移動済） */}
@@ -4095,7 +4129,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
 // 1項目=1ブロックの縦積みで、入力欄・ボタンを指で押しやすい大きさにする。
 function MobileEditForm({ form, setForm, editing, employees = [], companyComboOptions = [], tradingComboOptions = [], onPdfImport, removePdf, previewPdf }) {
   const H = makeDenpyoHandlers({ form, setForm, employees, companyComboOptions })
-  const { set, setVal, handleCompanyInput, setMixCell, setMixRowNote, addMixRow, delMixRow, mixRowsOf,
+  const { set, setVal, handleCompanyInput, setMixCell, setMixRowNote, setMixRowKind, setMixRowMortar, addMixRow, delMixRow, mixRowsOf,
     toggleVehItem, setVehQty, vehItems, toggleNoteTag, toggleTestTag, addNoteMessage, removeNoteMessage, unloadText, setUnload, addDriver, removeDriver } = H
 
   // 時間（最大2）
@@ -4206,63 +4240,58 @@ function MobileEditForm({ form, setForm, editing, employees = [], companyComboOp
         </div>
         <div>
           <label style={lbl}>配合</label>
-          {/* 配合モード切替（数値 / モルタル / ドライテック） */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-            {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => {
-              const on = (form.mixMode || (form.mixCode === 'ドライテック' ? 'dry' : (/^1:[1-4]$/.test(form.mixCode || '') ? 'mortar' : 'num'))) === m
-              return (
-                <button key={m} type="button"
-                  onClick={() => setForm(f => {
-                    if ((f.mixMode || 'num') === m) return f
-                    if (m === 'dry') return { ...f, mixMode: 'dry', mixCode: 'ドライテック', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
-                    if (m === 'mortar') return { ...f, mixMode: 'mortar', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
-                    return { ...f, mixMode: 'num', mixCode: '', mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }
+          {/* 配合ごとに種類（数値/モルタル/ドライテック）を選べる。1つ目がモルタル/ドライテックでも2つ目を追加できる */}
+          {mixRowsOf().map((r, ri) => {
+            const kind = mixRowKind(r)
+            return (
+              <div key={ri} style={{ marginTop: ri > 0 ? 12 : 0, border: ri > 0 ? '1px dashed #d4dbe5' : 'none', borderRadius: 11, padding: ri > 0 ? '8px' : 0 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'stretch' }}>
+                  {[['num', '数値'], ['mortar', 'モルタル'], ['dry', 'ドライテック']].map(([m, label]) => {
+                    const on = kind === m
+                    return (
+                      <button key={m} type="button" onClick={() => setMixRowKind(ri, m)}
+                        style={{ flex: 1, border: on ? '2px solid #0f3060' : '1.5px solid #d4dbe5', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#475467', borderRadius: 10, padding: '10px 6px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {label}
+                      </button>
+                    )
                   })}
-                  style={{ flex: 1, border: on ? '2px solid #0f3060' : '1.5px solid #d4dbe5', background: on ? '#0f3060' : '#fff', color: on ? '#fff' : '#475467', borderRadius: 10, padding: '10px 6px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-          {/* モード別のフォーム */}
-          {(form.mixMode === 'mortar' || (!form.mixMode && /^1:[1-4]$/.test(form.mixCode || ''))) ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {['1:1', '1:2', '1:3', '1:4'].map(r => {
-                const on = form.mixCode === r
-                return (
-                  <button key={r} type="button"
-                    onClick={() => setForm(f => ({ ...f, mixMode: 'mortar', mixCode: r, mixRows: [{ parts: ['', '', ''], note: '' }], mixNotes: ['', '', ''] }))}
-                    style={{ height: 56, border: on ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 11, fontSize: 22, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{r}</button>
-                )
-              })}
-            </div>
-          ) : (form.mixMode === 'dry' || (!form.mixMode && form.mixCode === 'ドライテック')) ? (
-            <div style={{ textAlign: 'center', padding: '18px 0', fontSize: 28, fontWeight: 800, color: '#111', letterSpacing: '0.1em', border: '1.5px solid #d4dbe5', borderRadius: 11, background: '#fff' }}>ドライテック</div>
-          ) : (
-            <>
-              {mixRowsOf().map((r, ri) => (
-                <div key={ri} style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: ri > 0 ? 12 : 0 }}>
-                  {[0, 1, 2].map(i => (
-                    <Fragment key={i}>
-                      {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#101828', paddingBottom: 11 }}>-</span>}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {i === 1
-                          ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記" data-ime="kana"
-                              style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
-                          : <div style={{ height: 16 }} />}
-                        <input value={r.parts[i] || ''} inputMode="numeric" data-ime="ascii" placeholder="00"
-                          onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
-                          onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
-                          style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #d4dbe5', borderRadius: 11, padding: '12px 4px', fontFamily: 'inherit', color: '#101828', marginTop: 4 }} />
-                      </div>
-                    </Fragment>
-                  ))}
-                  {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} style={{ ...smallBtn, height: 52 }}>×</button>}
+                  {ri > 0 && <button type="button" onClick={() => delMixRow(ri)} title="この配合を削除" style={{ ...smallBtn, flex: '0 0 auto', minWidth: 44 }}>×</button>}
                 </div>
-              ))}
-              {mixRowsOf().length < 2 && <button type="button" onClick={addMixRow} style={{ ...addBtn, marginTop: 10 }}>＋ 配合を追加</button>}
-            </>
-          )}
+                {kind === 'mortar' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+                    {['1:1', '1:2', '1:3', '1:4'].map(mc => {
+                      const on = r.code === mc
+                      return (
+                        <button key={mc} type="button" onClick={() => setMixRowMortar(ri, mc)}
+                          style={{ height: 52, border: on ? '2px solid #1b4ea8' : '1.5px solid #d4dbe5', background: on ? '#e8f0ff' : '#fff', color: on ? '#1b4ea8' : '#101828', borderRadius: 11, fontSize: 19, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>{mc}</button>
+                      )
+                    })}
+                  </div>
+                ) : kind === 'dry' ? (
+                  <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 26, fontWeight: 800, color: '#111', letterSpacing: '0.1em', border: '1.5px solid #d4dbe5', borderRadius: 11, background: '#fff' }}>ドライテック</div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+                    {[0, 1, 2].map(i => (
+                      <Fragment key={i}>
+                        {i > 0 && <span style={{ fontSize: 24, fontWeight: 700, color: '#101828', paddingBottom: 11 }}>-</span>}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {i === 1
+                            ? <input value={r.note || ''} onChange={e => setMixRowNote(ri, e.target.value)} placeholder="特記" data-ime="kana"
+                                style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#c0392b', textAlign: 'center', border: 'none', borderBottom: '1px dashed #e7a3a3', outline: 'none', padding: '0 0 3px', fontFamily: 'inherit' }} />
+                            : <div style={{ height: 16 }} />}
+                          <input value={r.parts[i] || ''} inputMode="numeric" data-ime="ascii" placeholder="00"
+                            onChange={e => setMixCell(ri, i, e.target.value, e.nativeEvent?.isComposing)}
+                            onCompositionEnd={e => setMixCell(ri, i, e.target.value, false)}
+                            style={{ width: '100%', boxSizing: 'border-box', fontSize: 22, fontWeight: 700, textAlign: 'center', border: '1.5px solid #d4dbe5', borderRadius: 11, padding: '12px 4px', fontFamily: 'inherit', color: '#101828', marginTop: 4 }} />
+                        </div>
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {mixRowsOf().length < 2 && <button type="button" onClick={addMixRow} style={{ ...addBtn, marginTop: 10 }}>＋ 配合を追加</button>}
         </div>
         <div>
           <label style={lbl}>量（m³）</label>
