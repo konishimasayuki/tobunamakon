@@ -243,7 +243,9 @@ input, textarea, select { font-family: inherit; }
 /* 通常の出荷予定表と同じ大きさ・フォントのまま、編集列を消して
    画面いっぱいに広げる（横スクロールを出さない）。 */
 .schedule.popup-view table { min-width:0; width:100%; }
-.schedule.popup-view td, .schedule.popup-view th { padding:6px 8px; }
+/* 別ウィンドウ（掲示板）は各セルの上下余白を詰めて、1件あたりの縦幅を小さくする */
+.schedule.popup-view td, .schedule.popup-view th { padding:1px 8px; }
+.schedule.popup-view td { height:auto; }
 /* 別ウィンドウ（スマホ横向きで閲覧）: iPhoneのカメラ/ノッチを避けて左右上に安全マージン。
    縦・横どちらの向きでも内容幅が常にセーフエリア内に収まるよう padding で揃える。 */
 .schedule-popup-root {
