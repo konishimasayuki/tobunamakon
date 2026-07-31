@@ -3039,23 +3039,43 @@ function diffChangedFields(orig, next) {
 
 // 出荷予定表 大型モニター(4K)表示：表示倍率（端末ごと・localStorage）。設定画面で 通常/4K を切替＋倍率調整。
 const SCHED4K_ON = 'sched4kOn', SCHED4K_SCALE = 'sched4kScale'
-const SCHED_SCALE_MIN = 0.5, SCHED_SCALE_MAX = 5   // 別ウィンドウ「画面に合わせる」で縮小/拡大できる範囲
 function read4kScale() {
   try {
     if (localStorage.getItem(SCHED4K_ON) !== '1') return 1
     const v = parseFloat(localStorage.getItem(SCHED4K_SCALE))
-    return (Number.isFinite(v) && v >= SCHED_SCALE_MIN && v <= SCHED_SCALE_MAX) ? v : 1.4
+    return (Number.isFinite(v) && v >= 1 && v <= 3) ? v : 1.4
   } catch { return 1 }
 }
-// 出荷予定表の表示倍率を保存（別ウィンドウのズーム操作・設定画面で共用）。全ウィンドウに即反映。
-function writeSchedScale(scale) {
-  const v = Math.max(SCHED_SCALE_MIN, Math.min(SCHED_SCALE_MAX, Math.round((Number(scale) || 1) * 100) / 100))
+// 別ウィンドウ（掲示板）の画面倍率を保存（この端末のブラウザにだけ）。全ウィンドウに即反映。
+function writeBoardScale(scale) {
+  const v = Math.max(1, Math.min(3, Math.round((Number(scale) || 1) * 100) / 100))
   try {
-    localStorage.setItem(SCHED4K_ON, '1')
+    localStorage.setItem(SCHED4K_ON, v > 1 ? '1' : '0')
     localStorage.setItem(SCHED4K_SCALE, String(v))
     window.dispatchEvent(new Event('sched4kchange'))
   } catch { /* noop */ }
   return v
+}
+// 別ウィンドウの列設定（表示項目・表示順）。端末ごと・localStorage。既定の列キー順。
+const BOARD_ORDER_KEY = 'boardColOrder', BOARD_HIDDEN_KEY = 'boardColHidden', BOARD_AMPM_KEY = 'boardAmpm'
+const BOARD_COL_KEYS = ['company', 'site', 'pour', 'vehicle', 'mix', 'cement', 'volume', 'time', 'driver', 'notes', 'toku', 'map']
+// 保存済み順に、未知/新規キーを既定順で補完した「全キーの並び」を返す
+function readBoardOrder() {
+  let saved = []
+  try { const a = JSON.parse(localStorage.getItem(BOARD_ORDER_KEY) || '[]'); if (Array.isArray(a)) saved = a.filter(k => BOARD_COL_KEYS.includes(k)) } catch { /* noop */ }
+  const rest = BOARD_COL_KEYS.filter(k => !saved.includes(k))
+  return [...saved, ...rest]
+}
+function readBoardHidden() {
+  try { const a = JSON.parse(localStorage.getItem(BOARD_HIDDEN_KEY) || '[]'); if (Array.isArray(a)) return a.filter(k => BOARD_COL_KEYS.includes(k)) } catch { /* noop */ }
+  return []
+}
+function writeBoardCols(order, hidden) {
+  try {
+    localStorage.setItem(BOARD_ORDER_KEY, JSON.stringify(order))
+    localStorage.setItem(BOARD_HIDDEN_KEY, JSON.stringify(hidden))
+    window.dispatchEvent(new Event('boardcolchange'))
+  } catch { /* noop */ }
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
@@ -3079,31 +3099,31 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return localToday()
   })
   useAutoToday(setDate)   // 0:00を跨いだら本日表示中は自動で当日へ繰り上げ
-  const [ampm, setAmpm] = useState('both')   // 表示の絞り込み（'both' | 'AM' | 'PM'）
+  // 表示の絞り込み（'both' | 'AM' | 'PM'）。別ウィンドウは端末ごとに保存した値で開く
+  const [ampm, setAmpm] = useState(() => {
+    try { if (isPopup) { const v = localStorage.getItem(BOARD_AMPM_KEY); if (v === 'AM' || v === 'PM' || v === 'both') return v } } catch { /* noop */ }
+    return 'both'
+  })
+  useEffect(() => { if (isPopup) { try { localStorage.setItem(BOARD_AMPM_KEY, ampm) } catch { /* noop */ } } }, [ampm, isPopup])
   const [all, setAll] = useState([])
   const [loading, setLoading] = useState(true)
-  // 大型モニター(4K)表示倍率（端末ごと・localStorage）。設定画面での切替/調整を反映
+  // 大型モニター(4K)表示倍率（端末ごと・localStorage）。設定画面・別ウィンドウのモーダルで調整
   const [scale4k, setScale4k] = useState(read4kScale)
+  // 別ウィンドウの列設定（表示項目＝非表示リスト／表示順）とモーダルの開閉
+  const [boardOrder, setBoardOrder] = useState(readBoardOrder)
+  const [boardHidden, setBoardHidden] = useState(readBoardHidden)
+  const [boardModal, setBoardModal] = useState(false)
+  const [boardModalMin, setBoardModalMin] = useState(false)   // 画面操作モーダルの最小化
+  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, cols: true })   // モーダル各セクションの開閉
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
+    const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
     window.addEventListener('sched4kchange', on)
+    window.addEventListener('boardcolchange', onCols)
     window.addEventListener('storage', on)   // 別タブ/別ウィンドウでの変更も反映
-    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('storage', on) }
+    window.addEventListener('storage', onCols)
+    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols) }
   }, [])
-  // 別ウィンドウ（掲示板）のズーム操作用。boardRef=倍率をかけている内容の外枠
-  const boardRef = useRef(null)
-  const bumpScale = (delta) => writeSchedScale((scale4k || 1) + delta)
-  // 「画面に合わせる」＝その日の一覧が縦スクロールなしで画面に収まる最大倍率に自動調整（高さ基準）
-  const fitToScreen = () => {
-    const el = boardRef.current
-    if (!el || typeof window === 'undefined') return
-    const rect = el.getBoundingClientRect()   // CSS zoom は getBoundingClientRect に反映される（＝現在の倍率での実寸）
-    const cur = scale4k || 1
-    const naturalH = rect.height / cur                       // 倍率1相当の内容の高さ
-    const avail = window.innerHeight - rect.top - 8          // 内容の上端から画面下までの高さ
-    if (naturalH <= 0 || avail <= 0) return
-    writeSchedScale(avail / naturalH)
-  }
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3893,34 +3913,100 @@ function SchedulePage({ onEditShipment, isPopup }) {
     </span>
   )
 
+  // ===== 表の列定義（生コン準拠）。別ウィンドウでは表示項目・表示順を可変にする =====
+  const cementCell = (s) => {
+    const ct = (v) => v === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{v || ''}</span>
+    const c1 = s.cementType || '', c2 = s.cementType2 || ''
+    if (c1 && c2) return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
+        <span>{ct(c1)}</span><span style={{ fontSize: 9, color: '#999', lineHeight: 1 }}>─</span><span>{ct(c2)}</span>
+      </div>
+    )
+    return ct(c1)
+  }
+  const tokuCell = (s) => {
+    const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
+    const tests = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')
+    if (!tags && !tests) return null
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+        {tags ? <div style={{ fontSize: 11, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
+        {tests ? <div style={{ fontSize: 10, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
+      </div>
+    )
+  }
+  const vehicleTd = (s) => (<>
+    {inlineEdit ? (
+      <input type="text" key={'vf' + (isChanged(s, 'vehicleFree') ? '_c' : '')} defaultValue={s.vehicleFree || ''} placeholder="補足"
+        onBlur={(e) => saveField(s, 'vehicleFree', e.target.value)}
+        style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 700, color: '#1b4ea8', textAlign: 'center', border: 'none', borderBottom: '1px dashed #c0d0e3', background: 'transparent', outline: 'none', padding: '0 2px 1px' }} />
+    ) : (
+      vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFontSchedule(vfPlace(s.vehicleFree).veh), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null
+    )}
+    {cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}
+  </>)
+  const notesTd = (s) => (<>
+    {cellNotes(s, { plain: true, noVf: true, noTags: true })}{placeLine(s)}{cell(s, 'siteContact', '現場連絡先')}
+    {!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}
+  </>)
+  const mapTd = (s) => (String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''
+  const editTd = (s) => (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'stretch' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <button type="button" className="sc-act edit" onClick={() => openEditWindow(s)}>✏️ 編集</button>
+        <button type="button" className="sc-act line" style={{ marginTop: 0 }} onClick={() => openLine(s)}>LINE送信</button>
+      </div>
+      <button type="button" className="sc-act del" style={{ flex: '0 0 auto', width: 'auto', marginTop: 0, alignSelf: 'stretch', padding: '4px 6px' }} onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
+    </div>
+  )
+  const COLS = {
+    company: { label: '業者名/商社', width: 12, th: <><div>業者名</div><div>商社</div></>, td: (s) => <>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</> },
+    site: { label: '現場名', width: 15, th: '現場名', td: (s) => cell(s, 'siteName', '', { big: true, wrap: true }) },
+    pour: { label: '打設', width: 4, thClass: 'th-tight', th: '打設', td: (s) => cell(s, 'pourLocation', '', { center: true, wrap: true }) },
+    vehicle: { label: '車種', width: 7, thClass: 'th-tight', th: '車種', tdClass: 'sc-nowrap', td: vehicleTd },
+    mix: { label: '配合', width: 11, th: '配合', tdClass: 'sc-nowrap', td: (s) => cellMix(s, { center: true, big: true }) },
+    cement: { label: '種', width: 3, thClass: 'th-tight', th: '種', tdClass: 'sc-nowrap', tdStyle: { textAlign: 'center' }, td: cementCell },
+    volume: { label: '数量', width: 7, th: '数量', tdClass: 'sc-nowrap', td: (s) => cellVolume(s) },
+    time: { label: '時間', width: 7, th: '時間', tdClass: 'sc-nowrap', td: (s) => cellMulti(s, 'times', '', { center: true, big: true }) },
+    driver: { label: '担当', width: 9, th: '担当', td: (s) => cellDrivers(s, { big: true }) },
+    notes: { label: '備考/現場連絡先', width: 15, th: <><div>備考</div><div>現場連絡先</div></>, td: notesTd },
+    toku: { label: '特記', width: 2.5, thClass: 'th-tight', th: '特記', tdClass: 'sc-nowrap', tdStyle: { textAlign: 'center', padding: '2px 2px' }, td: tokuCell },
+    map: { label: '地図', width: 2.5, thClass: 'th-tight', th: '地図', tdStyle: { textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }, td: mapTd },
+    edit: { label: '編集', width: 7, thClass: 'th-tight', th: '編集', tdStyle: { textAlign: 'center' }, td: editTd },
+  }
+  // 実際に描画する列。別ウィンドウは端末設定（順序＋非表示）を反映。アプリ内は既定順＋編集列。
+  const hiddenSet = new Set(boardHidden)
+  const activeCols = isPopup
+    ? boardOrder.map(k => COLS[k] && { key: k, ...COLS[k] }).filter(Boolean).filter(c => !hiddenSet.has(c.key))
+    : [...BOARD_COL_KEYS.map(k => ({ key: k, ...COLS[k] })), { key: 'edit', ...COLS.edit }]
+  const colTotalW = activeCols.reduce((a, c) => a + (c.width || 0), 0) || 1
+  // 別ウィンドウの列設定 操作（表示ON/OFF・並び替え・既定に戻す）
+  const toggleBoardCol = (k) => { const next = hiddenSet.has(k) ? boardHidden.filter(x => x !== k) : [...boardHidden, k]; setBoardHidden(next); writeBoardCols(boardOrder, next) }
+  const moveBoardCol = (i, dir) => { const j = i + dir; if (j < 0 || j >= boardOrder.length) return; const next = [...boardOrder];[next[i], next[j]] = [next[j], next[i]]; setBoardOrder(next); writeBoardCols(next, boardHidden) }
+  const resetBoardCols = () => { setBoardOrder([...BOARD_COL_KEYS]); setBoardHidden([]); writeBoardCols([...BOARD_COL_KEYS], []) }
+  // 画面操作モーダルの折りたたみセクション見出し（クリックで開閉）
+  const secHead = (key, title) => (
+    <div onClick={() => setSecOpen(o => ({ ...o, [key]: !o[key] }))}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f4f6f9', border: '1px solid #e3e8ef', borderRadius: 8, padding: '9px 12px', fontSize: 14, fontWeight: 700, color: '#334', cursor: 'pointer', userSelect: 'none' }}>
+      <span style={{ fontSize: 12, color: '#6b7a8d', width: 14, display: 'inline-block' }}>{secOpen[key] ? '▾' : '▸'}</span>
+      <span>{title}</span>
+    </div>
+  )
+
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
       {isPopup ? (
-        /* 別ウィンドウ: 日付・曜日(左)／タイトル(中央)／閉じる(右)、その下にAM/PM(中央) */
-        <div style={{ borderBottom: '1px solid #e5e9f0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '10px 12px 4px' }}>
-            <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
-              <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
-            {/* 掲示板形式（共有ボード）は閉じるボタンを置かない（ブラウザのタブ/ウィンドウで閉じる） */}
-            <div className="no-print" />
+        /* 別ウィンドウ: 日付・曜日(左)／タイトル(中央)／AM・PM(右) を1行で高さを揃える。日付・AM/PMはタイトルに被らない配置 */
+        <div style={{ borderBottom: '1px solid #e5e9f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
+            <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
           </div>
-          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 12px 6px', flexWrap: 'wrap' }}>
-            {ampmButtons}
-          </div>
-          {/* 表示サイズ調整（掲示板をモニターに合わせる）。印刷には出さない */}
-          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 12px 10px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: '#6b7a8d' }}>表示サイズ</span>
-            <button type="button" onClick={() => bumpScale(-0.1)} title="小さく"
-              style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '3px 12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>−</button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f3060', minWidth: '3.4em', textAlign: 'center' }}>{Math.round((scale4k || 1) * 100)}%</span>
-            <button type="button" onClick={() => bumpScale(0.1)} title="大きく"
-              style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '3px 12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>＋</button>
-            <button type="button" onClick={fitToScreen} title="今の画面サイズいっぱいに合わせる"
-              style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⤢ 画面に合わせる</button>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+            <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順・AM/PM）"
+              style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
           </div>
         </div>
       ) : (
@@ -4031,110 +4117,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
       ) : (() => {
         const inner = (<>
         <table>
-          {/* 生コン準拠の列: 業者名+商社 / 現場名 / 打設 / 車種 / 配合 / 種 / 数量 / 時間 / 担当 / 備考+連絡先 / 特記 / 地図 / 電 / (編集) */}
+          {/* 生コン準拠の列。別ウィンドウは表示項目・表示順を端末設定で可変（activeCols） */}
           <colgroup>
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '15%' }} />
-            <col style={{ width: '4%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '3%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '15%' }} />
-            <col style={{ width: '2.5%' }} />
-            <col style={{ width: '2.5%' }} />
-            {!isPopup && <col style={{ width: '7%' }} />}
+            {activeCols.map(c => <col key={c.key} style={{ width: (c.width / colTotalW * 100) + '%' }} />)}
           </colgroup>
           <thead>
             <tr>
-              <th><div>業者名</div><div>商社</div></th>
-              <th>現場名</th>
-              <th className="th-tight">打設</th>
-              <th className="th-tight">車種</th>
-              <th>配合</th>
-              <th className="th-tight">種</th>
-              <th>数量</th>
-              <th>時間</th>
-              <th>担当</th>
-              <th><div>備考</div><div>現場連絡先</div></th>
-              <th className="th-tight">特記</th>
-              <th className="th-tight">地図</th>
-              {!isPopup && <th className="th-tight">編集</th>}
+              {activeCols.map(c => <th key={c.key} className={c.thClass || ''}>{c.th}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.map(s => (
               <tr key={s.id}>
-                <td>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</td>
-                <td>{cell(s, 'siteName', '', { big: true, wrap: true })}</td>
-                <td>{cell(s, 'pourLocation', '', { center: true, wrap: true })}</td>
-                {/* 車種: 補足(vehicleFree) も inline 編集可。表示時のみ vfPlace で長い文字は備考列にあふれさせる */}
-                <td className="sc-nowrap">
-                  {inlineEdit ? (
-                    <input type="text"
-                      key={'vf' + (isChanged(s, 'vehicleFree') ? '_c' : '')}
-                      defaultValue={s.vehicleFree || ''}
-                      placeholder="補足"
-                      onBlur={(e) => saveField(s, 'vehicleFree', e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, fontWeight: 700, color: '#1b4ea8', textAlign: 'center', border: 'none', borderBottom: '1px dashed #c0d0e3', background: 'transparent', outline: 'none', padding: '0 2px 1px' }} />
-                  ) : (
-                    vfPlace(s.vehicleFree).veh ? <div style={{ fontSize: vfVehFontSchedule(vfPlace(s.vehicleFree).veh), fontWeight: 700, lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1b4ea8', textAlign: 'center' }}>{vfPlace(s.vehicleFree).veh}</div> : null
-                  )}
-                  {cell(s, 'vehicleType', '', { center: true, big: true, xl: true })}
-                </td>
-                <td className="sc-nowrap">{cellMix(s, { center: true, big: true })}</td>
-                {/* 種: 1つだけ=従来どおり / 2つあれば縦並び（B/N など） */}
-                <td className="sc-nowrap" style={{ textAlign: 'center' }}>{(() => {
-                  const ct = (v) => v === 'B'
-                    ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b>
-                    : <span style={{ fontSize: 16 }}>{v || ''}</span>
-                  const c1 = s.cementType || ''
-                  const c2 = s.cementType2 || ''
-                  if (c1 && c2) {
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
-                        <span>{ct(c1)}</span>
-                        <span style={{ fontSize: 9, color: '#999', lineHeight: 1 }}>─</span>
-                        <span>{ct(c2)}</span>
-                      </div>
-                    )
-                  }
-                  return ct(c1)
-                })()}</td>
-                <td className="sc-nowrap">{cellVolume(s)}</td>
-                <td className="sc-nowrap">{cellMulti(s, 'times', '', { center: true, big: true })}</td>
-                <td>{cellDrivers(s, { big: true })}</td>
-                {/* 備考: 領追インラインは特記列に統合したので noTags で抑制。荷下ろしは備考の下に読み取り専用で表示（生コン予定表と同様） */}
-                <td>{cellNotes(s, { plain: true, noVf: true, noTags: true })}{placeLine(s)}{cell(s, 'siteContact', '現場連絡先')}{!inlineEdit && vfPlace(s.vehicleFree).over ? <span style={{ marginLeft: 8, color: '#1b4ea8', fontWeight: 700 }}>{vfPlace(s.vehicleFree).over}</span> : null}</td>
-                {/* 特記: 上=領/追(赤太字)、下=現/工(testTags の TP を除く略表記) */}
-                <td className="sc-nowrap" style={{ textAlign: 'center', padding: '2px 2px' }}>{(() => {
-                  const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
-                  const tests = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')
-                  if (!tags && !tests) return null
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-                      {tags ? <div style={{ fontSize: 11, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
-                      {tests ? <div style={{ fontSize: 10, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
-                    </div>
-                  )
-                })()}</td>
-                {/* 地図: 現場住所が入っているか PDF添付があれば ✔（生コン予定表と同ロジック） */}
-                <td style={{ textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }}>
-                  {(String(s.siteAddress || '').trim() || s.hasPdf === '1' || s.hasPdf === true || s.hasPdf === 1) ? '✔' : ''}
-                </td>
-                {!isPopup && (
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'stretch' }}>
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <button type="button" className="sc-act edit" onClick={() => openEditWindow(s)}>✏️ 編集</button>
-                        <button type="button" className="sc-act line" style={{ marginTop: 0 }} onClick={() => openLine(s)}>LINE送信</button>
-                      </div>
-                      <button type="button" className="sc-act del" style={{ flex: '0 0 auto', width: 'auto', marginTop: 0, alignSelf: 'stretch', padding: '4px 6px' }} onClick={() => deleteShip(s)} title="この伝票を削除（キャンセル伝票に保管・復元可）">削除</button>
-                    </div>
-                  </td>
-                )}
+                {activeCols.map(c => <td key={c.key} className={c.tdClass || ''} style={c.tdStyle}>{c.td(s)}</td>)}
               </tr>
             ))}
           </tbody>
@@ -4158,21 +4153,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
         )}
         </>)
-        // 4K表示: inner を zoom で拡大（表は width:100% のままなので列幅は画面いっぱい・文字だけ拡大）
-        // ref を渡すと必ずラッパーdivを付ける（別ウィンドウの「画面に合わせる」で高さを測るため）
-        const scaled = (node, ref) => (ref || scale4k !== 1)
-          ? <div ref={ref} style={scale4k !== 1 ? { zoom: scale4k } : undefined}>{node}</div>
-          : node
-        if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{scaled(inner)}</div>
+        // 4K表示は「別ウィンドウ（掲示板）だけ」に効かせる。通常のアプリ内表示(!isPopup)は常に等倍＝
+        // 別ウィンドウの拡大設定に干渉されない。表は width:100% のままなので列幅は画面いっぱい・文字だけ拡大。
+        const scaled = (node) => scale4k !== 1 ? <div style={{ zoom: scale4k }}>{node}</div> : node
+        if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
         // 別ウィンドウ:
         //   ・PC幅(>=880)では画面いっぱいに表示
         //   ・スマホ幅(<880)では FitToWidth による縮小だと地図など右端の列が見切れるため、
         //     横スクロール可能にして全列を読めるようにする
         return popupNarrow
           ? <div className="schedule popup-view" style={{ padding: '4px 0 24px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <div style={{ minWidth: 760 }}>{scaled(inner, boardRef)}</div>
+              <div style={{ minWidth: 760 }}>{scaled(inner)}</div>
             </div>
-          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner, boardRef)}</div>
+          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner)}</div>
       })()}
       {editModal && (
         <ScheduleEditModal
@@ -4183,6 +4176,85 @@ function SchedulePage({ onEditShipment, isPopup }) {
           onClose={() => setEditModal(null)}
           onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
         />
+      )}
+      {/* 別ウィンドウ（掲示板）の画面操作：最小化時は小さなバー、通常時はモーダル（各セクション折りたたみ可） */}
+      {boardModal && boardModalMin && (
+        <div className="no-print" style={{ position: 'fixed', top: 10, right: 12, zIndex: 1300, display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #0f3060', borderRadius: 10, padding: '6px 8px 6px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#0f3060' }}>⚙ 画面操作</span>
+          <button type="button" onClick={() => setBoardModalMin(false)} title="元に戻す"
+            style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>◱ 元に戻す</button>
+          <button type="button" onClick={() => { setBoardModal(false); setBoardModalMin(false) }} title="閉じる"
+            style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+      {boardModal && !boardModalMin && (
+        <div className="no-print" onClick={() => setBoardModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 540, borderRadius: 14, maxHeight: '90dvh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '12px 14px', borderBottom: '1px solid #e3e8ef' }}>
+              <h2 style={{ margin: 0, fontSize: 17, color: '#1a2332' }}>⚙ 画面操作</h2>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setBoardModalMin(true)} title="最小化" style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>▁ 最小化</button>
+                <button type="button" onClick={() => setBoardModal(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
+              </div>
+            </div>
+            <div style={{ overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* 画面倍率（折りたたみ） */}
+              <div>
+                {secHead('scale', `画面倍率：${Math.round((scale4k || 1) * 100)}%`)}
+                {secOpen.scale && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px 2px' }}>
+                    <button type="button" onClick={() => writeBoardScale((scale4k || 1) - 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>−</button>
+                    <input type="range" min="1" max="3" step="0.05" value={scale4k || 1} onChange={e => writeBoardScale(parseFloat(e.target.value))} style={{ flex: 1 }} />
+                    <button type="button" onClick={() => writeBoardScale((scale4k || 1) + 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>＋</button>
+                  </div>
+                )}
+              </div>
+              {/* AM / PM（折りたたみ） */}
+              <div>
+                {secHead('ampm', 'AM / PM 表示')}
+                {secOpen.ampm && (
+                  <div style={{ display: 'flex', gap: 8, padding: '10px 4px 2px' }}>
+                    {[['both', '両方'], ['AM', 'AM'], ['PM', 'PM']].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setAmpm(v)}
+                        style={{ flex: 1, border: ampm === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === v ? '#0f3060' : '#fff', color: ampm === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* 表示項目・表示順（折りたたみ） */}
+              <div>
+                {secHead('cols', '表示項目・表示順')}
+                {secOpen.cols && (
+                  <div style={{ padding: '10px 4px 2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontSize: 12, color: '#6b7a8d' }}>チェックで表示／↑↓で並び替え（上が左の列）</div>
+                      <button type="button" onClick={resetBoardCols} style={{ border: '1px dashed #b9c4d4', background: '#f7f9fc', color: '#3a4a5c', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>既定に戻す</button>
+                    </div>
+                    <div style={{ border: '1px solid #e3e8ef', borderRadius: 8, overflow: 'hidden' }}>
+                      {boardOrder.map((k, i) => {
+                        const col = COLS[k]; if (!col) return null
+                        const visible = !hiddenSet.has(k)
+                        return (
+                          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderTop: i === 0 ? 'none' : '1px solid #f0f2f5', background: visible ? '#fff' : '#fafbfc' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', minWidth: 0 }}>
+                              <input type="checkbox" checked={visible} onChange={() => toggleBoardCol(k)} style={{ width: 18, height: 18 }} />
+                              <span style={{ fontSize: 14, fontWeight: 600, color: visible ? '#111' : '#aab', whiteSpace: 'nowrap' }}>{col.label}</span>
+                            </label>
+                            <button type="button" onClick={() => moveBoardCol(i, -1)} disabled={i === 0}
+                              style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 14, cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.35 : 1 }}>↑</button>
+                            <button type="button" onClick={() => moveBoardCol(i, 1)} disabled={i === boardOrder.length - 1}
+                              style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 14, cursor: i === boardOrder.length - 1 ? 'default' : 'pointer', opacity: i === boardOrder.length - 1 ? 0.35 : 1 }}>↓</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7a8d', lineHeight: 1.5 }}>※ この端末（ブラウザ）にだけ保存されます。アプリ内の通常の出荷予定表には影響しません。</div>
+            </div>
+          </div>
+        </div>
       )}
       {lineTarget && (
         <div onClick={() => setLineTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -6186,7 +6258,7 @@ function SettingsPage() {
               <button type="button" onClick={() => saveK4(true, Math.min(2.5, Math.round((k4Scale + 0.1) * 100) / 100))} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>＋</button>
             </div>
             <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
-              ※ 変更は出荷予定表・別ウィンドウ（ボード）に即反映されます。4Kモニターは 130〜180% が目安です。
+              ※ 拡大は<b>別ウィンドウ（ボード）だけ</b>に反映されます（アプリ内の通常の出荷予定表は等倍のまま）。4Kモニターは 130〜180% が目安です。
             </div>
           </div>
         )}
