@@ -3043,14 +3043,14 @@ function read4kScale() {
   try {
     if (localStorage.getItem(SCHED4K_ON) !== '1') return 1
     const v = parseFloat(localStorage.getItem(SCHED4K_SCALE))
-    return (Number.isFinite(v) && v >= 1 && v <= 3) ? v : 1.4
+    return (Number.isFinite(v) && v >= 0.5 && v <= 3) ? v : 1.4
   } catch { return 1 }
 }
-// 別ウィンドウ（掲示板）の画面倍率を保存（この端末のブラウザにだけ）。全ウィンドウに即反映。
+// 別ウィンドウ（掲示板）の画面倍率を保存（この端末のブラウザにだけ）。全ウィンドウに即反映。50%〜300%。
 function writeBoardScale(scale) {
-  const v = Math.max(1, Math.min(3, Math.round((Number(scale) || 1) * 100) / 100))
+  const v = Math.max(0.5, Math.min(3, Math.round((Number(scale) || 1) * 100) / 100))
   try {
-    localStorage.setItem(SCHED4K_ON, v > 1 ? '1' : '0')
+    localStorage.setItem(SCHED4K_ON, v !== 1 ? '1' : '0')
     localStorage.setItem(SCHED4K_SCALE, String(v))
     window.dispatchEvent(new Event('sched4kchange'))
   } catch { /* noop */ }
@@ -3114,7 +3114,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardHidden, setBoardHidden] = useState(readBoardHidden)
   const [boardModal, setBoardModal] = useState(false)
   const [boardModalMin, setBoardModalMin] = useState(false)   // 画面操作モーダルの最小化
-  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, cols: true })   // モーダル各セクションの開閉
+  const [secOpen, setSecOpen] = useState({ scale: true, cols: true })   // モーダル各セクションの開閉
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
     const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
@@ -4005,7 +4005,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-            <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順・AM/PM）"
+            {ampmButtons}
+            <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
               style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
           </div>
         </div>
@@ -4020,6 +4021,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
           <button type="button" onClick={openScheduleWindow}
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
+          <button type="button" onClick={() => setBoardModal(true)} title="別ウィンドウ（掲示板）の画面操作（倍率・表示項目・表示順）"
+            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 別ウィンドウ操作</button>
           {compact && ampmButtons}
         </div>
         {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
@@ -4204,20 +4207,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
                 {secOpen.scale && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px 2px' }}>
                     <button type="button" onClick={() => writeBoardScale((scale4k || 1) - 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>−</button>
-                    <input type="range" min="1" max="3" step="0.05" value={scale4k || 1} onChange={e => writeBoardScale(parseFloat(e.target.value))} style={{ flex: 1 }} />
+                    <input type="range" min="0.5" max="3" step="0.05" value={scale4k || 1} onChange={e => writeBoardScale(parseFloat(e.target.value))} style={{ flex: 1 }} />
                     <button type="button" onClick={() => writeBoardScale((scale4k || 1) + 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>＋</button>
-                  </div>
-                )}
-              </div>
-              {/* AM / PM（折りたたみ） */}
-              <div>
-                {secHead('ampm', 'AM / PM 表示')}
-                {secOpen.ampm && (
-                  <div style={{ display: 'flex', gap: 8, padding: '10px 4px 2px' }}>
-                    {[['both', '両方'], ['AM', 'AM'], ['PM', 'PM']].map(([v, l]) => (
-                      <button key={v} type="button" onClick={() => setAmpm(v)}
-                        style={{ flex: 1, border: ampm === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === v ? '#0f3060' : '#fff', color: ampm === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                    ))}
                   </div>
                 )}
               </div>
