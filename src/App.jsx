@@ -3915,7 +3915,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // ===== 表の列定義（生コン準拠）。別ウィンドウでは表示項目・表示順を可変にする =====
   const cementCell = (s) => {
-    const ct = (v) => v === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{v || ''}</span>
+    const k = isPopup ? 2 : 1   // 別ウィンドウ（掲示板）は種の文字を2倍に
+    const ct = (v) => v === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 * k }}>B</b> : <span style={{ fontSize: 16 * k }}>{v || ''}</span>
     const c1 = s.cementType || '', c2 = s.cementType2 || ''
     if (c1 && c2) return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
@@ -3925,13 +3926,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return ct(c1)
   }
   const tokuCell = (s) => {
+    const k = isPopup ? 2 : 1   // 別ウィンドウ（掲示板）は特記の文字を2倍に
     const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
     const tests = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')
     if (!tags && !tests) return null
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-        {tags ? <div style={{ fontSize: 11, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
-        {tests ? <div style={{ fontSize: 10, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
+        {tags ? <div style={{ fontSize: 11 * k, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
+        {tests ? <div style={{ fontSize: 10 * k, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
       </div>
     )
   }
