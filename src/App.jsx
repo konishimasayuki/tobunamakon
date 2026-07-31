@@ -3039,12 +3039,23 @@ function diffChangedFields(orig, next) {
 
 // 出荷予定表 大型モニター(4K)表示：表示倍率（端末ごと・localStorage）。設定画面で 通常/4K を切替＋倍率調整。
 const SCHED4K_ON = 'sched4kOn', SCHED4K_SCALE = 'sched4kScale'
+const SCHED_SCALE_MIN = 0.5, SCHED_SCALE_MAX = 5   // 別ウィンドウ「画面に合わせる」で縮小/拡大できる範囲
 function read4kScale() {
   try {
     if (localStorage.getItem(SCHED4K_ON) !== '1') return 1
     const v = parseFloat(localStorage.getItem(SCHED4K_SCALE))
-    return (Number.isFinite(v) && v >= 1 && v <= 3) ? v : 1.4
+    return (Number.isFinite(v) && v >= SCHED_SCALE_MIN && v <= SCHED_SCALE_MAX) ? v : 1.4
   } catch { return 1 }
+}
+// 出荷予定表の表示倍率を保存（別ウィンドウのズーム操作・設定画面で共用）。全ウィンドウに即反映。
+function writeSchedScale(scale) {
+  const v = Math.max(SCHED_SCALE_MIN, Math.min(SCHED_SCALE_MAX, Math.round((Number(scale) || 1) * 100) / 100))
+  try {
+    localStorage.setItem(SCHED4K_ON, '1')
+    localStorage.setItem(SCHED4K_SCALE, String(v))
+    window.dispatchEvent(new Event('sched4kchange'))
+  } catch { /* noop */ }
+  return v
 }
 
 function SchedulePage({ onEditShipment, isPopup }) {
@@ -3079,6 +3090,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
     window.addEventListener('storage', on)   // 別タブ/別ウィンドウでの変更も反映
     return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('storage', on) }
   }, [])
+  // 別ウィンドウ（掲示板）のズーム操作用。boardRef=倍率をかけている内容の外枠
+  const boardRef = useRef(null)
+  const bumpScale = (delta) => writeSchedScale((scale4k || 1) + delta)
+  // 「画面に合わせる」＝その日の一覧が縦スクロールなしで画面に収まる最大倍率に自動調整（高さ基準）
+  const fitToScreen = () => {
+    const el = boardRef.current
+    if (!el || typeof window === 'undefined') return
+    const rect = el.getBoundingClientRect()   // CSS zoom は getBoundingClientRect に反映される（＝現在の倍率での実寸）
+    const cur = scale4k || 1
+    const naturalH = rect.height / cur                       // 倍率1相当の内容の高さ
+    const avail = window.innerHeight - rect.top - 8          // 内容の上端から画面下までの高さ
+    if (naturalH <= 0 || avail <= 0) return
+    writeSchedScale(avail / naturalH)
+  }
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3883,8 +3908,19 @@ function SchedulePage({ onEditShipment, isPopup }) {
             {/* 掲示板形式（共有ボード）は閉じるボタンを置かない（ブラウザのタブ/ウィンドウで閉じる） */}
             <div className="no-print" />
           </div>
-          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 12px 10px' }}>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 12px 6px', flexWrap: 'wrap' }}>
             {ampmButtons}
+          </div>
+          {/* 表示サイズ調整（掲示板をモニターに合わせる）。印刷には出さない */}
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 12px 10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: '#6b7a8d' }}>表示サイズ</span>
+            <button type="button" onClick={() => bumpScale(-0.1)} title="小さく"
+              style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '3px 12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>−</button>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f3060', minWidth: '3.4em', textAlign: 'center' }}>{Math.round((scale4k || 1) * 100)}%</span>
+            <button type="button" onClick={() => bumpScale(0.1)} title="大きく"
+              style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '3px 12px', fontSize: 15, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>＋</button>
+            <button type="button" onClick={fitToScreen} title="今の画面サイズいっぱいに合わせる"
+              style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⤢ 画面に合わせる</button>
           </div>
         </div>
       ) : (
@@ -4123,8 +4159,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
         )}
         </>)
         // 4K表示: inner を zoom で拡大（表は width:100% のままなので列幅は画面いっぱい・文字だけ拡大）
-        const scaled = (node) => scale4k !== 1
-          ? <div style={{ zoom: scale4k }}>{node}</div>
+        // ref を渡すと必ずラッパーdivを付ける（別ウィンドウの「画面に合わせる」で高さを測るため）
+        const scaled = (node, ref) => (ref || scale4k !== 1)
+          ? <div ref={ref} style={scale4k !== 1 ? { zoom: scale4k } : undefined}>{node}</div>
           : node
         if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{scaled(inner)}</div>
         // 別ウィンドウ:
@@ -4133,9 +4170,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
         //     横スクロール可能にして全列を読めるようにする
         return popupNarrow
           ? <div className="schedule popup-view" style={{ padding: '4px 0 24px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <div style={{ minWidth: 760 }}>{scaled(inner)}</div>
+              <div style={{ minWidth: 760 }}>{scaled(inner, boardRef)}</div>
             </div>
-          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner)}</div>
+          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner, boardRef)}</div>
       })()}
       {editModal && (
         <ScheduleEditModal
