@@ -3113,6 +3113,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardOrder, setBoardOrder] = useState(readBoardOrder)
   const [boardHidden, setBoardHidden] = useState(readBoardHidden)
   const [boardModal, setBoardModal] = useState(false)
+  const [boardModalMin, setBoardModalMin] = useState(false)   // 画面操作モーダルの最小化
+  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, cols: true })   // モーダル各セクションの開閉
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
     const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
@@ -3982,6 +3984,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const toggleBoardCol = (k) => { const next = hiddenSet.has(k) ? boardHidden.filter(x => x !== k) : [...boardHidden, k]; setBoardHidden(next); writeBoardCols(boardOrder, next) }
   const moveBoardCol = (i, dir) => { const j = i + dir; if (j < 0 || j >= boardOrder.length) return; const next = [...boardOrder];[next[i], next[j]] = [next[j], next[i]]; setBoardOrder(next); writeBoardCols(next, boardHidden) }
   const resetBoardCols = () => { setBoardOrder([...BOARD_COL_KEYS]); setBoardHidden([]); writeBoardCols([...BOARD_COL_KEYS], []) }
+  // 画面操作モーダルの折りたたみセクション見出し（クリックで開閉）
+  const secHead = (key, title) => (
+    <div onClick={() => setSecOpen(o => ({ ...o, [key]: !o[key] }))}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f4f6f9', border: '1px solid #e3e8ef', borderRadius: 8, padding: '9px 12px', fontSize: 14, fontWeight: 700, color: '#334', cursor: 'pointer', userSelect: 'none' }}>
+      <span style={{ fontSize: 12, color: '#6b7a8d', width: 14, display: 'inline-block' }}>{secOpen[key] ? '▾' : '▸'}</span>
+      <span>{title}</span>
+    </div>
+  )
 
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
@@ -4167,59 +4177,79 @@ function SchedulePage({ onEditShipment, isPopup }) {
           onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
         />
       )}
-      {/* 別ウィンドウ（掲示板）の画面操作モーダル：倍率・AM/PM・表示項目・表示順（端末ごと保存） */}
-      {boardModal && (
+      {/* 別ウィンドウ（掲示板）の画面操作：最小化時は小さなバー、通常時はモーダル（各セクション折りたたみ可） */}
+      {boardModal && boardModalMin && (
+        <div className="no-print" style={{ position: 'fixed', top: 10, right: 12, zIndex: 1300, display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #0f3060', borderRadius: 10, padding: '6px 8px 6px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#0f3060' }}>⚙ 画面操作</span>
+          <button type="button" onClick={() => setBoardModalMin(false)} title="元に戻す"
+            style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>◱ 元に戻す</button>
+          <button type="button" onClick={() => { setBoardModal(false); setBoardModalMin(false) }} title="閉じる"
+            style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+      {boardModal && !boardModalMin && (
         <div className="no-print" onClick={() => setBoardModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 540, borderRadius: 14, maxHeight: '90dvh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #e3e8ef' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '12px 14px', borderBottom: '1px solid #e3e8ef' }}>
               <h2 style={{ margin: 0, fontSize: 17, color: '#1a2332' }}>⚙ 画面操作</h2>
-              <button type="button" onClick={() => setBoardModal(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setBoardModalMin(true)} title="最小化" style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>▁ 最小化</button>
+                <button type="button" onClick={() => setBoardModal(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
+              </div>
             </div>
-            <div style={{ overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {/* 画面倍率 */}
+            <div style={{ overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* 画面倍率（折りたたみ） */}
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 8, color: '#334' }}>画面倍率：<span style={{ color: '#0f3060' }}>{Math.round((scale4k || 1) * 100)}%</span></div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button type="button" onClick={() => writeBoardScale((scale4k || 1) - 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>−</button>
-                  <input type="range" min="1" max="3" step="0.05" value={scale4k || 1} onChange={e => writeBoardScale(parseFloat(e.target.value))} style={{ flex: 1 }} />
-                  <button type="button" onClick={() => writeBoardScale((scale4k || 1) + 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>＋</button>
-                </div>
+                {secHead('scale', `画面倍率：${Math.round((scale4k || 1) * 100)}%`)}
+                {secOpen.scale && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px 2px' }}>
+                    <button type="button" onClick={() => writeBoardScale((scale4k || 1) - 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>−</button>
+                    <input type="range" min="1" max="3" step="0.05" value={scale4k || 1} onChange={e => writeBoardScale(parseFloat(e.target.value))} style={{ flex: 1 }} />
+                    <button type="button" onClick={() => writeBoardScale((scale4k || 1) + 0.1)} style={{ border: '1.5px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>＋</button>
+                  </div>
+                )}
               </div>
-              {/* AM / PM */}
+              {/* AM / PM（折りたたみ） */}
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 8, color: '#334' }}>AM / PM 表示</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[['both', '両方'], ['AM', 'AM'], ['PM', 'PM']].map(([v, l]) => (
-                    <button key={v} type="button" onClick={() => setAmpm(v)}
-                      style={{ flex: 1, border: ampm === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === v ? '#0f3060' : '#fff', color: ampm === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                  ))}
-                </div>
+                {secHead('ampm', 'AM / PM 表示')}
+                {secOpen.ampm && (
+                  <div style={{ display: 'flex', gap: 8, padding: '10px 4px 2px' }}>
+                    {[['both', '両方'], ['AM', 'AM'], ['PM', 'PM']].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setAmpm(v)}
+                        style={{ flex: 1, border: ampm === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: ampm === v ? '#0f3060' : '#fff', color: ampm === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+                    ))}
+                  </div>
+                )}
               </div>
-              {/* 表示項目・表示順 */}
+              {/* 表示項目・表示順（折りたたみ） */}
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={{ fontWeight: 700, color: '#334' }}>表示項目・表示順</div>
-                  <button type="button" onClick={resetBoardCols} style={{ border: '1px dashed #b9c4d4', background: '#f7f9fc', color: '#3a4a5c', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>既定に戻す</button>
-                </div>
-                <div style={{ fontSize: 12, color: '#6b7a8d', marginBottom: 6 }}>チェックで表示／↑↓で並び替え（上が左の列）</div>
-                <div style={{ border: '1px solid #e3e8ef', borderRadius: 8, overflow: 'hidden' }}>
-                  {boardOrder.map((k, i) => {
-                    const col = COLS[k]; if (!col) return null
-                    const visible = !hiddenSet.has(k)
-                    return (
-                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderTop: i === 0 ? 'none' : '1px solid #f0f2f5', background: visible ? '#fff' : '#fafbfc' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', minWidth: 0 }}>
-                          <input type="checkbox" checked={visible} onChange={() => toggleBoardCol(k)} style={{ width: 18, height: 18 }} />
-                          <span style={{ fontSize: 14, fontWeight: 600, color: visible ? '#111' : '#aab', whiteSpace: 'nowrap' }}>{col.label}</span>
-                        </label>
-                        <button type="button" onClick={() => moveBoardCol(i, -1)} disabled={i === 0}
-                          style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 14, cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.35 : 1 }}>↑</button>
-                        <button type="button" onClick={() => moveBoardCol(i, 1)} disabled={i === boardOrder.length - 1}
-                          style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 14, cursor: i === boardOrder.length - 1 ? 'default' : 'pointer', opacity: i === boardOrder.length - 1 ? 0.35 : 1 }}>↓</button>
-                      </div>
-                    )
-                  })}
-                </div>
+                {secHead('cols', '表示項目・表示順')}
+                {secOpen.cols && (
+                  <div style={{ padding: '10px 4px 2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontSize: 12, color: '#6b7a8d' }}>チェックで表示／↑↓で並び替え（上が左の列）</div>
+                      <button type="button" onClick={resetBoardCols} style={{ border: '1px dashed #b9c4d4', background: '#f7f9fc', color: '#3a4a5c', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>既定に戻す</button>
+                    </div>
+                    <div style={{ border: '1px solid #e3e8ef', borderRadius: 8, overflow: 'hidden' }}>
+                      {boardOrder.map((k, i) => {
+                        const col = COLS[k]; if (!col) return null
+                        const visible = !hiddenSet.has(k)
+                        return (
+                          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderTop: i === 0 ? 'none' : '1px solid #f0f2f5', background: visible ? '#fff' : '#fafbfc' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', minWidth: 0 }}>
+                              <input type="checkbox" checked={visible} onChange={() => toggleBoardCol(k)} style={{ width: 18, height: 18 }} />
+                              <span style={{ fontSize: 14, fontWeight: 600, color: visible ? '#111' : '#aab', whiteSpace: 'nowrap' }}>{col.label}</span>
+                            </label>
+                            <button type="button" onClick={() => moveBoardCol(i, -1)} disabled={i === 0}
+                              style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 14, cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.35 : 1 }}>↑</button>
+                            <button type="button" onClick={() => moveBoardCol(i, 1)} disabled={i === boardOrder.length - 1}
+                              style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 14, cursor: i === boardOrder.length - 1 ? 'default' : 'pointer', opacity: i === boardOrder.length - 1 ? 0.35 : 1 }}>↓</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{ fontSize: 12, color: '#6b7a8d', lineHeight: 1.5 }}>※ この端末（ブラウザ）にだけ保存されます。アプリ内の通常の出荷予定表には影響しません。</div>
             </div>
