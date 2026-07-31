@@ -3753,7 +3753,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
       lines = names.length ? names : ['']
     }
     const display = lines.length ? lines : ['']
-    const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '')
+    const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '') + (opts.sm ? ' sm' : '')
     return (
       <div className="sc-drivers" key={'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + display.length}>
         {display.map((line, i) => (
@@ -3915,7 +3915,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // ===== 表の列定義（生コン準拠）。別ウィンドウでは表示項目・表示順を可変にする =====
   const cementCell = (s) => {
-    const ct = (v) => v === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 }}>B</b> : <span style={{ fontSize: 16 }}>{v || ''}</span>
+    const k = isPopup ? 2 : 1   // 別ウィンドウ（掲示板）は種の文字を2倍に
+    const ct = (v) => v === 'B' ? <b style={{ fontWeight: 800, fontSize: 18 * k }}>B</b> : <span style={{ fontSize: 16 * k }}>{v || ''}</span>
     const c1 = s.cementType || '', c2 = s.cementType2 || ''
     if (c1 && c2) return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
@@ -3925,13 +3926,14 @@ function SchedulePage({ onEditShipment, isPopup }) {
     return ct(c1)
   }
   const tokuCell = (s) => {
+    const k = isPopup ? 2 : 1   // 別ウィンドウ（掲示板）は特記の文字を2倍に
     const tags = (Array.isArray(s.noteTags) ? s.noteTags : []).filter(Boolean).join('')
     const tests = (Array.isArray(s.testTags) ? s.testTags : []).map(t => t === '現TP' ? '現' : t === '工TP' ? '工' : t).filter(Boolean).join('')
     if (!tags && !tests) return null
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-        {tags ? <div style={{ fontSize: 11, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
-        {tests ? <div style={{ fontSize: 10, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
+        {tags ? <div style={{ fontSize: 11 * k, fontWeight: 800, color: '#c81e1e', lineHeight: 1.1 }}>{tags}</div> : null}
+        {tests ? <div style={{ fontSize: 10 * k, fontWeight: 800, color: '#111', marginTop: tags ? 1 : 0, lineHeight: 1.1 }}>{tests}</div> : null}
       </div>
     )
   }
@@ -3960,7 +3962,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
     </div>
   )
   const COLS = {
-    company: { label: '業者名/商社', width: 12, th: <><div>業者名</div><div>商社</div></>, td: (s) => <>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</> },
+    company: { label: '業者名/商社', width: 12, th: isPopup ? '業者名/商社' : <><div>業者名</div><div>商社</div></>, td: (s) => <>{cell(s, 'companyName', '業者名', { wrap: true })}{cell(s, 'tradingCompany', '商社', { wrap: true })}</> },
     site: { label: '現場名', width: 15, th: '現場名', td: (s) => cell(s, 'siteName', '', { big: true, wrap: true }) },
     pour: { label: '打設', width: 4, thClass: 'th-tight', th: '打設', td: (s) => cell(s, 'pourLocation', '', { center: true, wrap: true }) },
     vehicle: { label: '車種', width: 7, thClass: 'th-tight', th: '車種', tdClass: 'sc-nowrap', td: vehicleTd },
@@ -3968,8 +3970,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
     cement: { label: '種', width: 3, thClass: 'th-tight', th: '種', tdClass: 'sc-nowrap', tdStyle: { textAlign: 'center' }, td: cementCell },
     volume: { label: '数量', width: 7, th: '数量', tdClass: 'sc-nowrap', td: (s) => cellVolume(s) },
     time: { label: '時間', width: 7, th: '時間', tdClass: 'sc-nowrap', td: (s) => cellMulti(s, 'times', '', { center: true, big: true }) },
-    driver: { label: '担当', width: 9, th: '担当', td: (s) => cellDrivers(s, { big: true }) },
-    notes: { label: '備考/現場連絡先', width: 15, th: <><div>備考</div><div>現場連絡先</div></>, td: notesTd },
+    driver: { label: '担当', width: isPopup ? 6 : 9, th: '担当', td: (s) => cellDrivers(s, { big: !isPopup, sm: isPopup }) },
+    notes: { label: '備考/現場連絡先', width: 15, th: isPopup ? '備考/現場連絡先' : <><div>備考</div><div>現場連絡先</div></>, td: notesTd },
     toku: { label: '特記', width: 2.5, thClass: 'th-tight', th: '特記', tdClass: 'sc-nowrap', tdStyle: { textAlign: 'center', padding: '2px 2px' }, td: tokuCell },
     map: { label: '地図', width: 2.5, thClass: 'th-tight', th: '地図', tdStyle: { textAlign: 'center', fontWeight: 800, color: '#1a7a3a', fontSize: 16 }, td: mapTd },
     edit: { label: '編集', width: 7, thClass: 'th-tight', th: '編集', tdStyle: { textAlign: 'center' }, td: editTd },
