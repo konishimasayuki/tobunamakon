@@ -246,6 +246,10 @@ input, textarea, select { font-family: inherit; }
 /* 別ウィンドウ（掲示板）は各セルの上下余白を詰めて、1件あたりの縦幅を小さくする */
 .schedule.popup-view td, .schedule.popup-view th { padding:1px 8px; }
 .schedule.popup-view td { height:auto; }
+/* 別ウィンドウ（掲示板）: 列名の文字を少し小さくする */
+.schedule.popup-view thead th, .schedule.popup-view thead th > div { font-size:clamp(10px,1.2cqi,13px); }
+/* 別ウィンドウ: 担当は文字を小さめにして列幅を狭くする */
+.schedule .sc-in.sm { font-size:clamp(11px,1.35cqi,15px); }
 /* 別ウィンドウ（スマホ横向きで閲覧）: iPhoneのカメラ/ノッチを避けて左右上に安全マージン。
    縦・横どちらの向きでも内容幅が常にセーフエリア内に収まるよう padding で揃える。 */
 .schedule-popup-root {
