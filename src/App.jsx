@@ -3689,7 +3689,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
           const r3 = red || volNumColor(seg.num) === '#c81e1e'
           return (
             <span key={i} className={r3 ? 'sc-vol3' : undefined} style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 700, color: r3 ? '#c81e1e' : '#111' }}>
-              {seg.note ? <span style={{ display: 'block', fontSize: 10, color: '#c81e1e', fontWeight: 700, lineHeight: 1, marginBottom: 1 }}>{seg.note}</span> : null}
+              {/* 別ウィンドウ（掲示板）は特記を数字の左に、通常画面は数字の上に表示 */}
+              {seg.note ? <span style={{ display: 'inline-block', fontSize: '.5em', color: '#c81e1e', fontWeight: 700, lineHeight: 1, verticalAlign: 'middle', ...(isPopup ? { marginRight: 4 } : { display: 'block', fontSize: 10, marginBottom: 1 }) }}>{seg.note}</span> : null}
               {seg.text}
             </span>
           )
@@ -4143,11 +4144,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <div style={{ padding: 20, color: '#6b7a8d' }}>読み込み中...</div>
         ) : rows.length === 0 ? (
           <div style={{ padding: 20, color: '#6b7a8d' }}>この日（{date}）の出荷登録はありません</div>
-        ) : (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', lineHeight: 1.5, padding: isPopup ? '8px 8px 16px' : 0 }}>
+        ) : !isPopup ? (
+          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7a8d', lineHeight: 1.5, padding: 0 }}>
             黒＝出荷登録の値／赤＝変更した値・重要（出荷登録にも反映されます）
           </div>
-        )}
+        ) : null}
         {!isPopup && rows.length > 0 && (
           <div className="no-print" style={{ marginTop: 12, textAlign: 'right' }}>
             <button type="button" onClick={resetReds}
