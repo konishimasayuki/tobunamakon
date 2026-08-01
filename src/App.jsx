@@ -3185,13 +3185,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }, [])
   useEffect(() => {
     if (!isPopup) return
-    // 共有ボードの自動更新。1分ごとに「表示中の当日ぶんだけ」を取得（日付索引で軽量）。
+    // 共有ボードの自動更新。30秒ごとに「表示中の当日ぶんだけ」を取得（日付索引で軽量）。
     // 非表示タブでは更新を止め、表示に戻った時は即時更新。同一端末の保存は storage 通知で即反映。
     const tick = async () => {
       if (typeof document !== 'undefined' && document.hidden) return
       try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch (e) { /* 一時的な失敗は無視 */ }
     }
-    const t = setInterval(tick, 60000)
+    const t = setInterval(tick, 30000)
     const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) tick() }
     document.addEventListener('visibilitychange', onVis)
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
