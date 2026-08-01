@@ -3077,6 +3077,20 @@ function writeBoardCols(order, hidden) {
     window.dispatchEvent(new Event('boardcolchange'))
   } catch { /* noop */ }
 }
+// 別ウィンドウ（掲示板）のAM/PM表示。端末ごと・localStorage。出荷予定表側の画面操作からも変更でき、
+// storage/boardampmchange 通知で開いている別ウィンドウに即反映する。
+function readBoardAmpm() {
+  try { const v = localStorage.getItem(BOARD_AMPM_KEY); if (v === 'AM' || v === 'PM' || v === 'both') return v } catch { /* noop */ }
+  return 'both'
+}
+function writeBoardAmpm(v) {
+  const val = (v === 'AM' || v === 'PM' || v === 'both') ? v : 'both'
+  try {
+    localStorage.setItem(BOARD_AMPM_KEY, val)
+    window.dispatchEvent(new Event('boardampmchange'))
+  } catch { /* noop */ }
+  return val
+}
 
 function SchedulePage({ onEditShipment, isPopup }) {
   // 出荷予定表: スマホ(<768px)は1件=1カードの縦リスト。
@@ -3114,16 +3128,22 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardHidden, setBoardHidden] = useState(readBoardHidden)
   const [boardModal, setBoardModal] = useState(false)
   const [boardModalMin, setBoardModalMin] = useState(false)   // 画面操作モーダルの最小化
-  const [secOpen, setSecOpen] = useState({ scale: true, cols: true })   // モーダル各セクションの開閉
+  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, cols: true })   // モーダル各セクションの開閉
+  // 出荷予定表側のコントローラーで別ウィンドウのAM/PMを操作するための値（別ウィンドウでは header のampmが本体）
+  const [boardAmpm, setBoardAmpm] = useState(readBoardAmpm)
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
     const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
+    // AM/PMは、別ウィンドウ側は自身の絞り込み(ampm)へ、出荷予定表側はコントローラー表示用(boardAmpm)へ反映
+    const onAmpm = () => { const v = readBoardAmpm(); if (isPopup) setAmpm(v); else setBoardAmpm(v) }
     window.addEventListener('sched4kchange', on)
     window.addEventListener('boardcolchange', onCols)
+    window.addEventListener('boardampmchange', onAmpm)
     window.addEventListener('storage', on)   // 別タブ/別ウィンドウでの変更も反映
     window.addEventListener('storage', onCols)
-    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols) }
-  }, [])
+    window.addEventListener('storage', onAmpm)
+    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('boardampmchange', onAmpm); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols); window.removeEventListener('storage', onAmpm) }
+  }, [isPopup])
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -4215,6 +4235,20 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   </div>
                 )}
               </div>
+              {/* AM / PM（折りたたみ）：別ウィンドウのAM/PM表示を出荷予定表側から変更する */}
+              {!isPopup && (
+                <div>
+                  {secHead('ampm', '別ウィンドウの AM / PM 表示')}
+                  {secOpen.ampm && (
+                    <div style={{ display: 'flex', gap: 8, padding: '10px 4px 2px' }}>
+                      {[['both', '両方'], ['AM', 'AM'], ['PM', 'PM']].map(([v, l]) => (
+                        <button key={v} type="button" onClick={() => { setBoardAmpm(v); writeBoardAmpm(v) }}
+                          style={{ flex: 1, border: boardAmpm === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: boardAmpm === v ? '#0f3060' : '#fff', color: boardAmpm === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* 表示項目・表示順（折りたたみ） */}
               <div>
                 {secHead('cols', '表示項目・表示順')}
