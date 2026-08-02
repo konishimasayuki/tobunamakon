@@ -37,8 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const changedFields = changed.length ? Array.from(new Set([...prevCf, ...changed])) : prevCf
       const updated = { ...existing, ...patch, changedFields, updatedAt: new Date().toISOString() }
       ;(updated as any).history = appendHistory(existing, updated)
-      await redis.hset(`shipment:${id}`, updated)
-      await indexShipment(id as string, (updated as any).date)
+      await saveShipmentHash(id as string, updated, (updated as any).date)
       return res.status(200).json(updated)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -60,6 +59,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(500).json({ error: msg })
     }
+  }
+
+  // 版番号（グローバルINCR）の取得。掲示板のポーリングが「変化があったか」を1コマンドで確認するための軽量GET。
+  // 認証不要（閲覧専用の別ウィンドウから叩けるように）。値が前回と変わっていなければ本体取得をスキップできる。
+  if (req.method === 'GET' && !hasId && (req.query.rev === '1' || req.query.rev === 'true')) {
+    return res.status(200).json({ rev: await readRev() })
   }
 
   // 単一伝票の取得（担当振替の別ウィンドウ等）。?id=... のGET（pdf指定なし）→ その1件だけ読む
@@ -127,8 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const prevHist = Array.isArray((existing as any).history) ? (existing as any).history : []
       const histItem = { t: now, items: [{ f: '状態', from: cancelled ? '有効' : 'キャンセル', to: cancelled ? 'キャンセル' : '復元' }] }
       const updated = { ...existing, cancelled, cancelledAt: cancelled ? now : '', updatedAt: now, history: [histItem, ...prevHist].slice(0, 30) }
-      await redis.hset(`shipment:${id}`, updated)
-      await indexShipment(id as string, (updated as any).date)
+      await saveShipmentHash(id as string, updated, (updated as any).date)
       return res.status(200).json(updated)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -208,9 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         history: [],
         createdAt: now, updatedAt: now,
       }
-      await redis.hset(`shipment:${newId}`, shipment)
-      await redis.sadd('shipments', newId)
-      await indexShipment(newId, date)
+      await saveShipmentHash(newId, shipment, date)
       return res.status(201).json(shipment)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -278,8 +280,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: new Date().toISOString(),
       }
       ;(updated as any).history = appendHistory(existing, updated)
-      await redis.hset(`shipment:${id}`, updated)
-      await indexShipment(id as string, (updated as any).date)
+      await saveShipmentHash(id as string, updated, (updated as any).date)
       return res.status(200).json(updated)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -300,6 +301,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await redis.del(INDEX_KEY)
       await redis.del('shipments:indexed')
       _indexedMem = false
+      await bumpRev()   // 全削除も版番号を更新して掲示板に反映させる
       return res.status(200).json({ deleted: ids.length })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -310,10 +312,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 削除
   if (req.method === 'DELETE' && hasId) {
     try {
-      await redis.del(`shipment:${id}`)
-      await redis.del(`shipmentpdf:${id}`)
-      await redis.srem('shipments', id)
-      await redis.zrem(INDEX_KEY, id as string)
+      await removeShipment(id as string)
       return res.status(200).json({ message: '削除しました' })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -383,10 +382,35 @@ function dateScore(d: any): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''))
   return m ? parseInt(m[1] + m[2] + m[3], 10) : 0
 }
-// 伝票1件を索引に登録（作成・更新時に呼ぶ。date変更時も同member再登録でscoreが更新される）
-async function indexShipment(id: string, date: any): Promise<void> {
+// ===== 変更版番号（グローバルINCR）＝掲示板ポーリングの「変化検知」用 =====
+// 伝票が1件でも変わるたびに +1 する単一カウンター。掲示板は ?rev=1 でこの値だけ読み、
+// 前回と同じなら本体（当日ぶん）を取得しない＝平常時の読み取りを大幅に削減する。
+const REV_KEY = 'shipments:rev'
+// ★伝票ハッシュへの書き込みは必ずこの1関数を通す（saveShipmentHash / removeShipment）。
+//   hset＋索引更新＋版番号INCRを MULTI で原子化し、「片方だけ成功して版番号がズレる」部分失敗を防ぐ。
+//   直接 redis.hset(`shipment:...`) を書く新規経路を足すと版番号更新が漏れるため、CIで検出する（scripts/check-shipment-writes.mjs）。
+async function saveShipmentHash(id: string, obj: any, date: any): Promise<void> {
   const sc = dateScore(date)
-  if (sc) { try { await redis.zadd(INDEX_KEY, { score: sc, member: id }) } catch { /* 索引失敗は本処理を止めない */ } }
+  const tx = redis.multi()
+  tx.hset(`shipment:${id}`, obj)
+  tx.sadd('shipments', id)              // 冪等（既存でも無害）＝作成・更新のどちらでも集合を保つ
+  if (sc) tx.zadd(INDEX_KEY, { score: sc, member: id })
+  tx.incr(REV_KEY)
+  await tx.exec()
+}
+// 伝票の削除も必ずこの1関数を通す（版番号INCRを含める）
+async function removeShipment(id: string): Promise<void> {
+  const tx = redis.multi()
+  tx.del(`shipment:${id}`)
+  tx.del(`shipmentpdf:${id}`)
+  tx.srem('shipments', id)
+  tx.zrem(INDEX_KEY, id)
+  tx.incr(REV_KEY)
+  await tx.exec()
+}
+async function bumpRev(): Promise<void> { try { await redis.incr(REV_KEY) } catch { /* noop */ } }
+async function readRev(): Promise<number> {
+  try { const v = await redis.get(REV_KEY); const n = Number(v); return Number.isFinite(n) ? n : 0 } catch { return 0 }
 }
 // 既存データの索引を一度だけ構築（インスタンス内メモ＋Redisフラグ）。初回の日付取得時に自動実行。
 let _indexedMem = false
