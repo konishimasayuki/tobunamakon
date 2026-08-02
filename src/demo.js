@@ -23,6 +23,8 @@ function load() {
   return { shipments: {}, customers: {}, employees: {}, debug: {}, users: {} }
 }
 function save(db) { try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* noop */ } }
+// 版番号（グローバルINCR相当）。伝票が変わるたびに +1（掲示板ポーリングの変化検知用）
+function bumpRev(db) { db.rev = (Number(db.rev) || 0) + 1 }
 export function resetDemo() { try { localStorage.removeItem(KEY) } catch { /* noop */ } seedIfNeeded() }
 
 // ---------- 乱数 ユーティリティ（seedable） ----------
@@ -228,6 +230,8 @@ export async function demoRequest(rawPath, options = {}) {
 
   // ---- shipments ----
   if (path === '/api/shipments') {
+    // 版番号（グローバルINCR相当）。掲示板ポーリングの変化検知用。
+    if (method === 'GET' && q.rev === '1') return { rev: db.rev || 0 }
     // ?id=... 単一/PDF
     if (q.id && q.pdf === '1') throw new Error('デモではPDFは表示できません')
     if (q.id && method === 'GET') { const s = db.shipments[q.id]; if (!s) throw new Error('見つかりません'); return s }
@@ -243,7 +247,7 @@ export async function demoRequest(rawPath, options = {}) {
       const id = uuid()
       const now = new Date().toISOString()
       const s = { ...body, id, createdAt: now, updatedAt: now, cancelled: false, changedFields: body.changedFields || [], history: [] }
-      db.shipments[id] = s; save(db); return s
+      db.shipments[id] = s; bumpRev(db); save(db); return s
     }
     if (method === 'PUT' && q.id) {
       const s = db.shipments[q.id]; if (!s) throw new Error('見つかりません')
@@ -252,10 +256,10 @@ export async function demoRequest(rawPath, options = {}) {
       else if (q.assign === '1') { Object.assign(s, body) }
       else { Object.assign(s, body) }
       s.updatedAt = now
-      db.shipments[q.id] = s; save(db); return s
+      db.shipments[q.id] = s; bumpRev(db); save(db); return s
     }
-    if (method === 'DELETE' && q.id) { delete db.shipments[q.id]; save(db); return { ok: true } }
-    if (method === 'DELETE' && (q.all === '1')) { db.shipments = {}; save(db); return { deleted: 0 } }
+    if (method === 'DELETE' && q.id) { delete db.shipments[q.id]; bumpRev(db); save(db); return { ok: true } }
+    if (method === 'DELETE' && (q.all === '1')) { db.shipments = {}; bumpRev(db); save(db); return { deleted: 0 } }
   }
   // /api/shipments/:id 形式（PUT 更新）
   const shipMatch = path.match(/^\/api\/shipments\/([^/?]+)$/)
@@ -267,12 +271,12 @@ export async function demoRequest(rawPath, options = {}) {
       const now = new Date().toISOString()
       const cancel = q.cancel === '1'
       const assign = q.assign === '1'
-      if (cancel) { s.cancelled = true; s.cancelledAt = now; save(db); return s }
+      if (cancel) { s.cancelled = true; s.cancelledAt = now; bumpRev(db); save(db); return s }
       Object.assign(s, body)
       s.updatedAt = now
-      db.shipments[id] = s; save(db); return s
+      db.shipments[id] = s; bumpRev(db); save(db); return s
     }
-    if (method === 'DELETE') { delete db.shipments[id]; save(db); return { ok: true } }
+    if (method === 'DELETE') { delete db.shipments[id]; bumpRev(db); save(db); return { ok: true } }
     if (method === 'GET') { if (!s) throw new Error('見つかりません'); return s }
   }
 

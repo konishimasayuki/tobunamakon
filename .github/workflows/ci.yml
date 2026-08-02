@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build-and-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # 伝票書き込みは必ず saveShipmentHash / removeShipment を通す規約（版番号INCR漏れ＝掲示板の取りこぼし防止）。
+      # 依存インストール不要（Nodeのfsのみ）なので先に実行する。
+      - name: 伝票書き込み規約チェック
+        run: node scripts/check-shipment-writes.mjs
+      # npm ci はロックファイルに esbuild のプラットフォーム別 optional 依存が揃っている必要があり環境差で失敗するため npm install を使う
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: ビルド（型チェック＋フロントビルド）
+        run: npm run build

@@ -3092,6 +3092,70 @@ function writeBoardAmpm(v) {
   return val
 }
 
+// ===== 日本時刻ユーティリティ（掲示板の時刻自動切替・ポーリング休止判定に使う）=====
+// ブラウザのタイムゾーンに関係なく Asia/Tokyo の 年月日・時・分 を得る。
+function jstParts(d) {
+  const dt = d || new Date()
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+  const o = {}; f.formatToParts(dt).forEach(p => { o[p.type] = p.value })
+  return { ymd: `${o.year}-${o.month}-${o.day}`, hour: (parseInt(o.hour, 10) || 0) % 24, minute: parseInt(o.minute, 10) || 0 }
+}
+function ymdAddDays(ymd, n) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || '')); if (!m) return ymd
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); d.setUTCDate(d.getUTCDate() + n)
+  const p = x => String(x).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+}
+// 掲示板の時刻自動切替：日本時刻から「表示すべき日付＋AM/PM」を返す。
+//   00:00–10:59 → 当日AM ／ 11:00–15:59 → 当日PM ／ 16:00–23:59 → 翌日AM
+function boardAutoSlot(d) {
+  const { ymd, hour, minute } = jstParts(d)
+  const mins = hour * 60 + minute
+  if (mins < 11 * 60) return { date: ymd, ampm: 'AM', slot: 'amToday' }
+  if (mins < 16 * 60) return { date: ymd, ampm: 'PM', slot: 'pmToday' }
+  return { date: ymdAddDays(ymd, 1), ampm: 'AM', slot: 'amTomorrow' }
+}
+// 掲示板の時刻自動切替のON/OFF（端末ごと・localStorage。既定ON）
+const BOARD_AUTOSWITCH_KEY = 'boardAutoSwitch'
+function readBoardAutoSwitch() { try { return localStorage.getItem(BOARD_AUTOSWITCH_KEY) !== '0' } catch { return true } }
+function writeBoardAutoSwitch(on) { try { localStorage.setItem(BOARD_AUTOSWITCH_KEY, on ? '1' : '0'); window.dispatchEvent(new Event('boardautoswitchchange')) } catch { /* noop */ } }
+
+// ===== 掲示板ポーリングの休止時間帯（端末ごと・localStorage。設定タブで編集）=====
+// 既定：18:30〜翌7:00 は 30分に1回（それ以外は30秒に1回）。日本時刻で判定。
+const POLL_CFG_KEY = 'boardPollConfig'
+function readPollConfig() {
+  try {
+    const o = JSON.parse(localStorage.getItem(POLL_CFG_KEY) || '{}')
+    return {
+      enabled: o.enabled !== false,
+      start: /^\d{1,2}:\d{2}$/.test(o.start) ? o.start : '18:30',
+      end: /^\d{1,2}:\d{2}$/.test(o.end) ? o.end : '07:00',
+      intervalMin: (Number.isFinite(+o.intervalMin) && +o.intervalMin > 0) ? +o.intervalMin : 30,
+    }
+  } catch { return { enabled: true, start: '18:30', end: '07:00', intervalMin: 30 } }
+}
+function writePollConfig(cfg) { try { localStorage.setItem(POLL_CFG_KEY, JSON.stringify(cfg)); window.dispatchEvent(new Event('boardpollcfgchange')) } catch { /* noop */ } }
+function hmToMin(hm) { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || '')); return m ? (+m[1]) * 60 + (+m[2]) : null }
+function isPollDowntime(cfg, d) {
+  if (!cfg || !cfg.enabled) return false
+  const s = hmToMin(cfg.start), e = hmToMin(cfg.end); if (s == null || e == null) return false
+  const { hour, minute } = jstParts(d); const t = hour * 60 + minute
+  return s <= e ? (t >= s && t < e) : (t >= s || t < e)   // end<start は日跨ぎ（夜間）
+}
+// 現在の推奨ポーリング間隔(ms)。休止時間帯は intervalMin 分、それ以外は30秒。
+function currentPollMs() {
+  const cfg = readPollConfig()
+  return isPollDowntime(cfg) ? cfg.intervalMin * 60000 : 30000
+}
+
+// ===== 生コン出荷予定表の「休み」欄（別ウィンドウと相互リンク。端末ごと・localStorage）=====
+const SEIKON_PRESENT_KEY = 'seikon_present_default'
+function seikonRestKey(date) { return 'seikon_rest_' + date }
+function readSeikonRest(date) { try { return localStorage.getItem(seikonRestKey(date)) || '' } catch { return '' } }
+function writeSeikonRest(date, v) { try { localStorage.setItem(seikonRestKey(date), v); window.dispatchEvent(new Event('seikonrestchange')) } catch { /* noop */ } }
+function readSeikonPresent() { try { const n = parseInt(localStorage.getItem(SEIKON_PRESENT_KEY), 10); return Number.isFinite(n) ? n : 16 } catch { return 16 } }
+function writeSeikonPresent(n) { try { localStorage.setItem(SEIKON_PRESENT_KEY, String(n)); window.dispatchEvent(new Event('seikonrestchange')) } catch { /* noop */ } }
+
 function SchedulePage({ onEditShipment, isPopup }) {
   // 出荷予定表: スマホ(<768px)は1件=1カードの縦リスト。
   // iPad(768〜1024) と PC(>=1025) は従来テーブル＋セル直接編集。
@@ -3128,22 +3192,39 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardHidden, setBoardHidden] = useState(readBoardHidden)
   const [boardModal, setBoardModal] = useState(false)
   const [boardModalMin, setBoardModalMin] = useState(false)   // 画面操作モーダルの最小化
-  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, cols: true })   // モーダル各セクションの開閉
+  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, auto: true, cols: true })   // モーダル各セクションの開閉
   // 出荷予定表側のコントローラーで別ウィンドウのAM/PMを操作するための値（別ウィンドウでは header のampmが本体）
   const [boardAmpm, setBoardAmpm] = useState(readBoardAmpm)
+  // 掲示板の時刻自動切替 ON/OFF（端末ごと）
+  const [autoSwitch, setAutoSwitchState] = useState(readBoardAutoSwitch)
+  // 掲示板ヘッダーの「休み」欄（生コン出荷予定表出力と相互リンク）。別ウィンドウの表示日に対応
+  const [boardRest, setBoardRest] = useState(() => readSeikonRest(''))
+  const [boardPresent, setBoardPresent] = useState(readSeikonPresent)
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
     const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
     // AM/PMは、別ウィンドウ側は自身の絞り込み(ampm)へ、出荷予定表側はコントローラー表示用(boardAmpm)へ反映
     const onAmpm = () => { const v = readBoardAmpm(); if (isPopup) setAmpm(v); else setBoardAmpm(v) }
+    const onAuto = () => setAutoSwitchState(readBoardAutoSwitch())
     window.addEventListener('sched4kchange', on)
     window.addEventListener('boardcolchange', onCols)
     window.addEventListener('boardampmchange', onAmpm)
+    window.addEventListener('boardautoswitchchange', onAuto)
     window.addEventListener('storage', on)   // 別タブ/別ウィンドウでの変更も反映
     window.addEventListener('storage', onCols)
     window.addEventListener('storage', onAmpm)
-    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('boardampmchange', onAmpm); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols); window.removeEventListener('storage', onAmpm) }
+    window.addEventListener('storage', onAuto)
+    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('boardampmchange', onAmpm); window.removeEventListener('boardautoswitchchange', onAuto); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols); window.removeEventListener('storage', onAmpm); window.removeEventListener('storage', onAuto) }
   }, [isPopup])
+  // 掲示板ヘッダーの「休み」欄を、表示日に対応して読み込み＆他ウィンドウの変更に追従
+  useEffect(() => {
+    if (!isPopup) return
+    const sync = () => { setBoardRest(readSeikonRest(date)); setBoardPresent(readSeikonPresent()) }
+    sync()
+    window.addEventListener('seikonrestchange', sync)
+    window.addEventListener('storage', sync)
+    return () => { window.removeEventListener('seikonrestchange', sync); window.removeEventListener('storage', sync) }
+  }, [isPopup, date])
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3205,17 +3286,62 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }, [])
   useEffect(() => {
     if (!isPopup) return
-    // 共有ボードの自動更新。30秒ごとに「表示中の当日ぶんだけ」を取得（日付索引で軽量）。
-    // 非表示タブでは更新を止め、表示に戻った時は即時更新。同一端末の保存は storage 通知で即反映。
+    // 共有ボードの自動更新。まず版番号(?rev=1)だけ読み、前回と同じなら本体取得をスキップ＝読み取り削減。
+    //  ・変化あり or 一定回数ごと（保険）にだけ当日ぶんをフル取得（差分は mergeDiff）。
+    //  ・非表示タブでは取得しない。表示に戻ったら即時更新。同一端末の保存は storage 通知で即反映。
+    //  ・間隔は currentPollMs()＝休止時間帯(既定18:30〜7:00)は長め、それ以外は30秒。
+    let lastRev = null
+    let sinceFull = 0
+    const SAFETY_EVERY = 10   // 変化が無くても一定回数ごとに1回はフル取得（bump漏れ・障害の保険）
+    let timer = null
+    let stopped = false
+    const schedule = () => { if (!stopped) timer = setTimeout(tick, currentPollMs()) }
     const tick = async () => {
-      if (typeof document !== 'undefined' && document.hidden) return
-      try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch (e) { /* 一時的な失敗は無視 */ }
+      if (typeof document !== 'undefined' && document.hidden) { schedule(); return }
+      try {
+        const r = await api.get('/api/shipments?rev=1')
+        const rev = (r && typeof r === 'object') ? r.rev : null
+        sinceFull++
+        const changed = rev == null || rev !== lastRev
+        if (changed || sinceFull >= SAFETY_EVERY) {
+          lastRev = rev; sinceFull = 0
+          mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current)))
+        }
+      } catch (e) { /* 一時的な失敗は無視 */ }
+      schedule()
     }
-    const t = setInterval(tick, 30000)
-    const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) tick() }
+    schedule()
+    const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) { clearTimeout(timer); tick() } }
+    const onCfg = () => { clearTimeout(timer); schedule() }   // 休止時間設定を変えたら間隔を即再計算
     document.addEventListener('visibilitychange', onVis)
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
+    window.addEventListener('boardpollcfgchange', onCfg)
+    window.addEventListener('storage', onCfg)
+    return () => { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('boardpollcfgchange', onCfg); window.removeEventListener('storage', onCfg) }
   }, [isPopup, mergeDiff])
+
+  // 掲示板の時刻自動切替（日本時刻）。ONの間、境界（11:00/16:00/翌0:00）を跨いだら表示日付とAM/PMを自動で切り替える。
+  //   00:00–10:59 → 当日AM ／ 11:00–15:59 → 当日PM ／ 16:00–23:59 → 翌日AM
+  //   PDF印刷用ウィンドウ(?print=1)は指定日を印刷するため自動切替しない。
+  useEffect(() => {
+    if (!isPopup) return
+    const isPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
+    if (isPrint) return
+    let lastSlot = null
+    const apply = () => {
+      if (!readBoardAutoSwitch()) return
+      const s = boardAutoSlot()
+      if (s.slot === lastSlot) return   // 境界を跨いだ時だけ適用（同一スロット内の手動操作は尊重）
+      lastSlot = s.slot
+      setDate(s.date)
+      setAmpm(s.ampm)
+    }
+    apply()                              // 開いた瞬間に現在のスロットへ合わせる
+    const t = setInterval(apply, 60000)  // 1分ごとに境界跨ぎを確認
+    const onCfg = () => { lastSlot = null; apply() }   // 自動切替ON/OFFの変更で即再適用
+    window.addEventListener('boardautoswitchchange', onCfg)
+    window.addEventListener('storage', onCfg)
+    return () => { clearInterval(t); window.removeEventListener('boardautoswitchchange', onCfg); window.removeEventListener('storage', onCfg) }
+  }, [isPopup])
 
   // 別タブ（出荷登録の編集ウィンドウ等）で更新が入ったら即座に再取得して反映する
   const refetch = useCallback(async () => {
@@ -4007,6 +4133,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const toggleBoardCol = (k) => { const next = hiddenSet.has(k) ? boardHidden.filter(x => x !== k) : [...boardHidden, k]; setBoardHidden(next); writeBoardCols(boardOrder, next) }
   const moveBoardCol = (i, dir) => { const j = i + dir; if (j < 0 || j >= boardOrder.length) return; const next = [...boardOrder];[next[i], next[j]] = [next[j], next[i]]; setBoardOrder(next); writeBoardCols(next, boardHidden) }
   const resetBoardCols = () => { setBoardOrder([...BOARD_COL_KEYS]); setBoardHidden([]); writeBoardCols([...BOARD_COL_KEYS], []) }
+  const setAutoSwitch = (on) => { setAutoSwitchState(on); writeBoardAutoSwitch(on) }
+  // 掲示板ヘッダーの休み欄：入力を localStorage（seikon_rest_日付 / seikon_present_default）へ保存し、生コン出力とも相互反映
+  const setBoardRestText = (v) => { setBoardRest(v); writeSeikonRest(date, v) }
+  const setBoardPresentNum = (n) => { const num = Math.max(0, parseInt(n, 10) || 0); setBoardPresent(num); writeSeikonPresent(num) }
   // 画面操作モーダルの折りたたみセクション見出し（クリックで開閉）
   const secHead = (key, title) => (
     <div onClick={() => setSecOpen(o => ({ ...o, [key]: !o[key] }))}
@@ -4025,6 +4155,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
             <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
+            {/* 休み欄：生コン出荷予定表出力の上部入力とリンク（相互に反映・保存） */}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', marginLeft: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#2b3a4d' }}>休み</span>
+              <input type="text" value={boardRest} onChange={e => setBoardRestText(e.target.value)} placeholder="例: 田中 高橋"
+                style={{ width: '9em', fontSize: 12, padding: '3px 6px', border: '1px solid #b9c4d4', borderRadius: 4, fontFamily: 'inherit', color: '#111', minWidth: 0 }} />
+              <input type="number" min="0" value={boardPresent} onChange={e => setBoardPresentNum(e.target.value)} title="出社人数"
+                style={{ width: '3.2em', fontSize: 12, padding: '3px 4px', border: '1px solid #888', borderRadius: 4, color: '#0f3060', fontWeight: 700, textAlign: 'center' }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#0f3060' }}>名</span>
+            </span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
@@ -4249,6 +4388,27 @@ function SchedulePage({ onEditShipment, isPopup }) {
                   )}
                 </div>
               )}
+              {/* 時刻で自動切替（折りたたみ） */}
+              <div>
+                {secHead('auto', '時刻で自動切替')}
+                {secOpen.auto && (
+                  <div style={{ padding: '10px 4px 2px' }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      {[[true, 'ON'], [false, 'OFF']].map(([v, l]) => (
+                        <button key={l} type="button" onClick={() => setAutoSwitch(v)}
+                          style={{ flex: 1, border: autoSwitch === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: autoSwitch === v ? '#0f3060' : '#fff', color: autoSwitch === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6b7a8d', lineHeight: 1.6 }}>
+                      日本時刻で自動的に表示を切り替えます。<br />
+                      ・00:00〜10:59 → <b>当日AM</b><br />
+                      ・11:00〜15:59 → <b>当日PM</b><br />
+                      ・16:00〜23:59 → <b>翌日AM</b><br />
+                      ONの間は境界の時刻で日付とAM/PMが自動で変わります。
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* 表示項目・表示順（折りたたみ） */}
               <div>
                 {secHead('cols', '表示項目・表示順')}
@@ -5015,15 +5175,20 @@ function SeikonOutputPage({ isPopup }) {
   useEffect(() => { api.get('/api/employees?drivers=1').then(d => setDrivers(Array.isArray(d) ? d : [])).catch(() => { /* noop */ }) }, [])
   const nickList = [...new Set(drivers.map(dispDriverName).map(x => String(x ?? '').trim()).filter(Boolean))]
   // 出社/休み：出社数のデフォルトを保存し、当日 欄に入れた休みの呼び名の数だけ引く
-  const PRESENT_KEY = 'seikon_present_default'
-  const [presentDefault, setPresentDefault] = useState(() => { try { const v = parseInt(localStorage.getItem(PRESENT_KEY), 10); return Number.isFinite(v) ? v : 16 } catch { return 16 } })
-  const savePresentDefault = (n) => { setPresentDefault(n); try { localStorage.setItem(PRESENT_KEY, String(n)) } catch { /* noop */ } }
+  const [presentDefault, setPresentDefault] = useState(readSeikonPresent)
+  const savePresentDefault = (n) => { setPresentDefault(n); writeSeikonPresent(n) }   // 別ウィンドウの休み欄とも相互反映
   const [presentEdit, setPresentEdit] = useState(false)
   const [restOpen, setRestOpen] = useState(false)
-  const restKey = 'seikon_rest_' + date
   const [restText, setRestText] = useState('')
-  useEffect(() => { try { setRestText(localStorage.getItem('seikon_rest_' + date) || '') } catch { setRestText('') } }, [date])
-  const saveRest = (v) => { setRestText(v); try { localStorage.setItem(restKey, v) } catch { /* noop */ } }
+  // 表示日に対応した休みを読み込み、別ウィンドウ等での変更（seikonrestchange / storage）にも追従
+  useEffect(() => {
+    const sync = () => { setRestText(readSeikonRest(date)); setPresentDefault(readSeikonPresent()) }
+    sync()
+    window.addEventListener('seikonrestchange', sync)
+    window.addEventListener('storage', sync)
+    return () => { window.removeEventListener('seikonrestchange', sync); window.removeEventListener('storage', sync) }
+  }, [date])
+  const saveRest = (v) => { setRestText(v); writeSeikonRest(date, v) }   // 別ウィンドウの休み欄とも相互反映
   const restNames = restText.split(/[\s,、・／/]+/).map(x => x.trim()).filter(Boolean)
   const addRest = (n) => { const t = String(n ?? '').trim(); if (t && !restNames.includes(t)) saveRest([...restNames, t].join(' ')) }
   const removeRest = (n) => saveRest(restNames.filter(x => x !== n).join(' '))
@@ -6181,6 +6346,9 @@ function SettingsPage() {
     try { localStorage.setItem(SCHED4K_ON, on ? '1' : '0'); localStorage.setItem(SCHED4K_SCALE, String(scale)) } catch { /* noop */ }
     try { window.dispatchEvent(new Event('sched4kchange')) } catch { /* noop */ }
   }
+  // 別ウィンドウ（掲示板）ポーリングの休止時間帯（端末ごと・localStorage）
+  const [pollCfg, setPollCfg] = useState(readPollConfig)
+  const savePoll = (patch) => { const next = { ...pollCfg, ...patch }; setPollCfg(next); writePollConfig(next) }
 
   // 全データ（伝票・顧客・従業員）を1ファイル(JSON)でダウンロード
   const downloadBackup = async () => {
@@ -6290,6 +6458,38 @@ function SettingsPage() {
             </div>
           </div>
         )}
+      </div>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🕒 別ウィンドウ（掲示板）の自動更新 休止時間</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          指定した時間帯は、掲示板の自動更新（ポーリング）の間隔を長くして読み取りを抑えます。<b>この端末のブラウザにだけ</b>保存されます。時刻は<b>日本時刻</b>で判定します。
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+          {[[true, 'ON'], [false, 'OFF']].map(([v, l]) => (
+            <button key={l} type="button" onClick={() => savePoll({ enabled: v })}
+              style={{ border: pollCfg.enabled === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: pollCfg.enabled === v ? '#0f3060' : '#fff', color: pollCfg.enabled === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+          ))}
+        </div>
+        {pollCfg.enabled && (
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, color: '#475467', display: 'flex', alignItems: 'center', gap: 6 }}>
+              開始<input type="time" value={pollCfg.start} onChange={e => savePoll({ start: e.target.value })}
+                style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #cdd5e0', borderRadius: 6 }} />
+            </label>
+            <label style={{ fontSize: 13, color: '#475467', display: 'flex', alignItems: 'center', gap: 6 }}>
+              終了<input type="time" value={pollCfg.end} onChange={e => savePoll({ end: e.target.value })}
+                style={{ fontSize: 14, padding: '5px 8px', border: '1.5px solid #cdd5e0', borderRadius: 6 }} />
+            </label>
+            <label style={{ fontSize: 13, color: '#475467', display: 'flex', alignItems: 'center', gap: 6 }}>
+              間隔<input type="number" min="1" max="180" value={pollCfg.intervalMin} onChange={e => savePoll({ intervalMin: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                style={{ width: '4em', fontSize: 14, padding: '5px 8px', border: '1.5px solid #cdd5e0', borderRadius: 6, textAlign: 'center' }} />分に1回
+            </label>
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 10, lineHeight: 1.6 }}>
+          ※ 既定は 18:30〜翌 7:00 を 30分に1回。休止時間帯以外は 30秒に1回です。終了が開始より前の場合は日をまたぐ夜間として扱います。
+        </div>
       </div>
 
       <div style={box}>
