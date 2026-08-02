@@ -3191,7 +3191,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardOrder, setBoardOrder] = useState(readBoardOrder)
   const [boardHidden, setBoardHidden] = useState(readBoardHidden)
   const [boardModal, setBoardModal] = useState(false)
-  const [boardModalMin, setBoardModalMin] = useState(false)   // 画面操作モーダルの最小化
   const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, auto: true, cols: true })   // モーダル各セクションの開閉
   // 出荷予定表側のコントローラーで別ウィンドウのAM/PMを操作するための値（別ウィンドウでは header のampmが本体）
   const [boardAmpm, setBoardAmpm] = useState(readBoardAmpm)
@@ -4342,25 +4341,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
           onSave={async (patch, changedKeys) => { await saveStructured(editModal, patch, changedKeys); setEditModal(null) }}
         />
       )}
-      {/* 別ウィンドウ（掲示板）の画面操作：最小化時は小さなバー、通常時はモーダル（各セクション折りたたみ可） */}
-      {boardModal && boardModalMin && (
-        <div className="no-print" style={{ position: 'fixed', top: 10, right: 12, zIndex: 1300, display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #0f3060', borderRadius: 10, padding: '6px 8px 6px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#0f3060' }}>⚙ 画面操作</span>
-          <button type="button" onClick={() => setBoardModalMin(false)} title="元に戻す"
-            style={{ border: '1.5px solid #0f3060', background: '#0f3060', color: '#fff', borderRadius: 7, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>◱ 元に戻す</button>
-          <button type="button" onClick={() => { setBoardModal(false); setBoardModalMin(false) }} title="閉じる"
-            style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 7, padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}>✕</button>
-        </div>
-      )}
-      {boardModal && !boardModalMin && (
+      {/* 別ウィンドウ（掲示板）の画面操作モーダル（各セクション折りたたみ可） */}
+      {boardModal && (
         <div className="no-print" onClick={() => setBoardModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 540, borderRadius: 14, maxHeight: '90dvh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '12px 14px', borderBottom: '1px solid #e3e8ef' }}>
               <h2 style={{ margin: 0, fontSize: 17, color: '#1a2332' }}>⚙ 画面操作</h2>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={() => setBoardModalMin(true)} title="最小化" style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>▁ 最小化</button>
-                <button type="button" onClick={() => setBoardModal(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
-              </div>
+              <button type="button" onClick={() => setBoardModal(false)} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
             </div>
             <div style={{ overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* 画面倍率（折りたたみ） */}
