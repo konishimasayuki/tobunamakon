@@ -4174,8 +4174,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
             {ampmButtons}
-            <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
-              style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
+            {/* スマホ幅（掲示板をスマホで開いた時）は画面操作ボタンを出さない。倍率等はPC/大型モニタ用のため */}
+            {!boardPan && (
+              <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
+                style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
+            )}
           </div>
         </div>
       ) : (
