@@ -3166,8 +3166,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // PC版の表（アプリ内・別ウィンドウでない・スマホカードでない）はセルを直接書き換え可能にする。
   // 別ウィンドウ（共有ボード）は閲覧専用のまま（inlineEdit=false）。
   const inlineEdit = !isPopup && !compact
-  // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
-  const popupNarrow = useIsMobile(880)
+  // 別ウィンドウ（掲示板）のPC設計幅。ビューポートがこれより狭ければ（スマホ縦・スマホ横・タブレット等）
+  // 全列を詰め込んで圧縮せず、PC版レイアウトをこの固定幅のまま描画し、上下左右スワイプ（2次元スクロール）で見る。
+  // これ以上の幅（PC・大型モニタ）は従来どおり画面幅いっぱい＝PC側レイアウトは一切変更しない。
+  const BOARD_PC_WIDTH = 1280
+  const popupNarrow = useIsMobile(BOARD_PC_WIDTH)
+  const boardPan = isPopup && popupNarrow
   // 別ウィンドウからは ?date= で表示日を引き継ぐ
   const [date, setDate] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -4147,6 +4151,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
+      {/* スマホ幅の別ウィンドウはヘッダー＋表をPC幅の固定幅で丸ごと描画し、ルートの2次元スクロールで
+          上下左右にスワイプして見られるようにする（PC版レイアウトをそのまま表示）。 */}
+      <div style={boardPan ? { minWidth: BOARD_PC_WIDTH } : undefined}>
       {isPopup ? (
         /* 別ウィンドウ: 日付・曜日(左)／タイトル(中央)／AM・PM(右) を1行で高さを揃える。日付・AM/PMはタイトルに被らない配置 */
         <div style={{ borderBottom: '1px solid #e5e9f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
@@ -4167,8 +4174,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
             {ampmButtons}
-            <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
-              style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
+            {/* スマホ幅（掲示板をスマホで開いた時）は画面操作ボタンを出さない。倍率等はPC/大型モニタ用のため */}
+            {!boardPan && (
+              <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
+                style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
+            )}
           </div>
         </div>
       ) : (
@@ -4321,16 +4331,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
         // 別ウィンドウの拡大設定に干渉されない。表は width:100% のままなので列幅は画面いっぱい・文字だけ拡大。
         const scaled = (node) => scale4k !== 1 ? <div style={{ zoom: scale4k }}>{node}</div> : node
         if (!isPopup) return <div className="schedule" style={{ overflowX: 'auto', padding: '0 16px 24px' }}>{inner}</div>
-        // 別ウィンドウ:
-        //   ・PC幅(>=880)では画面いっぱいに表示
-        //   ・スマホ幅(<880)では FitToWidth による縮小だと地図など右端の列が見切れるため、
-        //     横スクロール可能にして全列を読めるようにする
-        return popupNarrow
-          ? <div className="schedule popup-view" style={{ padding: '4px 0 24px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <div style={{ minWidth: 760 }}>{scaled(inner)}</div>
-            </div>
-          : <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner)}</div>
+        // 別ウィンドウ（掲示板）は常にPC版テーブルを width:100% で描画する。
+        //   ・PC/横広画面では画面いっぱい。
+        //   ・スマホ幅では上位ラッパー(minWidth=BOARD_PC_WIDTH)によりPC幅で描画され、
+        //     ルートの2次元スクロールで上下左右スワイプして見られる。
+        return <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner)}</div>
       })()}
+      </div>{/* /PC幅ラッパー */}
       {editModal && (
         <ScheduleEditModal
           shipment={editModal}
