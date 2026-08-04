@@ -3166,12 +3166,12 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // PC版の表（アプリ内・別ウィンドウでない・スマホカードでない）はセルを直接書き換え可能にする。
   // 別ウィンドウ（共有ボード）は閲覧専用のまま（inlineEdit=false）。
   const inlineEdit = !isPopup && !compact
-  // 別ウィンドウで画面が表の基準幅より狭いか（スマホ縦＝縮小、PC/横＝幅いっぱい）
-  const popupNarrow = useIsMobile(880)
-  // スマホ幅の別ウィンドウ（掲示板）は、PC版レイアウトをそのまま固定幅で描画し、
-  // 上下左右スワイプ（2次元スクロール）で見られるようにする。固定幅＝PCモニター相当。
-  const boardPan = isPopup && popupNarrow
+  // 別ウィンドウ（掲示板）のPC設計幅。ビューポートがこれより狭ければ（スマホ縦・スマホ横・タブレット等）
+  // 全列を詰め込んで圧縮せず、PC版レイアウトをこの固定幅のまま描画し、上下左右スワイプ（2次元スクロール）で見る。
+  // これ以上の幅（PC・大型モニタ）は従来どおり画面幅いっぱい＝PC側レイアウトは一切変更しない。
   const BOARD_PC_WIDTH = 1280
+  const popupNarrow = useIsMobile(BOARD_PC_WIDTH)
+  const boardPan = isPopup && popupNarrow
   // 別ウィンドウからは ?date= で表示日を引き継ぐ
   const [date, setDate] = useState(() => {
     if (typeof window !== 'undefined') {
