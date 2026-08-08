@@ -3291,7 +3291,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
     if (!isPopup) return
     // 共有ボードの自動更新。まず版番号(?rev=1)だけ読み、前回と同じなら本体取得をスキップ＝読み取り削減。
     //  ・変化あり or 一定回数ごと（保険）にだけ当日ぶんをフル取得（差分は mergeDiff）。
-    //  ・非表示タブでは取得しない。表示に戻ったら即時更新。同一端末の保存は storage 通知で即反映。
+    //  ・非表示（裏タブ・最小化）でも更新を止めない＝放置しても最新化される（表示に戻れば即時更新）。
+    //    ※裏タブはブラウザのタイマー間引きで最短でも約1分間隔になる。最前面表示なら通常30秒。
     //  ・間隔は currentPollMs()＝休止時間帯(既定18:30〜7:00)は長め、それ以外は30秒。
     let lastRev = null
     let sinceFull = 0
@@ -3300,7 +3301,6 @@ function SchedulePage({ onEditShipment, isPopup }) {
     let stopped = false
     const schedule = () => { if (!stopped) timer = setTimeout(tick, currentPollMs()) }
     const tick = async () => {
-      if (typeof document !== 'undefined' && document.hidden) { schedule(); return }
       try {
         const r = await api.get('/api/shipments?rev=1')
         const rev = (r && typeof r === 'object') ? r.rev : null
@@ -3321,6 +3321,25 @@ function SchedulePage({ onEditShipment, isPopup }) {
     window.addEventListener('storage', onCfg)
     return () => { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('boardpollcfgchange', onCfg); window.removeEventListener('storage', onCfg) }
   }, [isPopup, mergeDiff])
+
+  // 掲示板（別ウィンドウ）は画面スリープを防ぐ（Screen Wake Lock）。モニターが消灯して更新が止まるのを防止。
+  // 表示中のみ取得でき、非表示になると自動解放されるため、表示復帰時に取り直す。未対応ブラウザは無視。
+  useEffect(() => {
+    if (!isPopup) return
+    let lock = null
+    const acquire = async () => {
+      try {
+        if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+          lock = await navigator.wakeLock.request('screen')
+          if (lock) lock.addEventListener && lock.addEventListener('release', () => { lock = null })
+        }
+      } catch { /* 未対応・拒否は無視 */ }
+    }
+    acquire()
+    const onVis = () => { if (document.visibilityState === 'visible' && !lock) acquire() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { document.removeEventListener('visibilitychange', onVis); try { if (lock) lock.release() } catch { /* noop */ } lock = null }
+  }, [isPopup])
 
   // 掲示板の時刻自動切替（日本時刻）。ONの間、境界（11:00/16:00/翌0:00）を跨いだら表示日付とAM/PMを自動で切り替える。
   //   00:00–10:59 → 当日AM ／ 11:00–15:59 → 当日PM ／ 16:00–23:59 → 翌日AM
@@ -3626,8 +3645,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     // 現場名など：1行で見切れる前に2行まで折り返し、3行目に行く前にフォントを縮小する
     if (opts.wrap) {
       const v = getVal(s, f)
+      // 空欄（プレースホルダ表示）のときは「変更＝赤(changed)」を付けない。
+      // ＝商社などを消して更新した時に、透かし文字が赤修正表示にならないようにする。
+      const wcls = (v ? cls : cls.replace(' changed', '')) + ' sc-wrap2' + (v ? '' : ' sc-wrap2-ph')
       return (
-        <div key={f + (isChanged(s, f) ? '_c' : '')} ref={fitRef} className={cls + ' sc-wrap2' + (v ? '' : ' sc-wrap2-ph')}>{v || ph || ''}</div>
+        <div key={f + (isChanged(s, f) ? '_c' : '')} ref={fitRef} className={wcls}>{v || ph || ''}</div>
       )
     }
     return (
