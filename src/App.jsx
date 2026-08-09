@@ -3153,6 +3153,14 @@ function currentPollMs() {
 // 休み(rests)＝従業員一覧から選択、追加要員(extras)＝自由入力（バイト等）。base＝出社人数の基準。
 // 表示用：苗字(氏名の先頭トークン。なければ氏名/名前)を返す。
 function attSurname(name) { const t = String(name || '').trim(); const first = t.split(/[\s　]+/)[0]; return first || t }
+// 休みの表示名：呼び名（従業員管理で登録）があれば呼び名、なければ苗字。
+function attDispName(rest) {
+  const id = rest && rest.id
+  if (id && NICK_REG.has(id)) return NICK_REG.get(id)
+  return attSurname(rest && rest.name)
+}
+// 配列を n 個ずつのまとまりに分割（休みの4人毎改行に使用）
+function chunkBy(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out }
 async function fetchAttendance(date) {
   try { const a = await api.get('/api/attendance?date=' + encodeURIComponent(date)); return { rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], base: Number.isFinite(+a.base) ? +a.base : 16 } }
   catch { return { rests: [], extras: [], base: 16 } }
@@ -3179,14 +3187,21 @@ function useAttendance(date) {
 }
 
 // 出欠登録の表示（休み / 追加要員 の2行）。掲示板・出荷予定表・生コン出力で共通。
+// 休みは呼び名（登録があれば）で表示し、4人毎に改行する。
 function AttendanceLines({ attendance, style }) {
+  useNickReg()   // 呼び名レジストリ更新で再描画
   const rests = (attendance && attendance.rests) || []
   const extras = (attendance && attendance.extras) || []
+  const restRows = chunkBy(rests.map(attDispName), 4)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.25, minWidth: 0, ...style }}>
-      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        <span style={{ fontWeight: 700, color: '#2b3a4d' }}>休み: </span>
-        <span style={{ color: '#111' }}>{rests.length ? rests.map(r => attSurname(r.name)).join('　') : '—'}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 0 }}>
+        <span style={{ fontWeight: 700, color: '#2b3a4d', whiteSpace: 'nowrap' }}>休み: </span>
+        {rests.length ? (
+          <span style={{ display: 'flex', flexDirection: 'column', color: '#111', minWidth: 0 }}>
+            {restRows.map((row, i) => <span key={i} style={{ whiteSpace: 'nowrap' }}>{row.join('　')}</span>)}
+          </span>
+        ) : <span style={{ color: '#111' }}>—</span>}
       </div>
       <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         <span style={{ fontWeight: 700, color: '#1a7a3a' }}>追加要員: </span>
@@ -4297,6 +4312,16 @@ function SchedulePage({ onEditShipment, isPopup }) {
     <button type="button" onClick={() => setAttModal(true)} title="出欠登録（休み・追加要員）"
       style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🧑‍🤝‍🧑 出欠登録</button>
   )
+  // 別ウィンドウ（掲示板）を開くボタン。別ウィンドウ操作の左に置く
+  const openWinBtn = (
+    <button type="button" onClick={openScheduleWindow}
+      style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
+  )
+  // 別ウィンドウ（掲示板）の画面操作ボタン。出荷予定表タブでは AM/PM の左に置く
+  const boardOpBtn = (
+    <button type="button" onClick={() => setBoardModal(true)} title="別ウィンドウ（掲示板）の画面操作（倍率・表示項目・表示順）"
+      style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 別ウィンドウ操作</button>
+  )
   // 画面操作モーダルの折りたたみセクション見出し（クリックで開閉）
   const secHead = (key, title) => (
     <div onClick={() => setSecOpen(o => ({ ...o, [key]: !o[key] }))}
@@ -4318,18 +4343,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
             <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
-            {/* 出欠登録：ボタン＋休み/追加要員の2行表示 */}
-            {attButton}
+            {/* 別ウィンドウは出欠登録ボタンは出さず、休み/追加要員の表示のみ（編集は出荷予定表側から） */}
             <AttendanceLines attendance={attendance} style={{ fontSize: 12, minWidth: 0 }} />
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-            {ampmButtons}
-            {/* スマホ幅（掲示板をスマホで開いた時）は画面操作ボタンを出さない。倍率等はPC/大型モニタ用のため */}
+            {/* 画面操作ボタンは AM/PM の左に置く。スマホ幅では出さない（倍率等はPC/大型モニタ用のため） */}
             {!boardPan && (
               <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
                 style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
             )}
+            {ampmButtons}
           </div>
         </div>
       ) : (
@@ -4341,16 +4365,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
-          <button type="button" onClick={openScheduleWindow}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
-          <button type="button" onClick={() => setBoardModal(true)} title="別ウィンドウ（掲示板）の画面操作（倍率・表示項目・表示順）"
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 別ウィンドウ操作</button>
           {attButton}
           <AttendanceLines attendance={attendance} style={{ fontSize: 12 }} />
-          {compact && ampmButtons}
+          {/* 別ウィンドウで開く→別ウィンドウ操作→AM/PM の順で AM/PM の左にまとめる（スマホ幅では同じ行の末尾に続く） */}
+          {compact && <>{openWinBtn}{boardOpBtn}{ampmButtons}</>}
         </div>
-        {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
-        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10 }}>{ampmButtons}</div>}
+        {/* PC/iPad: AM/PM はタイトルに被らないよう右端に。別ウィンドウで開く・別ウィンドウ操作をその左に置く */}
+        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8 }}>{openWinBtn}{boardOpBtn}{ampmButtons}</div>}
       </div>
       )}
       {compact ? (
@@ -5658,19 +5679,24 @@ async function saveShipmentDrivers(shipment, newDrivers) {
 }
 
 // 担当者を選ぶUI（チップ）。accent=選択時の色
-function DriverPicker({ value, options, onChange, accent = '#1b4ea8' }) {
+function DriverPicker({ value, options, onChange, accent = '#1b4ea8', isAbsent }) {
   const has = (id) => value.some(d => d.id === id)
   const toggle = (emp) => {
     if (has(emp.id)) onChange(value.filter(d => d.id !== emp.id))
     else onChange([...value, { id: emp.id, name: emp.name }])   // 上限なし
   }
+  const absentOf = typeof isAbsent === 'function' ? isAbsent : () => false
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       {options.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
         : options.map(emp => {
           const on = has(emp.id)
-          return <button key={emp.id} type="button" onClick={() => toggle(emp)}
-            style={{ border: on ? `2px solid ${accent}` : '1.5px solid #cdd5e0', background: on ? accent : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{dispDriverName(emp)}</button>
+          const absent = absentOf(emp)
+          // 出欠登録で「休み」の従業員は選択不可（グレーアウト）。既に選択済みの場合のみ解除は許可。
+          const disabled = absent && !on
+          return <button key={emp.id} type="button" onClick={() => { if (!disabled) toggle(emp) }} disabled={disabled}
+            title={absent ? '本日休みのため選択できません' : undefined}
+            style={{ border: on ? `2px solid ${accent}` : `1.5px solid ${absent ? '#dcdfe4' : '#cdd5e0'}`, background: on ? accent : (absent ? '#f0f1f3' : '#fff'), color: on ? '#fff' : (absent ? '#aab2bd' : '#3a4a5c'), borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', textDecoration: absent && !on ? 'line-through' : 'none' }}>{dispDriverName(emp)}{absent ? '（休み）' : ''}</button>
         })}
     </div>
   )
@@ -5690,6 +5716,21 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }
   }
   const [sel, setSel] = useState(initSel)
   const [busy, setBusy] = useState(false)
+  // 出欠登録の「休み」を読み込み、担当割当ではその従業員を選択不可（グレーアウト）にする
+  const [absentSet, setAbsentSet] = useState({ ids: new Set(), names: new Set() })
+  useEffect(() => {
+    if (!isAssign) return
+    let alive = true
+    fetchAttendance(shipment.date).then(a => {
+      if (!alive) return
+      setAbsentSet({
+        ids: new Set((a.rests || []).map(r => r && r.id).filter(Boolean)),
+        names: new Set((a.rests || []).map(r => String((r && r.name) || '').trim()).filter(Boolean)),
+      })
+    })
+    return () => { alive = false }
+  }, [isAssign, shipment.date])
+  const isAbsentEmp = (emp) => (emp && emp.id && absentSet.ids.has(emp.id)) || (emp && String(emp.name || '').trim() && absentSet.names.has(String(emp.name).trim()))
   // 担当割当：担当者を保存するだけ（LINE送信はしない）
   const doAssign = async () => {
     setBusy(true)
@@ -5723,7 +5764,7 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }
       <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
       <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>{isAssign ? '担当者（タップで選択／解除）' : '送信先（タップで選択／解除）'}</div>
-      <DriverPicker value={sel} options={drivers} onChange={setSel} accent={accent} />
+      <DriverPicker value={sel} options={drivers} onChange={setSel} accent={accent} isAbsent={isAssign ? isAbsentEmp : undefined} />
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
         <button type="button" onClick={() => (isAssign ? doAssign() : doSend())} disabled={busy}
