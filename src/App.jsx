@@ -3149,12 +3149,131 @@ function currentPollMs() {
 }
 
 // ===== 生コン出荷予定表の「休み」欄（別ウィンドウと相互リンク。端末ごと・localStorage）=====
-const SEIKON_PRESENT_KEY = 'seikon_present_default'
-function seikonRestKey(date) { return 'seikon_rest_' + date }
-function readSeikonRest(date) { try { return localStorage.getItem(seikonRestKey(date)) || '' } catch { return '' } }
-function writeSeikonRest(date, v) { try { localStorage.setItem(seikonRestKey(date), v); window.dispatchEvent(new Event('seikonrestchange')) } catch { /* noop */ } }
-function readSeikonPresent() { try { const n = parseInt(localStorage.getItem(SEIKON_PRESENT_KEY), 10); return Number.isFinite(n) ? n : 16 } catch { return 16 } }
-function writeSeikonPresent(n) { try { localStorage.setItem(SEIKON_PRESENT_KEY, String(n)); window.dispatchEvent(new Event('seikonrestchange')) } catch { /* noop */ } }
+// ===== 出欠登録（休み・追加要員／日付ごと・全端末共有）=====
+// 休み(rests)＝従業員一覧から選択、追加要員(extras)＝自由入力（バイト等）。base＝出社人数の基準。
+// 表示用：苗字(氏名の先頭トークン。なければ氏名/名前)を返す。
+function attSurname(name) { const t = String(name || '').trim(); const first = t.split(/[\s　]+/)[0]; return first || t }
+async function fetchAttendance(date) {
+  try { const a = await api.get('/api/attendance?date=' + encodeURIComponent(date)); return { rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], base: Number.isFinite(+a.base) ? +a.base : 16 } }
+  catch { return { rests: [], extras: [], base: 16 } }
+}
+async function saveAttendance(date, draft) {
+  const a = await api.put('/api/attendance?date=' + encodeURIComponent(date), { rests: draft.rests, extras: draft.extras, base: draft.base })
+  try { window.dispatchEvent(new Event('attendancechange')) } catch { /* noop */ }
+  notifyShipmentsChanged()   // 掲示板（別端末含む）へ rev / storage で変更通知
+  return { rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], base: Number.isFinite(+a.base) ? +a.base : 16 }
+}
+// 表示日ぶんの出欠を読み込み、他ウィンドウ/他端末の変更（attendancechange / storage）にも追従
+function useAttendance(date) {
+  const [attendance, setAttendance] = useState({ rests: [], extras: [], base: 16 })
+  const dref = useRef(date); dref.current = date
+  const reload = useCallback(async () => { setAttendance(await fetchAttendance(dref.current)) }, [])
+  useEffect(() => { reload() }, [date, reload])
+  useEffect(() => {
+    const on = () => reload()
+    window.addEventListener('attendancechange', on)
+    window.addEventListener('storage', on)
+    return () => { window.removeEventListener('attendancechange', on); window.removeEventListener('storage', on) }
+  }, [reload])
+  return [attendance, setAttendance, reload]
+}
+
+// 出欠登録の表示（休み / 追加要員 の2行）。掲示板・出荷予定表・生コン出力で共通。
+function AttendanceLines({ attendance, style }) {
+  const rests = (attendance && attendance.rests) || []
+  const extras = (attendance && attendance.extras) || []
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.25, minWidth: 0, ...style }}>
+      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ fontWeight: 700, color: '#2b3a4d' }}>休み: </span>
+        <span style={{ color: '#111' }}>{rests.length ? rests.map(r => attSurname(r.name)).join('　') : '—'}</span>
+      </div>
+      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ fontWeight: 700, color: '#1a7a3a' }}>追加要員: </span>
+        <span style={{ color: '#111' }}>{extras.length ? extras.join('　') : '—'}</span>
+      </div>
+    </div>
+  )
+}
+
+// 出欠登録モーダル：従業員一覧（選択＝休み）＋自由入力（＝追加要員）＋出社人数の基準。
+function AttendanceModal({ date, employees = [], initial, onClose, onSaved }) {
+  const [rests, setRests] = useState(() => Array.isArray(initial?.rests) ? initial.rests.map(r => ({ id: String(r.id || ''), name: String(r.name || '') })) : [])
+  const [extras, setExtras] = useState(() => Array.isArray(initial?.extras) ? [...initial.extras] : [])
+  const [base, setBase] = useState(() => Number.isFinite(+initial?.base) ? +initial.base : 16)
+  const [extraInput, setExtraInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const isRest = (id) => rests.some(r => r.id === id)
+  const toggleRest = (emp) => setRests(rs => isRest(emp.id) ? rs.filter(r => r.id !== emp.id) : [...rs, { id: emp.id, name: emp.name }])
+  const addExtra = () => { const t = extraInput.trim(); if (t && !extras.includes(t)) setExtras(x => [...x, t]); setExtraInput('') }
+  const removeExtra = (t) => setExtras(x => x.filter(e => e !== t))
+  const present = Math.max(0, base - rests.length)
+  const doSave = async () => {
+    setSaving(true)
+    try { const a = await saveAttendance(date, { rests, extras, base }); onSaved && onSaved(a) }
+    catch (e) { alert('保存に失敗しました: ' + (e && e.message ? e.message : e)) }
+    finally { setSaving(false) }
+  }
+  const empName = (e) => String(e.nickname || '').trim() ? `${e.name}（${e.nickname}）` : e.name
+  return (
+    <div className="no-print" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 560, borderRadius: 14, maxHeight: '90dvh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '12px 14px', borderBottom: '1px solid #e3e8ef' }}>
+          <h2 style={{ margin: 0, fontSize: 17, color: '#1a2332' }}>🧑‍🤝‍🧑 出欠登録 <span style={{ fontSize: 13, color: '#6b7a8d', fontWeight: 400 }}>{date}</span></h2>
+          <button type="button" onClick={onClose} style={{ border: '1px solid #cdd5e0', background: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 13, cursor: 'pointer' }}>✕ 閉じる</button>
+        </div>
+        <div style={{ overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* 休み：従業員を選択 */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334', marginBottom: 6 }}>休み（従業員を選択）</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {employees.length === 0 && <span style={{ fontSize: 12, color: '#9aa7b5' }}>従業員が登録されていません（従業員管理で登録）</span>}
+              {employees.map(e => {
+                const on = isRest(e.id)
+                return (
+                  <button key={e.id} type="button" onClick={() => toggleRest(e)}
+                    style={{ border: on ? '2px solid #c0392b' : '1.5px solid #cdd5e0', background: on ? '#fdecec' : '#fff', color: on ? '#c0392b' : '#3a4a5c', borderRadius: 999, padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    {on ? '● ' : ''}{empName(e)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {/* 追加要員：自由入力（バイト等） */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334', marginBottom: 6 }}>追加要員（バイト等・自由入力）</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input type="text" value={extraInput} onChange={e => setExtraInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExtra() } }}
+                placeholder="名前を入力して追加" data-ime="kana"
+                style={{ flex: 1, minWidth: 0, fontSize: 14, padding: '8px 10px', border: '1.5px solid #cdd5e0', borderRadius: 8 }} />
+              <button type="button" onClick={addExtra} style={{ border: '1.5px solid #1a8f5a', background: '#1a8f5a', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>追加</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {extras.length === 0 && <span style={{ fontSize: 12, color: '#9aa7b5' }}>（なし）</span>}
+              {extras.map(t => (
+                <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1.5px solid #a0dca0', background: '#f0f9f0', color: '#1a7a3a', borderRadius: 999, padding: '5px 10px', fontSize: 13, fontWeight: 700 }}>
+                  {t}<button type="button" onClick={() => removeExtra(t)} style={{ border: 'none', background: 'none', color: '#1a7a3a', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* 出社人数の基準 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#334' }}>出社人数（基準）</span>
+            <input type="number" min="0" value={base} onChange={e => setBase(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              style={{ width: '4.5em', fontSize: 14, padding: '6px 8px', border: '1.5px solid #cdd5e0', borderRadius: 8, textAlign: 'center', color: '#0f3060', fontWeight: 700 }} />
+            <span style={{ fontSize: 13, color: '#6b7a8d' }}>− 休み {rests.length}名 ＝ <b style={{ color: '#0f3060' }}>出社 {present}名</b></span>
+          </div>
+        </div>
+        <div style={{ padding: '12px 14px', borderTop: '1px solid #e3e8ef', textAlign: 'right' }}>
+          <button type="button" onClick={doSave} disabled={saving}
+            style={{ border: 'none', background: '#0f3060', color: '#fff', borderRadius: 8, padding: '10px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? '保存中…' : '保存'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function SchedulePage({ onEditShipment, isPopup }) {
   // 出荷予定表: スマホ(<768px)は1件=1カードの縦リスト。
@@ -3200,9 +3319,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardAmpm, setBoardAmpm] = useState(readBoardAmpm)
   // 掲示板の時刻自動切替 ON/OFF（端末ごと）
   const [autoSwitch, setAutoSwitchState] = useState(readBoardAutoSwitch)
-  // 掲示板ヘッダーの「休み」欄（生コン出荷予定表出力と相互リンク）。別ウィンドウの表示日に対応
-  const [boardRest, setBoardRest] = useState(() => readSeikonRest(''))
-  const [boardPresent, setBoardPresent] = useState(readSeikonPresent)
+  // 出欠登録（休み・追加要員／日付ごと・全端末共有）。従業員一覧はモーダルで選択に使う
+  const [attendance, setAttendance] = useState({ rests: [], extras: [], base: 16 })
+  const [allEmployees, setAllEmployees] = useState([])
+  const [attModal, setAttModal] = useState(false)
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
     const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
@@ -3219,15 +3339,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
     window.addEventListener('storage', onAuto)
     return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('boardampmchange', onAmpm); window.removeEventListener('boardautoswitchchange', onAuto); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols); window.removeEventListener('storage', onAmpm); window.removeEventListener('storage', onAuto) }
   }, [isPopup])
-  // 掲示板ヘッダーの「休み」欄を、表示日に対応して読み込み＆他ウィンドウの変更に追従
+  // 出欠登録を表示日に対応して読み込み、他ウィンドウ/他端末の変更（attendancechange / storage）にも追従
+  const loadAttendance = useCallback(async () => { setAttendance(await fetchAttendance(dateRef.current)) }, [])
+  useEffect(() => { loadAttendance() }, [date, loadAttendance])
   useEffect(() => {
-    if (!isPopup) return
-    const sync = () => { setBoardRest(readSeikonRest(date)); setBoardPresent(readSeikonPresent()) }
-    sync()
-    window.addEventListener('seikonrestchange', sync)
-    window.addEventListener('storage', sync)
-    return () => { window.removeEventListener('seikonrestchange', sync); window.removeEventListener('storage', sync) }
-  }, [isPopup, date])
+    const on = () => loadAttendance()
+    window.addEventListener('attendancechange', on)
+    window.addEventListener('storage', on)
+    return () => { window.removeEventListener('attendancechange', on); window.removeEventListener('storage', on) }
+  }, [loadAttendance])
   const [editModal, setEditModal] = useState(null)   // スマホ：編集モーダルで開いている伝票
   const [drivers, setDrivers] = useState([])         // 担当ドライバー選択用（従業員=driver）
   const [customers, setCustomers] = useState([])     // 編集モーダルの業者名・商社名サジェスト用
@@ -3244,7 +3364,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 初回＋表示日が変わるたびに読み直す（日付変更時は「読み込み中」を出さず、取得完了時に差し替え＝チラつき防止）
   useEffect(() => { load() }, [date, load])
   useEffect(() => {
-    api.get('/api/employees').then(e => { rememberEmployees(e); setDrivers((e || []).filter(emp => emp.type === 'driver')) }).catch(() => {})
+    api.get('/api/employees').then(e => { const arr = Array.isArray(e) ? e : []; rememberEmployees(arr); setAllEmployees(arr); setDrivers(arr.filter(emp => emp.type === 'driver')) }).catch(() => {})
   }, [])
   // 編集モーダルの業者名・商社名サジェスト用に顧客マスタを読み込む（別ウィンドウ＝ログイン不要時は失敗しても無視）
   useEffect(() => {
@@ -3309,6 +3429,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
         if (changed || sinceFull >= SAFETY_EVERY) {
           lastRev = rev; sinceFull = 0
           mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current)))
+          loadAttendance()   // 出欠登録も一緒に最新化（保存時にrevが上がるため変化検知で取り直す）
         }
       } catch (e) { /* 一時的な失敗は無視 */ }
       schedule()
@@ -3368,7 +3489,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // 別タブ（出荷登録の編集ウィンドウ等）で更新が入ったら即座に再取得して反映する
   const refetch = useCallback(async () => {
     try { mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current))) } catch (e) { /* 無視 */ }
-  }, [mergeDiff])
+    loadAttendance()
+  }, [mergeDiff, loadAttendance])
   useShipmentsChanged(refetch)
 
   const firstT = (s) => (Array.isArray(s.times) && s.times.length) ? (s.times[0]?.text ?? s.times[0] ?? '') : ''
@@ -4159,9 +4281,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const moveBoardCol = (i, dir) => { const j = i + dir; if (j < 0 || j >= boardOrder.length) return; const next = [...boardOrder];[next[i], next[j]] = [next[j], next[i]]; setBoardOrder(next); writeBoardCols(next, boardHidden) }
   const resetBoardCols = () => { setBoardOrder([...BOARD_COL_KEYS]); setBoardHidden([]); writeBoardCols([...BOARD_COL_KEYS], []) }
   const setAutoSwitch = (on) => { setAutoSwitchState(on); writeBoardAutoSwitch(on) }
-  // 掲示板ヘッダーの休み欄：入力を localStorage（seikon_rest_日付 / seikon_present_default）へ保存し、生コン出力とも相互反映
-  const setBoardRestText = (v) => { setBoardRest(v); writeSeikonRest(date, v) }
-  const setBoardPresentNum = (n) => { const num = Math.max(0, parseInt(n, 10) || 0); setBoardPresent(num); writeSeikonPresent(num) }
+  // 出欠登録：ボタン＋2行表示（休み／追加要員）。ボタンでモーダルを開く（掲示板・通常画面 共通）
+  const attButton = (
+    <button type="button" onClick={() => setAttModal(true)} title="出欠登録（休み・追加要員）"
+      style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🧑‍🤝‍🧑 出欠登録</button>
+  )
   // 画面操作モーダルの折りたたみセクション見出し（クリックで開閉）
   const secHead = (key, title) => (
     <div onClick={() => setSecOpen(o => ({ ...o, [key]: !o[key] }))}
@@ -4179,19 +4303,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
       {isPopup ? (
         /* 別ウィンドウ: 日付・曜日(左)／タイトル(中央)／AM・PM(右) を1行で高さを揃える。日付・AM/PMはタイトルに被らない配置 */
         <div style={{ borderBottom: '1px solid #e5e9f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
-          <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
             <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
-            {/* 休み欄：生コン出荷予定表出力の上部入力とリンク（相互に反映・保存） */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', marginLeft: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#2b3a4d' }}>休み</span>
-              <input type="text" value={boardRest} onChange={e => setBoardRestText(e.target.value)} placeholder="例: 田中 高橋"
-                style={{ width: '9em', fontSize: 12, padding: '3px 6px', border: '1px solid #b9c4d4', borderRadius: 4, fontFamily: 'inherit', color: '#111', minWidth: 0 }} />
-              <input type="number" min="0" value={boardPresent} onChange={e => setBoardPresentNum(e.target.value)} title="出社人数"
-                style={{ width: '3.2em', fontSize: 12, padding: '3px 4px', border: '1px solid #888', borderRadius: 4, color: '#0f3060', fontWeight: 700, textAlign: 'center' }} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#0f3060' }}>名</span>
-            </span>
+            {/* 出欠登録：ボタン＋休み/追加要員の2行表示 */}
+            {attButton}
+            <AttendanceLines attendance={attendance} style={{ fontSize: 12, minWidth: 0 }} />
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
@@ -4216,6 +4334,8 @@ function SchedulePage({ onEditShipment, isPopup }) {
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
           <button type="button" onClick={() => setBoardModal(true)} title="別ウィンドウ（掲示板）の画面操作（倍率・表示項目・表示順）"
             style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 別ウィンドウ操作</button>
+          {attButton}
+          <AttendanceLines attendance={attendance} style={{ fontSize: 12 }} />
           {compact && ampmButtons}
         </div>
         {/* PC/iPad: AM/PMはタイトルに被らないよう右端に配置 */}
@@ -4360,6 +4480,15 @@ function SchedulePage({ onEditShipment, isPopup }) {
         return <div className="schedule popup-view" style={{ padding: '4px 12px 24px' }}>{scaled(inner)}</div>
       })()}
       </div>{/* /PC幅ラッパー */}
+      {attModal && (
+        <AttendanceModal
+          date={date}
+          employees={allEmployees}
+          initial={attendance}
+          onClose={() => setAttModal(false)}
+          onSaved={(a) => { setAttendance(a); setAttModal(false) }}
+        />
+      )}
       {editModal && (
         <ScheduleEditModal
           shipment={editModal}
@@ -5190,25 +5319,12 @@ function SeikonOutputPage({ isPopup }) {
   const [drivers, setDrivers] = useState([])
   useEffect(() => { api.get('/api/employees?drivers=1').then(d => setDrivers(Array.isArray(d) ? d : [])).catch(() => { /* noop */ }) }, [])
   const nickList = [...new Set(drivers.map(dispDriverName).map(x => String(x ?? '').trim()).filter(Boolean))]
-  // 出社/休み：出社数のデフォルトを保存し、当日 欄に入れた休みの呼び名の数だけ引く
-  const [presentDefault, setPresentDefault] = useState(readSeikonPresent)
-  const savePresentDefault = (n) => { setPresentDefault(n); writeSeikonPresent(n) }   // 別ウィンドウの休み欄とも相互反映
-  const [presentEdit, setPresentEdit] = useState(false)
-  const [restOpen, setRestOpen] = useState(false)
-  const [restText, setRestText] = useState('')
-  // 表示日に対応した休みを読み込み、別ウィンドウ等での変更（seikonrestchange / storage）にも追従
-  useEffect(() => {
-    const sync = () => { setRestText(readSeikonRest(date)); setPresentDefault(readSeikonPresent()) }
-    sync()
-    window.addEventListener('seikonrestchange', sync)
-    window.addEventListener('storage', sync)
-    return () => { window.removeEventListener('seikonrestchange', sync); window.removeEventListener('storage', sync) }
-  }, [date])
-  const saveRest = (v) => { setRestText(v); writeSeikonRest(date, v) }   // 別ウィンドウの休み欄とも相互反映
-  const restNames = restText.split(/[\s,、・／/]+/).map(x => x.trim()).filter(Boolean)
-  const addRest = (n) => { const t = String(n ?? '').trim(); if (t && !restNames.includes(t)) saveRest([...restNames, t].join(' ')) }
-  const removeRest = (n) => saveRest(restNames.filter(x => x !== n).join(' '))
-  const presentCount = Math.max(0, presentDefault - restNames.length)   // 出社数＝デフォルト－休みの人数
+  // 出欠登録（休み・追加要員／日付ごと・全端末共有）。従業員一覧はモーダルで選択に使う
+  const [attendance, setAttendance] = useAttendance(date)
+  const [allEmployees, setAllEmployees] = useState([])
+  const [attModal, setAttModal] = useState(false)
+  useEffect(() => { api.get('/api/employees').then(e => setAllEmployees(Array.isArray(e) ? e : [])).catch(() => { /* noop */ }) }, [])
+  const presentCount = Math.max(0, (Number(attendance.base) || 0) - (Array.isArray(attendance.rests) ? attendance.rests.length : 0))   // 出社数＝基準－休み人数
   // [電]列：電話連絡済みチェック。日付ごとに localStorage 保存（seikon_rest_ と同流儀。印刷別ウィンドウにも共有）
   const [denSet, setDenSet] = useState(() => new Set())
   useEffect(() => { try { setDenSet(new Set(JSON.parse(localStorage.getItem('seikon_den_' + date) || '[]'))) } catch { setDenSet(new Set()) } }, [date])
@@ -5389,6 +5505,10 @@ function SeikonOutputPage({ isPopup }) {
 
   return (
     <div className="seikon-wrap" style={{ height: '100%', overflow: 'auto', padding: isPopup ? 8 : 18, background: '#fff' }}>
+      {attModal && (
+        <AttendanceModal date={date} employees={allEmployees} initial={attendance}
+          onClose={() => setAttModal(false)} onSaved={(a) => { setAttendance(a); setAttModal(false) }} />
+      )}
       <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ padding: '6px 10px', border: '1.5px solid #bbb', borderRadius: 6, fontSize: 16 }} />
         <span style={{ fontSize: 13, color: '#6b7a8d' }}>{reiwa}</span>
@@ -5402,18 +5522,12 @@ function SeikonOutputPage({ isPopup }) {
       <div className="seikon-sheet">
         <div className="seikon-title">
           <span className="st-name">生コン出荷予定表</span>
-          <span className="st-rest" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
-            <span style={{ color: '#2b3a4d', fontSize: 12, fontWeight: 700 }}>休み</span>
-            {/* 自由入力テキスト（呼び名/コメントなど自由に） */}
-            <input type="text" value={restText} onChange={e => saveRest(e.target.value)}
-              placeholder="例: 田中 高橋"
-              style={{ width: '12em', fontSize: 12, padding: '2px 6px', border: '1px solid #b9c4d4', borderRadius: 4, fontFamily: 'inherit', color: '#111' }} />
-            {/* 出社人数: 直接編集できる number input（基準デフォルトも localStorage 保存） */}
-            <input type="number" min="0" value={presentDefault}
-              onChange={e => savePresentDefault(Math.max(0, parseInt(e.target.value, 10) || 0))}
-              title="出社人数（基準デフォルトとして保存）"
-              style={{ width: '3.4em', fontSize: 12, padding: '2px 4px', border: '1px solid #888', borderRadius: 4, color: '#0f3060', fontWeight: 700, textAlign: 'center' }} />
-            <span style={{ color: '#0f3060', fontWeight: 700 }}>名</span>
+          <span className="st-rest" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
+            {/* 出欠登録：ボタン（印刷除外）＋休み/追加要員の2行＋出社人数 */}
+            <button type="button" className="no-print" onClick={() => setAttModal(true)} title="出欠登録（休み・追加要員）"
+              style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>🧑‍🤝‍🧑 出欠登録</button>
+            <AttendanceLines attendance={attendance} style={{ fontSize: 11 }} />
+            <span style={{ color: '#0f3060', fontWeight: 700 }}>出社 {presentCount}名</span>
           </span>
           <span className="st-date">{titleDate}</span>
           <span className="st-ampm">

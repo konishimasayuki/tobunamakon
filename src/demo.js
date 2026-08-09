@@ -280,6 +280,24 @@ export async function demoRequest(rawPath, options = {}) {
     if (method === 'GET') { if (!s) throw new Error('見つかりません'); return s }
   }
 
+  // ---- attendance（出欠登録：日付ごと・共有）----
+  if (path === '/api/attendance') {
+    const date = q.date || ''
+    if (method === 'GET') {
+      const rec = (db.attendance && db.attendance[date]) || { rests: [], extras: [] }
+      return { date, rests: Array.isArray(rec.rests) ? rec.rests : [], extras: Array.isArray(rec.extras) ? rec.extras : [], base: db.attendanceBase || 16 }
+    }
+    if (method === 'PUT' || method === 'POST') {
+      if (!db.attendance) db.attendance = {}
+      const rests = Array.isArray(body.rests) ? body.rests.map(r => ({ id: String(r?.id || ''), name: String(r?.name || '') })).filter(r => r.name) : []
+      const extras = Array.isArray(body.extras) ? body.extras.map(x => String(x || '').trim()).filter(Boolean) : []
+      db.attendance[date] = { rests, extras }
+      if (body.base !== undefined) db.attendanceBase = Math.max(0, parseInt(body.base, 10) || 0)
+      bumpRev(db); save(db)
+      return { date, rests, extras, base: db.attendanceBase || 16 }
+    }
+  }
+
   // ---- customers ----
   if (path === '/api/customers') {
     if (method === 'GET') return Object.values(db.customers)
