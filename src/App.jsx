@@ -4037,30 +4037,38 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // 担当：1行=2人。各行を独立した入力にして、行ごとに別々の自動リサイズを行う
   // opts.oneEach=true のときは1人ずつ1行（縦並び）にする（スマホカード用）
+  // 出欠登録の「休み」に含まれる担当者を判定（id優先、なければ氏名で照合）。当日の休みは黄色背景で警告する。
+  const absentIds = new Set((attendance.rests || []).map(r => r && r.id).filter(Boolean))
+  const absentNames = new Set((attendance.rests || []).map(r => String((r && r.name) || '').trim()).filter(Boolean))
+  const isAbsentDriver = (d) => {
+    if (!d) return false
+    if (d.id && absentIds.has(d.id)) return true
+    const nm = String(d.name || '').trim()
+    return !!nm && absentNames.has(nm)
+  }
   const cellDrivers = (s, opts = {}) => {
     if (inlineEdit) return editCell(s, 'drivers', { ...opts, multiline: true })
-    const v = getVal(s, 'drivers')               // 2人ごとに改行された文字列
-    let lines = v ? v.split('\n') : ['']
-    if (opts.oneEach) {                           // 各行をさらに分解して1人=1行に
-      const names = (Array.isArray(s.drivers) ? s.drivers.map(dispDriverName) : (s.driverName ? [s.driverName] : []))
-        .map(x => String(x ?? '').trim()).filter(Boolean)
-      lines = names.length ? names : ['']
-    }
-    const display = lines.length ? lines : ['']
+    // 1人=1セルで描画（休みの人だけ背景を黄色にできるように）。表示は従来どおり2人ごとに1行。
+    const people = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ name: s.driverName }] : []))
+      .map(d => ({ name: String(dispDriverName(d) ?? '').trim(), absent: isAbsentDriver(d) }))
+      .filter(p => p.name)
     const cls = 'sc-in sc-driverline' + (isChanged(s, 'drivers') ? ' changed' : '') + (opts.big ? ' big' : '') + (opts.sm ? ' sm' : '')
+    const key = 'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + people.length + '_a' + people.filter(p => p.absent).length
+    if (!people.length) {
+      return <div className="sc-drivers"><input ref={fitRef} className={cls} defaultValue="" placeholder="担当" readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} /></div>
+    }
+    const rows = []
+    for (let i = 0; i < people.length; i += 2) rows.push(people.slice(i, i + 2))
     return (
-      <div className="sc-drivers" key={'drivers' + (isChanged(s, 'drivers') ? '_c' : '') + '_n' + display.length}>
-        {display.map((line, i) => (
-          <input
-            key={i}
-            ref={fitRef}
-            className={cls}
-            defaultValue={line}
-            placeholder={i === 0 ? '担当' : ''}
-            readOnly
-            tabIndex={-1}
-            style={{ pointerEvents: 'none' }}
-          />
+      <div className="sc-drivers" key={key}>
+        {rows.map((row, ri) => (
+          <div key={ri} style={{ display: 'flex', width: '100%' }}>
+            {row.map((p, ci) => (
+              <input key={ci} ref={fitRef} className={cls} defaultValue={p.name} readOnly tabIndex={-1}
+                title={p.absent ? '本日休みの担当者です' : undefined}
+                style={{ pointerEvents: 'none', flex: 1, minWidth: 0, ...(p.absent ? { background: '#fff176', borderRadius: 3 } : null) }} />
+            ))}
+          </div>
         ))}
       </div>
     )
@@ -4068,26 +4076,29 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   // 担当（スマホカード用）：1人=大きく1段、2人=2段（各1人）、3人以上=2人ずつ（3人＝上2・下1）
   const cellDriversCard = (s) => {
-    const names = (Array.isArray(s.drivers) ? s.drivers.map(dispDriverName) : (s.driverName ? [s.driverName] : []))
-      .map(x => String(x ?? '').trim()).filter(Boolean)
-    const n = names.length
+    const people = (Array.isArray(s.drivers) ? s.drivers : (s.driverName ? [{ name: s.driverName }] : []))
+      .map(d => ({ name: String(dispDriverName(d) ?? '').trim(), absent: isAbsentDriver(d) }))
+      .filter(p => p.name)
+    const n = people.length
     const rows = []
-    if (n <= 2) names.forEach(nm => rows.push([nm]))
-    else for (let i = 0; i < n; i += 2) rows.push(names.slice(i, i + 2))
-    if (rows.length === 0) rows.push([''])
+    if (n <= 2) people.forEach(p => rows.push([p]))
+    else for (let i = 0; i < n; i += 2) rows.push(people.slice(i, i + 2))
+    if (rows.length === 0) rows.push([null])
     const single = n <= 1
     const changed = isChanged(s, 'drivers')
     const cls = 'sc-in sc-driverline' + (changed ? ' changed' : '') + (single ? ' xbig' : ' big')
     let idx = 0
     return (
-      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n}>
+      <div className="sc-drivers-card" key={'drv' + (changed ? '_c' : '') + '_n' + n + '_a' + people.filter(p => p.absent).length}>
         {rows.map((row, ri) => (
           <div className="sc-drv-row" key={ri}>
-            {row.map((nm) => {
+            {row.map((p) => {
               const i = idx++
               return (
-                <input key={i} className={cls} defaultValue={nm}
-                  placeholder={i === 0 ? '担当' : ''} readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} />
+                <input key={i} className={cls} defaultValue={p ? p.name : ''}
+                  placeholder={i === 0 ? '担当' : ''} readOnly tabIndex={-1}
+                  title={p && p.absent ? '本日休みの担当者です' : undefined}
+                  style={{ pointerEvents: 'none', ...(p && p.absent ? { background: '#fff176', borderRadius: 3 } : null) }} />
               )
             })}
           </div>
