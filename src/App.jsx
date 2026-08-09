@@ -3153,6 +3153,14 @@ function currentPollMs() {
 // 休み(rests)＝従業員一覧から選択、追加要員(extras)＝自由入力（バイト等）。base＝出社人数の基準。
 // 表示用：苗字(氏名の先頭トークン。なければ氏名/名前)を返す。
 function attSurname(name) { const t = String(name || '').trim(); const first = t.split(/[\s　]+/)[0]; return first || t }
+// 休みの表示名：呼び名（従業員管理で登録）があれば呼び名、なければ苗字。
+function attDispName(rest) {
+  const id = rest && rest.id
+  if (id && NICK_REG.has(id)) return NICK_REG.get(id)
+  return attSurname(rest && rest.name)
+}
+// 配列を n 個ずつのまとまりに分割（休みの4人毎改行に使用）
+function chunkBy(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out }
 async function fetchAttendance(date) {
   try { const a = await api.get('/api/attendance?date=' + encodeURIComponent(date)); return { rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], base: Number.isFinite(+a.base) ? +a.base : 16 } }
   catch { return { rests: [], extras: [], base: 16 } }
@@ -3179,14 +3187,21 @@ function useAttendance(date) {
 }
 
 // 出欠登録の表示（休み / 追加要員 の2行）。掲示板・出荷予定表・生コン出力で共通。
+// 休みは呼び名（登録があれば）で表示し、4人毎に改行する。
 function AttendanceLines({ attendance, style }) {
+  useNickReg()   // 呼び名レジストリ更新で再描画
   const rests = (attendance && attendance.rests) || []
   const extras = (attendance && attendance.extras) || []
+  const restRows = chunkBy(rests.map(attDispName), 4)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.25, minWidth: 0, ...style }}>
-      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        <span style={{ fontWeight: 700, color: '#2b3a4d' }}>休み: </span>
-        <span style={{ color: '#111' }}>{rests.length ? rests.map(r => attSurname(r.name)).join('　') : '—'}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 0 }}>
+        <span style={{ fontWeight: 700, color: '#2b3a4d', whiteSpace: 'nowrap' }}>休み: </span>
+        {rests.length ? (
+          <span style={{ display: 'flex', flexDirection: 'column', color: '#111', minWidth: 0 }}>
+            {restRows.map((row, i) => <span key={i} style={{ whiteSpace: 'nowrap' }}>{row.join('　')}</span>)}
+          </span>
+        ) : <span style={{ color: '#111' }}>—</span>}
       </div>
       <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         <span style={{ fontWeight: 700, color: '#1a7a3a' }}>追加要員: </span>
