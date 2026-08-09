@@ -5658,19 +5658,24 @@ async function saveShipmentDrivers(shipment, newDrivers) {
 }
 
 // 担当者を選ぶUI（チップ）。accent=選択時の色
-function DriverPicker({ value, options, onChange, accent = '#1b4ea8' }) {
+function DriverPicker({ value, options, onChange, accent = '#1b4ea8', isAbsent }) {
   const has = (id) => value.some(d => d.id === id)
   const toggle = (emp) => {
     if (has(emp.id)) onChange(value.filter(d => d.id !== emp.id))
     else onChange([...value, { id: emp.id, name: emp.name }])   // 上限なし
   }
+  const absentOf = typeof isAbsent === 'function' ? isAbsent : () => false
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       {options.length === 0 ? <span style={{ fontSize: 13, color: '#9aa7b5' }}>ドライバーが登録されていません（従業員管理で登録してください）</span>
         : options.map(emp => {
           const on = has(emp.id)
-          return <button key={emp.id} type="button" onClick={() => toggle(emp)}
-            style={{ border: on ? `2px solid ${accent}` : '1.5px solid #cdd5e0', background: on ? accent : '#fff', color: on ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{dispDriverName(emp)}</button>
+          const absent = absentOf(emp)
+          // 出欠登録で「休み」の従業員は選択不可（グレーアウト）。既に選択済みの場合のみ解除は許可。
+          const disabled = absent && !on
+          return <button key={emp.id} type="button" onClick={() => { if (!disabled) toggle(emp) }} disabled={disabled}
+            title={absent ? '本日休みのため選択できません' : undefined}
+            style={{ border: on ? `2px solid ${accent}` : `1.5px solid ${absent ? '#dcdfe4' : '#cdd5e0'}`, background: on ? accent : (absent ? '#f0f1f3' : '#fff'), color: on ? '#fff' : (absent ? '#aab2bd' : '#3a4a5c'), borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', textDecoration: absent && !on ? 'line-through' : 'none' }}>{dispDriverName(emp)}{absent ? '（休み）' : ''}</button>
         })}
     </div>
   )
@@ -5690,6 +5695,21 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }
   }
   const [sel, setSel] = useState(initSel)
   const [busy, setBusy] = useState(false)
+  // 出欠登録の「休み」を読み込み、担当割当ではその従業員を選択不可（グレーアウト）にする
+  const [absentSet, setAbsentSet] = useState({ ids: new Set(), names: new Set() })
+  useEffect(() => {
+    if (!isAssign) return
+    let alive = true
+    fetchAttendance(shipment.date).then(a => {
+      if (!alive) return
+      setAbsentSet({
+        ids: new Set((a.rests || []).map(r => r && r.id).filter(Boolean)),
+        names: new Set((a.rests || []).map(r => String((r && r.name) || '').trim()).filter(Boolean)),
+      })
+    })
+    return () => { alive = false }
+  }, [isAssign, shipment.date])
+  const isAbsentEmp = (emp) => (emp && emp.id && absentSet.ids.has(emp.id)) || (emp && String(emp.name || '').trim() && absentSet.names.has(String(emp.name).trim()))
   // 担当割当：担当者を保存するだけ（LINE送信はしない）
   const doAssign = async () => {
     setBusy(true)
@@ -5723,7 +5743,7 @@ function DriverAssignBody({ shipment, drivers, onSaved, onClose, mode = 'send' }
       <div style={{ fontSize: 14, color: '#3a4a5c' }}><b style={{ color: '#c0392b' }}>{firstTimeOf(shipment) || '—'}</b>　<b>{shipment.companyName}</b></div>
       <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 12 }}>{shipment.siteName || ''}</div>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4a5c', marginBottom: 6 }}>{isAssign ? '担当者（タップで選択／解除）' : '送信先（タップで選択／解除）'}</div>
-      <DriverPicker value={sel} options={drivers} onChange={setSel} accent={accent} />
+      <DriverPicker value={sel} options={drivers} onChange={setSel} accent={accent} isAbsent={isAssign ? isAbsentEmp : undefined} />
       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, border: '1.5px solid #bbb', background: '#fff', color: '#3a4a5c', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>キャンセル</button>
         <button type="button" onClick={() => (isAssign ? doAssign() : doSend())} disabled={busy}
