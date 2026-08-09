@@ -4297,6 +4297,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
     <button type="button" onClick={() => setAttModal(true)} title="出欠登録（休み・追加要員）"
       style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🧑‍🤝‍🧑 出欠登録</button>
   )
+  // 別ウィンドウ（掲示板）を開くボタン。別ウィンドウ操作の左に置く
+  const openWinBtn = (
+    <button type="button" onClick={openScheduleWindow}
+      style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
+  )
   // 別ウィンドウ（掲示板）の画面操作ボタン。出荷予定表タブでは AM/PM の左に置く
   const boardOpBtn = (
     <button type="button" onClick={() => setBoardModal(true)} title="別ウィンドウ（掲示板）の画面操作（倍率・表示項目・表示順）"
@@ -4345,15 +4350,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ fontSize: compact ? 16 : 14, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
           <span style={{ fontSize: 15 }}>（{weekday}）</span>
-          <button type="button" onClick={openScheduleWindow}
-            style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{compact ? '📋 掲示板形式で表示' : '⛶ 別ウィンドウで開く'}</button>
           {attButton}
           <AttendanceLines attendance={attendance} style={{ fontSize: 12 }} />
-          {/* 別ウィンドウ操作は AM/PM の左に置く（スマホ幅では同じ行の末尾に AM/PM が続く） */}
-          {compact && <>{boardOpBtn}{ampmButtons}</>}
+          {/* 別ウィンドウで開く→別ウィンドウ操作→AM/PM の順で AM/PM の左にまとめる（スマホ幅では同じ行の末尾に続く） */}
+          {compact && <>{openWinBtn}{boardOpBtn}{ampmButtons}</>}
         </div>
-        {/* PC/iPad: AM/PM はタイトルに被らないよう右端に。別ウィンドウ操作をその左に置く */}
-        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8 }}>{boardOpBtn}{ampmButtons}</div>}
+        {/* PC/iPad: AM/PM はタイトルに被らないよう右端に。別ウィンドウで開く・別ウィンドウ操作をその左に置く */}
+        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8 }}>{openWinBtn}{boardOpBtn}{ampmButtons}</div>}
       </div>
       )}
       {compact ? (
