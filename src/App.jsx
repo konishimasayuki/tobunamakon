@@ -4318,18 +4318,17 @@ function SchedulePage({ onEditShipment, isPopup }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               style={{ fontSize: 13, padding: '4px 6px', border: '1.5px solid #bbb', borderRadius: 6, minWidth: 0 }} />
             <span style={{ fontSize: 13, color: '#111', whiteSpace: 'nowrap' }}>（{weekday}）</span>
-            {/* 出欠登録：ボタン＋休み/追加要員の2行表示 */}
-            {attButton}
+            {/* 別ウィンドウは出欠登録ボタンは出さず、休み/追加要員の表示のみ（編集は出荷予定表側から） */}
             <AttendanceLines attendance={attendance} style={{ fontSize: 12, minWidth: 0 }} />
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '0.2em', whiteSpace: 'nowrap', textAlign: 'center' }}>出荷予定表</div>
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-            {ampmButtons}
-            {/* スマホ幅（掲示板をスマホで開いた時）は画面操作ボタンを出さない。倍率等はPC/大型モニタ用のため */}
+            {/* 画面操作ボタンは AM/PM の左に置く。スマホ幅では出さない（倍率等はPC/大型モニタ用のため） */}
             {!boardPan && (
               <button type="button" onClick={() => setBoardModal(true)} title="画面操作（倍率・表示項目・表示順）"
                 style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 8, padding: '5px 12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 画面操作</button>
             )}
+            {ampmButtons}
           </div>
         </div>
       ) : (
