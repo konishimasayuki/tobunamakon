@@ -3119,6 +3119,10 @@ function boardAutoSlot(d) {
 const BOARD_AUTOSWITCH_KEY = 'boardAutoSwitch'
 function readBoardAutoSwitch() { try { return localStorage.getItem(BOARD_AUTOSWITCH_KEY) !== '0' } catch { return true } }
 function writeBoardAutoSwitch(on) { try { localStorage.setItem(BOARD_AUTOSWITCH_KEY, on ? '1' : '0'); window.dispatchEvent(new Event('boardautoswitchchange')) } catch { /* noop */ } }
+// 計測オーバーレイ（更新停止の原因調査用）のON/OFF（端末ごと・localStorage。既定OFF）。掲示板の画面操作から切替。
+const BOARD_DEBUG_KEY = 'boardDebugOverlay'
+function readBoardDebug() { try { return localStorage.getItem(BOARD_DEBUG_KEY) === '1' } catch { return false } }
+function writeBoardDebug(on) { try { localStorage.setItem(BOARD_DEBUG_KEY, on ? '1' : '0'); window.dispatchEvent(new Event('boarddebugchange')) } catch { /* noop */ } }
 
 // ===== 掲示板ポーリングの休止時間帯（端末ごと・localStorage。設定タブで編集）=====
 // 既定：18:30〜翌7:00 は 30分に1回（それ以外は30秒に1回）。日本時刻で判定。
@@ -3148,6 +3152,65 @@ function currentPollMs() {
   return isPollDowntime(cfg) ? cfg.intervalMin * 60000 : 30000
 }
 
+// ===== ①計測用オーバーレイ（別ウィンドウ／掲示板の隅に小さく表示）=====
+// 「更新が数十分止まる」原因を事実で掴むための表示。既存レイアウトには一切干渉しない（position:fixed）。
+//  ・🕒 現在時刻（1秒ごと更新）… 止まればウィンドウが凍結/停止した証拠（復帰時に時刻がジャンプする）
+//  ・表示: visible / hidden … ブラウザが窓を「非表示」扱いしているか（H1/H2の切り分け）
+//  ・最終取得 … 直近のポーリング成功時刻＋経過秒（想定間隔の2倍超で赤くなる）
+//  ・「×隠す」で一時的に隠せる。印刷ウィンドウでは出さない。表示ON/OFFは掲示板の「画面操作」から。
+function BoardDebugOverlay({ lastTickAt, lastChangeAt, ticks, rev, pollMs }) {
+  const [now, setNow] = useState(() => Date.now())
+  const [vis, setVis] = useState(() => (typeof document !== 'undefined' ? document.visibilityState : 'visible'))
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    const onVis = () => setVis(document.visibilityState)
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
+  }, [])
+  if (hidden) return null
+  const p2 = (n) => String(n).padStart(2, '0')
+  const hhmmss = (ts) => { if (!ts) return '—'; const d = new Date(ts); return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}` }
+  const agoSec = lastTickAt ? Math.round((now - lastTickAt) / 1000) : null
+  const stale = agoSec != null && agoSec > Math.round(pollMs / 1000) * 2 + 5
+  const btn = { font: 'inherit', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 9px', cursor: 'pointer' }
+  return (
+    <div className="no-print"
+      style={{ position: 'fixed', left: 6, bottom: 6, zIndex: 3000, background: stale ? 'rgba(196,32,32,0.92)' : 'rgba(20,30,50,0.82)', color: '#fff', font: '11px/1.45 ui-monospace,Menlo,Consolas,monospace', padding: '5px 8px', borderRadius: 6, userSelect: 'none', letterSpacing: 0 }}>
+      <div style={{ whiteSpace: 'pre' }}>{`🕒 ${hhmmss(now)}   表示:${vis === 'visible' ? '✓visible' : '✕hidden'}
+最終取得: ${hhmmss(lastTickAt)}  (${agoSec == null ? '—' : agoSec + '秒前'})   間隔:${Math.round(pollMs / 1000)}s
+最終変化: ${hhmmss(lastChangeAt)}   tick:${ticks}   rev:${rev == null ? '—' : rev}`}</div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+        <button type="button" onClick={() => setHidden(true)} style={{ ...btn, background: 'rgba(255,255,255,0.18)' }}>×隠す</button>
+      </div>
+    </div>
+  )
+}
+
+// Windows掲示板ランチャー(.bat)の中身を生成。Chromeのオクルージョン間引き無効化フラグ付きで、
+// 専用プロファイル・通常ウィンドウで掲示板を開く。デスクトップに置いてダブルクリックで起動する想定。
+// if/else ブロックを使わず1行ずつにして %ProgramFiles(x86)% の括弧によるバッチ構文事故を避ける。ASCIIのみ・CRLF。
+function boardLauncherBat(origin) {
+  const base = String(origin || '').replace(/\/+$/, '')
+  const url = base + '/?view=schedule&popup=1'
+  const flags = '--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling'
+  const L = [
+    '@echo off',
+    'setlocal',
+    'rem === Tobu Namakon board launcher (Windows) ===',
+    'rem Disables Chrome window-occlusion throttling so the board keeps',
+    'rem updating on a second monitor. Put on Desktop and double-click.',
+    'set "URL=' + url + '"',
+    'set "FLAGS=' + flags + '"',
+    'set "PROFILE=%LOCALAPPDATA%\\chrome-board"',
+    'set "CHROME=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"',
+    'if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"',
+    'if not exist "%CHROME%" set "CHROME=%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"',
+    'if not exist "%CHROME%" set "CHROME=chrome"',
+    'start "" "%CHROME%" %FLAGS% --user-data-dir="%PROFILE%" --new-window "%URL%"',
+  ]
+  return L.join('\r\n') + '\r\n'
+}
 // ===== 生コン出荷予定表の「休み」欄（別ウィンドウと相互リンク。端末ごと・localStorage）=====
 // ===== 出欠登録（休み・追加要員／日付ごと・全端末共有）=====
 // 休み(rests)＝従業員一覧から選択、追加要員(extras)＝自由入力（バイト等）。base＝出社人数の基準。
@@ -3329,30 +3392,38 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const [boardOrder, setBoardOrder] = useState(readBoardOrder)
   const [boardHidden, setBoardHidden] = useState(readBoardHidden)
   const [boardModal, setBoardModal] = useState(false)
-  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, auto: true, cols: true })   // モーダル各セクションの開閉
+  const [secOpen, setSecOpen] = useState({ scale: true, ampm: true, auto: true, cols: true, dbg: false })   // モーダル各セクションの開閉
   // 出荷予定表側のコントローラーで別ウィンドウのAM/PMを操作するための値（別ウィンドウでは header のampmが本体）
   const [boardAmpm, setBoardAmpm] = useState(readBoardAmpm)
   // 掲示板の時刻自動切替 ON/OFF（端末ごと）
   const [autoSwitch, setAutoSwitchState] = useState(readBoardAutoSwitch)
+  // ①計測オーバーレイの表示ON/OFF（端末ごと・既定OFF）。掲示板の画面操作の一番下で切替
+  const [dbgOn, setDbgOn] = useState(readBoardDebug)
   // 出欠登録（休み・追加要員／日付ごと・全端末共有）。従業員一覧はモーダルで選択に使う
   const [attendance, setAttendance] = useState({ rests: [], extras: [], base: 16 })
   const [allEmployees, setAllEmployees] = useState([])
   const [attModal, setAttModal] = useState(false)
+  // ①計測用：ポーリングの生存状況（最終tick時刻・最終変化・回数・rev）を保持して掲示板隅に表示する
+  const [pollDbg, setPollDbg] = useState({ lastTickAt: null, lastChangeAt: null, ticks: 0, rev: null })
+  const isPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
   useEffect(() => {
     const on = () => setScale4k(read4kScale())
     const onCols = () => { setBoardOrder(readBoardOrder()); setBoardHidden(readBoardHidden()) }
     // AM/PMは、別ウィンドウ側は自身の絞り込み(ampm)へ、出荷予定表側はコントローラー表示用(boardAmpm)へ反映
     const onAmpm = () => { const v = readBoardAmpm(); if (isPopup) setAmpm(v); else setBoardAmpm(v) }
     const onAuto = () => setAutoSwitchState(readBoardAutoSwitch())
+    const onDbg = () => setDbgOn(readBoardDebug())   // 計測オーバーレイ表示ON/OFF（別ウィンドウ間で同期）
     window.addEventListener('sched4kchange', on)
     window.addEventListener('boardcolchange', onCols)
     window.addEventListener('boardampmchange', onAmpm)
     window.addEventListener('boardautoswitchchange', onAuto)
+    window.addEventListener('boarddebugchange', onDbg)
     window.addEventListener('storage', on)   // 別タブ/別ウィンドウでの変更も反映
     window.addEventListener('storage', onCols)
     window.addEventListener('storage', onAmpm)
     window.addEventListener('storage', onAuto)
-    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('boardampmchange', onAmpm); window.removeEventListener('boardautoswitchchange', onAuto); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols); window.removeEventListener('storage', onAmpm); window.removeEventListener('storage', onAuto) }
+    window.addEventListener('storage', onDbg)
+    return () => { window.removeEventListener('sched4kchange', on); window.removeEventListener('boardcolchange', onCols); window.removeEventListener('boardampmchange', onAmpm); window.removeEventListener('boardautoswitchchange', onAuto); window.removeEventListener('boarddebugchange', onDbg); window.removeEventListener('storage', on); window.removeEventListener('storage', onCols); window.removeEventListener('storage', onAmpm); window.removeEventListener('storage', onAuto); window.removeEventListener('storage', onDbg) }
   }, [isPopup])
   // 出欠登録を表示日に対応して読み込み、他ウィンドウ/他端末の変更（attendancechange / storage）にも追従
   const loadAttendance = useCallback(async () => { setAttendance(await fetchAttendance(dateRef.current)) }, [])
@@ -3436,17 +3507,21 @@ function SchedulePage({ onEditShipment, isPopup }) {
     let stopped = false
     const schedule = () => { if (!stopped) timer = setTimeout(tick, currentPollMs()) }
     const tick = async () => {
+      let rev = null, revChanged = false
       try {
         const r = await api.get('/api/shipments?rev=1')
-        const rev = (r && typeof r === 'object') ? r.rev : null
+        rev = (r && typeof r === 'object') ? r.rev : null
         sinceFull++
-        const changed = rev == null || rev !== lastRev
-        if (changed || sinceFull >= SAFETY_EVERY) {
+        revChanged = rev == null || rev !== lastRev
+        if (revChanged || sinceFull >= SAFETY_EVERY) {
           lastRev = rev; sinceFull = 0
           mergeDiff(await api.get('/api/shipments?date=' + encodeURIComponent(dateRef.current)))
           loadAttendance()   // 出欠登録も一緒に最新化（保存時にrevが上がるため変化検知で取り直す）
         }
       } catch (e) { /* 一時的な失敗は無視 */ }
+      // ①計測：tickが実際に走った時刻を記録（止まれば掲示板隅の「最終取得 N秒前」が伸びる/時計が止まる）
+      const nowTs = Date.now()
+      setPollDbg(p => ({ lastTickAt: nowTs, ticks: p.ticks + 1, rev, lastChangeAt: (rev != null && revChanged ? nowTs : p.lastChangeAt) }))
       schedule()
     }
     schedule()
@@ -4333,6 +4408,11 @@ function SchedulePage({ onEditShipment, isPopup }) {
 
   return (
     <div className={isPopup ? 'schedule-popup-root' : ''} style={{ height: '100%', overflow: 'auto', background: '#fff' }}>
+      {/* ①計測用オーバーレイ（別ウィンドウのみ・印刷ウィンドウ除く・画面操作でONにした時だけ）。position:fixed で既存レイアウトに干渉しない */}
+      {isPopup && !isPrint && dbgOn && (
+        <BoardDebugOverlay lastTickAt={pollDbg.lastTickAt} lastChangeAt={pollDbg.lastChangeAt} ticks={pollDbg.ticks}
+          rev={pollDbg.rev} pollMs={currentPollMs()} />
+      )}
       {/* スマホ幅の別ウィンドウはヘッダー＋表をPC幅の固定幅で丸ごと描画し、ルートの2次元スクロールで
           上下左右にスワイプして見られるようにする（PC版レイアウトをそのまま表示）。 */}
       <div style={boardPan ? { minWidth: BOARD_PC_WIDTH } : undefined}>
@@ -4612,6 +4692,23 @@ function SchedulePage({ onEditShipment, isPopup }) {
                           </div>
                         )
                       })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* 計測オーバーレイ（原因調査用）ON/OFF。一番下・既定OFF */}
+              <div>
+                {secHead('dbg', `計測オーバーレイ（原因調査用）：${dbgOn ? 'ON' : 'OFF'}`)}
+                {secOpen.dbg && (
+                  <div style={{ padding: '10px 4px 2px' }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      {[[true, 'ON'], [false, 'OFF']].map(([v, l]) => (
+                        <button key={l} type="button" onClick={() => { setDbgOn(v); writeBoardDebug(v) }}
+                          style={{ flex: 1, border: dbgOn === v ? '2px solid #0f3060' : '1.5px solid #bbb', background: dbgOn === v ? '#0f3060' : '#fff', color: dbgOn === v ? '#fff' : '#3a4a5c', borderRadius: 8, padding: '8px 6px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6b7a8d', lineHeight: 1.6 }}>
+                      別ウィンドウの隅に、現在時刻・表示状態・最終更新時刻などを小さく表示します。「更新が止まる」原因調査に使います。<b>通常はOFF</b>で構いません。
                     </div>
                   </div>
                 )}
@@ -6579,6 +6676,20 @@ function SettingsPage() {
     if (!w) { alert('別ウィンドウを開けませんでした。ブラウザのポップアップを許可してください。'); window.open(url, '_blank') }
   }
 
+  // Windows掲示板ランチャー(.bat)をダウンロード。Chromeのオクルージョン間引きを無効化して掲示板を開く。
+  const downloadLauncher = () => {
+    try {
+      const bat = boardLauncherBat(window.location.origin)
+      const blob = new Blob([bat], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'keijiban-launcher.bat'   // 拡張子(.bat)を確実に残すためASCIIファイル名にする
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) { alert('ダウンロードに失敗しました: ' + (e && e.message ? e.message : e)) }
+  }
+
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
   }, [])
@@ -6671,6 +6782,22 @@ function SettingsPage() {
         )}
         <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 10, lineHeight: 1.6 }}>
           ※ 既定は 18:30〜翌 7:00 を 30分に1回。休止時間帯以外は 30秒に1回です。終了が開始より前の場合は日をまたぐ夜間として扱います。
+        </div>
+      </div>
+
+      <div style={box}>
+        <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🪟 Windows用 掲示板ランチャー（更新が止まる対策）</h3>
+        <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
+          Windowsで<b>2画面の掲示板側が非アクティブだと数十分更新されない</b>問題（Chromeのウィンドウ間引き）の対策です。
+          下のボタンで専用ランチャー（.bat）をダウンロードし、<b>掲示板を出すWindows PCのデスクトップ</b>に置いて、
+          そこから<b>ダブルクリック</b>で掲示板を開いてください。<b>Mac では不要</b>です。
+        </div>
+        <button type="button" onClick={downloadLauncher}
+          style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>⬇ 掲示板ランチャー(.bat)をダウンロード</button>
+        <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 10, lineHeight: 1.7 }}>
+          ・DL時に「このファイルは危険」等の警告が出たら<b>「保持」</b>を選んでください（自作の起動用ファイルです）。<br />
+          ・初回は<b>掲示板専用のChrome</b>が開くので、その画面で<b>一度だけログイン</b>してください（以降は保持）。<br />
+          ・普段のChromeはそのままでOK。掲示板だけこのランチャーから開きます。オクルージョン間引きを無効化して起動します。
         </div>
       </div>
 
