@@ -3188,21 +3188,36 @@ function BoardDebugOverlay({ lastTickAt, lastChangeAt, ticks, rev, pollMs }) {
 }
 
 // Windows掲示板ランチャー(.bat)の中身を生成。Chromeのオクルージョン間引き無効化フラグ付きで、
-// 専用プロファイル・通常ウィンドウで掲示板を開く。デスクトップに置いてダブルクリックで起動する想定。
-// if/else ブロックを使わず1行ずつにして %ProgramFiles(x86)% の括弧によるバッチ構文事故を避ける。ASCIIのみ・CRLF。
+// 専用プロファイル・通常ウィンドウで掲示板を開く。.bat自体にはアイコンを付けられないため、初回起動時に
+// アイコン(board-launcher.ico)を取得し、東部生コンアイコン付きのデスクトップショートカット
+// 「東部生コン掲示板」を PowerShell(WScript.Shell) で自動作成する。以降はそのショートカットで起動できる。
+// if/else ブロックを使わず1行ずつにして %ProgramFiles(x86)% の括弧によるバッチ構文事故を避ける。
+// ショートカット名の日本語は文字コード(0x…)から組み立て、.bat自体はASCIIのみ・CRLFに保つ。
 function boardLauncherBat(origin) {
   const base = String(origin || '').replace(/\/+$/, '')
   const url = base + '/?view=schedule&popup=1'
   const flags = '--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling'
+  // ショートカット名「東部生コン掲示板」の各文字のコードポイント
+  const nameCodes = '0x6771,0x90E8,0x751F,0x30B3,0x30F3,0x63B2,0x793A,0x677F'
+  const psShortcut = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$n=-join([char[]](${nameCodes})); $p=$env:USERPROFILE+'\\Desktop\\'+$n+'.lnk'; if(-not(Test-Path $p)){$w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut($p); $s.TargetPath='%~f0'; $s.IconLocation='%ICO%'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.Save()}"`
   const L = [
     '@echo off',
     'setlocal',
     'rem === Tobu Namakon board launcher (Windows) ===',
-    'rem Disables Chrome window-occlusion throttling so the board keeps',
-    'rem updating on a second monitor. Put on Desktop and double-click.',
+    'rem Disables Chrome window-occlusion throttling so the board keeps updating',
+    'rem on a second monitor. First run also creates a desktop shortcut with the',
+    'rem Tobu Namakon icon; use that shortcut afterwards.',
     'set "URL=' + url + '"',
     'set "FLAGS=' + flags + '"',
     'set "PROFILE=%LOCALAPPDATA%\\chrome-board"',
+    'set "APPDIR=%LOCALAPPDATA%\\tobunamakon"',
+    'set "ICO=%APPDIR%\\board.ico"',
+    'set "ICOURL=' + base + '/board-launcher.ico"',
+    'rem --- first run: fetch the icon and create an iconized desktop shortcut ---',
+    'if not exist "%APPDIR%" mkdir "%APPDIR%" >nul 2>&1',
+    'if not exist "%ICO%" curl -L -s -o "%ICO%" "%ICOURL%" >nul 2>&1',
+    'if exist "%ICO%" ' + psShortcut + ' >nul 2>&1',
+    'rem --- find Chrome and open the board ---',
     'set "CHROME=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"',
     'if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"',
     'if not exist "%CHROME%" set "CHROME=%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"',
@@ -6790,14 +6805,15 @@ function SettingsPage() {
         <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
           Windowsで<b>2画面の掲示板側が非アクティブだと数十分更新されない</b>問題（Chromeのウィンドウ間引き）の対策です。
           下のボタンで専用ランチャー（.bat）をダウンロードし、<b>掲示板を出すWindows PCのデスクトップ</b>に置いて、
-          そこから<b>ダブルクリック</b>で掲示板を開いてください。<b>Mac では不要</b>です。
+          <b>ダブルクリック</b>で掲示板を開いてください。<b>Mac では不要</b>です。
         </div>
         <button type="button" onClick={downloadLauncher}
           style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>⬇ 掲示板ランチャー(.bat)をダウンロード</button>
         <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 10, lineHeight: 1.7 }}>
           ・DL時に「このファイルは危険」等の警告が出たら<b>「保持」</b>を選んでください（自作の起動用ファイルです）。<br />
+          ・<b>初回ダブルクリック</b>で、デスクトップに<b>東部生コンアイコンの「東部生コン掲示板」ショートカット</b>が作られます。以降はそのショートカットから起動できます。<br />
           ・初回は<b>掲示板専用のChrome</b>が開くので、その画面で<b>一度だけログイン</b>してください（以降は保持）。<br />
-          ・普段のChromeはそのままでOK。掲示板だけこのランチャーから開きます。オクルージョン間引きを無効化して起動します。
+          ・普段のChromeはそのままでOK。オクルージョン間引きを無効化して掲示板を開きます。
         </div>
       </div>
 
