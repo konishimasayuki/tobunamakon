@@ -2656,42 +2656,16 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   }
 
   const handleReset = () => { setEditing(null); setEditChanged([]); setRestoreMode(false); setForm({ ...emptyShipForm }); setMapKey(k => k + 1) }
-  // コピーして複製：今のフォーム内容を新規扱いにする（保存すると新しい伝票になる）。
-  // 添付PDFも複製先へ引き継ぐ：フォームに本体(base64)が無ければ複製元の伝票から取得して dataURL 化し、
-  // form.pdfData に載せる。保存時の POST 作成経路（savePdf が新IDのキー shipmentpdf:newId へ独立保存）で
-  // PDFのコピーが作られる＝複製元を後で消しても複製先は無事。取得失敗時は本文のみ複製し、その旨を知らせる。
-  const handleDuplicate = async () => {
-    const srcId = editing
-    const hadPdf = !!form.hasPdf
-    let pdfData = form.pdfData || ''
-    let pdfName = form.pdfName || ''
-    // 複製元にPDFがあるのにフォームへ未読込なら、元伝票から取得して引き継ぐ（?pdf=1 は公開GET）
-    if (hadPdf && !pdfData && srcId) {
-      try {
-        const res = await fetch(`/api/shipments?id=${encodeURIComponent(srcId)}&pdf=1`)
-        if (res.ok) {
-          const blob = await res.blob()
-          pdfData = await new Promise((resolve, reject) => {
-            const fr = new FileReader()
-            fr.onload = () => resolve(String(fr.result || ''))
-            fr.onerror = () => reject(new Error('pdf read error'))
-            fr.readAsDataURL(blob)
-          })
-          if (!pdfName) pdfName = 'shipment.pdf'
-        }
-      } catch { /* 取得失敗時はPDFなしで本文のみ複製 */ }
-    }
-    const carryPdf = !!pdfData
+  // コピーして複製：今のフォーム内容を新規扱いにする（保存すると新しい伝票になる。PDF添付は引き継がない）
+  const handleDuplicate = () => {
     setEditing(null)
     setEditChanged([])
     setRestoreMode(false)   // 複製は新規扱い。復元確認は出さない
-    // 複製と分かるよう現場名に「 コピー」を付ける。受注日は本日（新規作成日）に。PDFは引き継ぐ
-    setForm(f => ({ ...f, orderDate: localToday(), siteName: ((f.siteName || '') + ' コピー').trim(), pdfData, pdfName, hasPdf: carryPdf, pdfRemove: false }))
+    // 複製と分かるよう現場名に「 コピー」を付ける。PDF添付は引き継がない。受注日は本日（新規作成日）に
+    setForm(f => ({ ...f, orderDate: localToday(), siteName: ((f.siteName || '') + ' コピー').trim(), pdfData: '', pdfName: '', hasPdf: false, pdfRemove: false }))
     setMapKey(k => k + 1)
     topRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-    alert(hadPdf && !carryPdf
-      ? 'コピーされました（PDFの取得に失敗したため引き継げませんでした。保存前に再添付してください）'
-      : (carryPdf ? 'コピーされました（PDFも複製されます）' : 'コピーされました'))
+    alert('コピーされました')
   }
 
   // 出荷一覧の「削除」はキャンセル（ソフト削除）。キャンセル伝票に保管され、復元できる
