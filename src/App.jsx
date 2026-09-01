@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext, useRef, Fragment, Component } from 'react'
 import { isDemoMode, demoLogin, demoRequest } from './demo.js'
+import { zipStore, unzipStore } from './zip.js'
 
 // ============================================================
 // 定数
@@ -6646,6 +6647,14 @@ function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
   )
 }
 
+// Uint8Array → base64（大きな配列でもスタック超過しないよう分割して変換）
+function u8ToBase64(u8) {
+  let s = ''
+  const chunk = 0x8000
+  for (let i = 0; i < u8.length; i += chunk) s += String.fromCharCode.apply(null, u8.subarray(i, i + chunk))
+  return btoa(s)
+}
+
 function SettingsPage() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
@@ -6659,6 +6668,9 @@ function SettingsPage() {
   const [pdfDate, setPdfDate] = useState(() => localToday())
   const [backupBusy, setBackupBusy] = useState(false)
   const fileRef = useRef(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfProgress, setPdfProgress] = useState('')
+  const pdfFileRef = useRef(null)
   // 出荷予定表 大型モニター(4K)表示（端末ごと・localStorage）
   const [k4On, setK4On] = useState(() => { try { return localStorage.getItem(SCHED4K_ON) === '1' } catch { return false } })
   const [k4Scale, setK4Scale] = useState(() => { try { const v = parseFloat(localStorage.getItem(SCHED4K_SCALE)); return (Number.isFinite(v) && v >= 1 && v <= 3) ? v : 1.4 } catch { return 1.4 } })
@@ -6716,6 +6728,68 @@ function SettingsPage() {
       window.location.reload()
     } catch (e) { alert('復元に失敗しました: ' + e.message) }
     finally { setBackupBusy(false) }
+  }
+
+  // 添付PDFを別ファイル(ZIP)でバックアップ。一覧を取得→1件ずつ取得→ZIP化（ZIP内は伝票ごとの実PDF）。
+  const backupPdfs = async () => {
+    setPdfBusy(true); setPdfProgress('一覧を取得中…')
+    try {
+      const { items } = await api.get('/api/backup?pdflist=1')
+      if (!items || !items.length) { alert('PDF付きの伝票はありません'); return }
+      const files = []
+      const manifest = []
+      let skipped = 0
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]
+        setPdfProgress(`PDF取得中 ${i + 1}/${items.length}`)
+        try {
+          const res = await fetch(`/api/shipments?id=${encodeURIComponent(it.id)}&pdf=1`)
+          if (!res.ok) { skipped++; continue }
+          files.push({ name: `pdfs/${it.id}.pdf`, bytes: new Uint8Array(await res.arrayBuffer()) })
+          manifest.push({ id: it.id, pdfName: it.pdfName, date: it.date, companyName: it.companyName })
+        } catch { skipped++ }
+      }
+      if (!files.length) { alert('PDFを取得できませんでした'); return }
+      setPdfProgress('ZIPを作成中…')
+      files.unshift({ name: 'manifest.json', bytes: new TextEncoder().encode(JSON.stringify({ app: 'tobunamakon', type: 'pdf-backup', version: 1, exportedAt: new Date().toISOString(), items: manifest }, null, 2)) })
+      const blob = new Blob([zipStore(files)], { type: 'application/zip' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const d = new Date(); const p = n => String(n).padStart(2, '0')
+      a.href = url
+      a.download = `tobunamakon-pdfs-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.zip`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+      alert(`PDF ${manifest.length} 件を保存しました${skipped ? `（取得できず ${skipped} 件スキップ）` : ''}`)
+    } catch (e) { alert('PDFバックアップに失敗しました: ' + e.message) }
+    finally { setPdfBusy(false); setPdfProgress('') }
+  }
+  // PDFバックアップ(ZIP)から復元。ZIPを解析→1件ずつサーバへ送る（Vercelの上限のため分割）。
+  const onRestorePdfZip = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    let entries
+    try { entries = unzipStore(new Uint8Array(await file.arrayBuffer())) }
+    catch { alert('ZIPを読み込めませんでした（当システムのPDFバックアップZIPを選んでください）'); return }
+    const man = entries.find(f => f.name === 'manifest.json')
+    const nameById = {}
+    try { if (man) (JSON.parse(new TextDecoder().decode(man.bytes)).items || []).forEach(it => { nameById[it.id] = it.pdfName }) } catch { /* manifest無しでも復元可 */ }
+    const pdfs = entries.filter(f => /^pdfs\/.+\.pdf$/i.test(f.name))
+    if (!pdfs.length) { alert('このZIPにPDFが見つかりません'); return }
+    if (!window.confirm(`PDF ${pdfs.length} 件を復元します。\n（同じ伝票のPDFは置き換わります）よろしいですか？`)) return
+    setPdfBusy(true)
+    let done = 0, fail = 0
+    for (let i = 0; i < pdfs.length; i++) {
+      const f = pdfs[i]
+      const id = f.name.replace(/^pdfs\//, '').replace(/\.pdf$/i, '')
+      setPdfProgress(`復元中 ${i + 1}/${pdfs.length}`)
+      try { await api.post('/api/backup?pdf=1', { id, data: u8ToBase64(f.bytes), pdfName: nameById[id] || `${id}.pdf` }); done++ }
+      catch { fail++ }
+    }
+    setPdfBusy(false); setPdfProgress('')
+    alert(`PDF復元 完了：${done} 件${fail ? ` / 失敗 ${fail} 件（大きすぎるPDF等）` : ''}`)
+    notifyShipmentsChanged()
   }
 
   // PDF出力：出荷予定表を A4横で別ウィンドウに開き、読み込み後に自動で印刷ダイアログを出す
@@ -6888,8 +6962,26 @@ function SettingsPage() {
         </div>
         <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
           ※復元は「追加・上書き」です（同じデータは置き換え、今あるデータは消しません）。<br />
-          ※添付PDFはバックアップに含まれません（データ本体のみ／PDFは別途）。<br />
+          ※上のバックアップに<b>添付PDFは含まれません</b>（データ本体のみ）。PDFは下でZIP保存します。<br />
           ※パスワードや連携情報を含むため<b>管理者のみ</b>。ファイルの取り扱いに注意してください。
+        </div>
+
+        <div style={{ borderTop: '1px solid #eef1f5', marginTop: 14, paddingTop: 12 }}>
+          <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 8, lineHeight: 1.7 }}>
+            <b>添付PDF</b>は容量が大きいため<b>別ファイル（ZIP）</b>で保存します。ZIP内は伝票ごとの実PDFファイルなので、そのまま開けます。
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={backupPdfs} disabled={pdfBusy || backupBusy}
+              style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13, opacity: (pdfBusy || backupBusy) ? 0.7 : 1 }}>🗂 PDFをバックアップ (ZIP)</button>
+            <button type="button" onClick={() => pdfFileRef.current?.click()} disabled={pdfBusy || backupBusy}
+              style={{ ...S.editBtn, padding: '10px 16px', fontSize: 13, opacity: (pdfBusy || backupBusy) ? 0.7 : 1 }}>📥 PDFを復元 (ZIP)</button>
+            <input ref={pdfFileRef} type="file" accept=".zip,application/zip" style={{ display: 'none' }} onChange={onRestorePdfZip} />
+            {pdfBusy && <span style={{ fontSize: 12, color: '#1a4d8f', fontWeight: 700 }}>{pdfProgress || '処理中…'}</span>}
+          </div>
+          <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
+            ※復元は伝票ごとに1件ずつ送ります（件数が多いと少し時間がかかります）。<br />
+            ※データ本体（上）を先に復元してからPDFを復元してください。
+          </div>
         </div>
       </div>
       )}

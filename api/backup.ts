@@ -74,6 +74,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // パスワードハッシュ・LINEトークンを含むため管理者のみ
   if (user.role !== 'admin') return res.status(403).json({ error: '管理者権限が必要です（バックアップは管理者のみ）' })
 
+  // 添付PDFの一覧（id・ファイル名・日付・業者名）。実データは別途 /api/shipments?id=..&pdf=1 で1件ずつ取得する。
+  if (req.method === 'GET' && (req.query.pdflist === '1' || req.query.pdflist === 'true')) {
+    try {
+      const ids = (await redis.smembers('shipments')) || []
+      if (!ids.length) return res.status(200).json({ items: [] })
+      const pp = redis.pipeline()
+      ids.forEach((id: string) => pp.hgetall(`shipment:${id}`))
+      const rows = (await pp.exec<Record<string, any>[]>()) || []
+      const items = rows
+        .map((s, i) => ({ s, id: ids[i] }))
+        .filter(({ s }) => s && (s.hasPdf === '1' || s.hasPdf === 1 || s.hasPdf === true))
+        .map(({ s, id }) => ({ id, pdfName: String(s.pdfName || ''), date: String(s.date || ''), companyName: String(s.companyName || '') }))
+      return res.status(200).json({ items })
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   // エクスポート（全データ取得）
   if (req.method === 'GET') {
     try {
@@ -108,6 +126,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(500).json({ error: msg })
+    }
+  }
+
+  // 添付PDFの復元（1件ずつ）。Vercelの1リクエスト上限のため PDF は分割して送る。
+  if (req.method === 'POST' && (req.query.pdf === '1' || req.query.pdf === 'true')) {
+    try {
+      const body: any = req.body || {}
+      const id = String(body.id || '')
+      if (!id) return res.status(400).json({ error: 'id が必要です' })
+      const raw = typeof body.data === 'string' ? body.data : ''
+      const b64 = raw.includes(',') ? raw.slice(raw.indexOf(',') + 1) : raw
+      if (!b64) return res.status(400).json({ error: 'data(base64) が必要です' })
+      await redis.set(`shipmentpdf:${id}`, b64)
+      // 伝票が存在すれば hasPdf/pdfName を補正（他項目は触らない）
+      if (await redis.exists(`shipment:${id}`)) {
+        await redis.hset(`shipment:${id}`, { hasPdf: '1', pdfName: String(body.pdfName || 'shipment.pdf') })
+      }
+      return res.status(200).json({ ok: true, id })
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
     }
   }
 
