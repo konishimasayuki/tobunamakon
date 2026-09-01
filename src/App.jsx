@@ -6648,6 +6648,7 @@ function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
 
 function SettingsPage() {
   const isMobile = useIsMobile()
+  const { user } = useAuth()
   const [token, setToken] = useState('')
   const [data, setData] = useState({ users: [], groups: [], activeGroupCount: 0, hasToken: false, hasSecret: false })
   const [saving, setSaving] = useState(false)
@@ -6684,7 +6685,9 @@ function SettingsPage() {
       document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
       const c = data.counts || {}
-      alert(`バックアップを保存しました\n伝票 ${c.shipments ?? 0} 件 / 顧客 ${c.customers ?? 0} 件 / 従業員 ${c.employees ?? 0} 件`)
+      alert('バックアップを保存しました\n'
+        + `伝票 ${c.shipments ?? 0} / 顧客 ${c.customers ?? 0} / 従業員 ${c.employees ?? 0}\n`
+        + `ユーザー ${c.users ?? 0} / 出欠 ${c.attendanceDays ?? 0}日 / LINE ${c.lineUsers ?? 0}人・${c.lineGroups ?? 0}グループ`)
     } catch (e) { alert('バックアップに失敗しました: ' + e.message) }
     finally { setBackupBusy(false) }
   }
@@ -6698,12 +6701,17 @@ function SettingsPage() {
     catch { alert('ファイルを読み込めませんでした（JSON形式のバックアップを選んでください）'); return }
     if (!data || data.type !== 'backup') { alert('これは当システムのバックアップファイルではありません'); return }
     const c = data.counts || {}
-    if (!window.confirm(`このバックアップから復元します。\n伝票 ${c.shipments ?? 0} / 顧客 ${c.customers ?? 0} / 従業員 ${c.employees ?? 0} 件\n\n同じデータは上書きされます（今あるデータは消えません）。よろしいですか？`)) return
+    if (!window.confirm('このバックアップから復元します。\n'
+      + `伝票 ${c.shipments ?? 0} / 顧客 ${c.customers ?? 0} / 従業員 ${c.employees ?? 0}\n`
+      + `ユーザー ${c.users ?? 0} / 出欠 ${c.attendanceDays ?? 0}日 / LINE ${c.lineUsers ?? 0}人・${c.lineGroups ?? 0}グループ\n\n`
+      + '同じデータは上書きされます（今あるデータは消えません）。よろしいですか？')) return
     setBackupBusy(true)
     try {
       const r = await api.post('/api/backup', data)
       const rr = r.restored || {}
-      alert(`復元しました\n伝票 ${rr.shipments ?? 0} / 顧客 ${rr.customers ?? 0} / 従業員 ${rr.employees ?? 0} 件\n\n画面を更新します。`)
+      alert('復元しました\n'
+        + `伝票 ${rr.shipments ?? 0} / 顧客 ${rr.customers ?? 0} / 従業員 ${rr.employees ?? 0}\n`
+        + `ユーザー ${rr.users ?? 0} / 出欠 ${rr.attendanceDays ?? 0}日 / LINE ${rr.line ?? 0}\n\n画面を更新します。`)
       notifyShipmentsChanged()
       window.location.reload()
     } catch (e) { alert('復元に失敗しました: ' + e.message) }
@@ -6864,11 +6872,12 @@ function SettingsPage() {
         </div>
       </div>
 
+      {user?.role === 'admin' && (
       <div style={box}>
         <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>💾 データのバックアップ</h3>
         <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 12, lineHeight: 1.7 }}>
-          伝票・顧客・従業員の全データを1ファイル（JSON）で保存できます。<br />
-          定期的にダウンロードして、パソコンやハードディスクに保管してください。
+          伝票・顧客・従業員・ユーザー・出欠・LINE の全データを1ファイル（JSON）で保存できます。<br />
+          定期的にダウンロードして、パソコンやハードディスク（USB等）に保管してください。
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={downloadBackup} disabled={backupBusy}
@@ -6879,9 +6888,11 @@ function SettingsPage() {
         </div>
         <div style={{ fontSize: 11, color: '#9aa7b5', marginTop: 8, lineHeight: 1.6 }}>
           ※復元は「追加・上書き」です（同じデータは置き換え、今あるデータは消しません）。<br />
-          ※添付PDFはバックアップに含まれません（データ本体のみ）。
+          ※添付PDFはバックアップに含まれません（データ本体のみ／PDFは別途）。<br />
+          ※パスワードや連携情報を含むため<b>管理者のみ</b>。ファイルの取り扱いに注意してください。
         </div>
       </div>
+      )}
 
       {/* 拡張機能ダウンロード */}
       <div style={box}>
