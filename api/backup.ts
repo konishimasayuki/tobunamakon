@@ -70,9 +70,19 @@ async function readAttendance(): Promise<{ base: number | null; records: { date:
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = requireAuth(req)
-  if (!user) return res.status(401).json({ error: '認証が必要です' })
-  // パスワードハッシュ・LINEトークンを含むため管理者のみ
-  if (user.role !== 'admin') return res.status(403).json({ error: '管理者権限が必要です（バックアップは管理者のみ）' })
+  const authz = req.headers.authorization || ''
+  const bearer = authz.startsWith('Bearer ') ? authz.slice(7) : ''
+  const admin = !!user && user.role === 'admin'
+  // 無人の自動バックアップ用の専用トークン（環境変数 BACKUP_TOKEN）。設定時のみ有効。
+  const envTok = process.env.BACKUP_TOKEN || ''
+  const tokenOk = envTok.length >= 16 && bearer === envTok
+  // 参照(GET=エクスポート/PDF一覧)は「管理者 or バックアップトークン」。
+  // 復元(POST=データ/PDF)はパスワードハッシュ等を書き換えるため管理者のみ（トークン不可）。
+  if (req.method === 'GET') {
+    if (!admin && !tokenOk) return res.status(401).json({ error: '認証が必要です（管理者またはバックアップトークン）' })
+  } else {
+    if (!admin) return res.status(403).json({ error: '管理者権限が必要です（バックアップは管理者のみ）' })
+  }
 
   // 添付PDFの一覧（id・ファイル名・日付・業者名）。実データは別途 /api/shipments?id=..&pdf=1 で1件ずつ取得する。
   if (req.method === 'GET' && (req.query.pdflist === '1' || req.query.pdflist === 'true')) {
