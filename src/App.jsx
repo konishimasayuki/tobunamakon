@@ -3253,6 +3253,92 @@ function boardLauncherBat(origin) {
   ]
   return L.join('\r\n') + '\r\n'
 }
+
+// USB自動バックアップ用 PowerShell スクリプトを生成。掲示板PCのタスクスケジューラで夜間実行する想定。
+// データ本体(JSON)＋添付PDF(ZIP)をUSBへ保存し、GFS世代管理（日次30/週次12/月次12）で自動ローテーション。
+// トークンはプレースホルダ（利用者がローカルで手入力）。ASCIIのみ・String.rawでバックスラッシュを保持・CRLF。
+function backupUsbPs1(origin) {
+  const base = String(origin || '').replace(/\/+$/, '')
+  const s = String.raw`# === Tobu Namakon USB backup (Windows / PowerShell) ===
+# Saves data + attached PDFs to a USB folder with GFS rotation (daily 30 / weekly 12 / monthly 12).
+# Run every evening (Mon-Sat) via Task Scheduler.
+#
+# SETUP:
+#   1) Set BACKUP_TOKEN in Vercel env (16+ random chars) and redeploy.
+#   2) Edit $TOKEN below to the SAME value, and $DEST to your USB folder.
+#   3) Register in Task Scheduler:
+#        Program : powershell.exe
+#        Args    : -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\tobunamakon-backup.ps1"
+#      If Windows blocks it once: run  Unblock-File .\tobunamakon-backup.ps1
+
+$ErrorActionPreference = 'Stop'
+
+# ==== settings (EDIT THESE) ====
+$BASE  = '${base}'
+$TOKEN = 'PASTE_BACKUP_TOKEN_HERE'
+$DEST  = 'D:\tobunamakon-backup'
+$DAILY_KEEP   = 30
+$WEEKLY_KEEP  = 12
+$MONTHLY_KEEP = 12
+# ===============================
+
+if ((Get-Date).DayOfWeek -eq 'Sunday') { exit 0 }
+$stamp = Get-Date -Format 'yyyyMMdd'
+$ym    = Get-Date -Format 'yyyyMM'
+$hdr   = @{ Authorization = 'Bearer ' + $TOKEN }
+$daily = Join-Path $DEST 'daily'
+New-Item -ItemType Directory -Force -Path $daily | Out-Null
+
+# 1) data backup (JSON)
+$dataFile = Join-Path $daily ('data-' + $stamp + '.json')
+Invoke-WebRequest -Uri ($BASE + '/api/backup') -Headers $hdr -OutFile $dataFile
+
+# 2) attached PDFs -> zip (pdfs/<id>.pdf + manifest.json; same format as the in-app PDF backup)
+$list = Invoke-RestMethod -Uri ($BASE + '/api/backup?pdflist=1') -Headers $hdr
+$tmp  = Join-Path $env:TEMP ('tbpdf-' + $stamp)
+if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+$pdfd = Join-Path $tmp 'pdfs'
+New-Item -ItemType Directory -Force -Path $pdfd | Out-Null
+foreach ($it in $list.items) {
+  try { Invoke-WebRequest -Uri ($BASE + '/api/shipments?id=' + $it.id + '&pdf=1') -OutFile (Join-Path $pdfd ($it.id + '.pdf')) } catch {}
+}
+@{ items = $list.items } | ConvertTo-Json -Depth 6 | Out-File (Join-Path $tmp 'manifest.json') -Encoding utf8
+$zip = Join-Path $daily ('pdfs-' + $stamp + '.zip')
+if (Test-Path $zip) { Remove-Item -Force $zip }
+if ((Get-ChildItem $pdfd -Filter '*.pdf' | Measure-Object).Count -gt 0) {
+  Compress-Archive -Path (Join-Path $tmp '*') -DestinationPath $zip -Force
+}
+Remove-Item -Recurse -Force $tmp
+
+# 3) promotions: weekly on Saturday, monthly on the first run of the month
+$weekly  = Join-Path $DEST 'weekly'
+$monthly = Join-Path $DEST 'monthly'
+New-Item -ItemType Directory -Force -Path $weekly  | Out-Null
+New-Item -ItemType Directory -Force -Path $monthly | Out-Null
+if ((Get-Date).DayOfWeek -eq 'Saturday') {
+  Copy-Item $dataFile $weekly -Force -ErrorAction SilentlyContinue
+  if (Test-Path $zip) { Copy-Item $zip $weekly -Force -ErrorAction SilentlyContinue }
+}
+if (-not (Get-ChildItem $monthly -Filter ('data-' + $ym + '*.json') -ErrorAction SilentlyContinue)) {
+  Copy-Item $dataFile $monthly -Force -ErrorAction SilentlyContinue
+  if (Test-Path $zip) { Copy-Item $zip $monthly -Force -ErrorAction SilentlyContinue }
+}
+
+# 4) prune: keep newest N per folder/type
+function Prune($dir, $pat, $keep) {
+  Get-ChildItem $dir -Filter $pat -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -Skip $keep | Remove-Item -Force -ErrorAction SilentlyContinue
+}
+Prune $daily   'data-*.json' $DAILY_KEEP
+Prune $daily   'pdfs-*.zip'  $DAILY_KEEP
+Prune $weekly  'data-*.json' $WEEKLY_KEEP
+Prune $weekly  'pdfs-*.zip'  $WEEKLY_KEEP
+Prune $monthly 'data-*.json' $MONTHLY_KEEP
+Prune $monthly 'pdfs-*.zip'  $MONTHLY_KEEP
+
+Write-Output ('backup done: ' + $stamp)
+`
+  return s.replace(/\r?\n/g, '\r\n')
+}
 // ===== 生コン出荷予定表の「休み」欄（別ウィンドウと相互リンク。端末ごと・localStorage）=====
 // ===== 出欠登録（休み・追加要員／日付ごと・全端末共有）=====
 // 休み(rests)＝従業員一覧から選択、追加要員(extras)＝自由入力（バイト等）。base＝出社人数の基準。
@@ -6812,6 +6898,19 @@ function SettingsPage() {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) { alert('ダウンロードに失敗しました: ' + (e && e.message ? e.message : e)) }
   }
+  // USB自動バックアップ用 PowerShell スクリプト(.ps1)をダウンロード。掲示板PCのタスクスケジューラで夜間実行する想定。
+  const downloadUsbBackup = () => {
+    try {
+      const ps = backupUsbPs1(window.location.origin)
+      const blob = new Blob([ps], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'tobunamakon-backup.ps1'
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) { alert('ダウンロードに失敗しました: ' + (e && e.message ? e.message : e)) }
+  }
 
   const load = useCallback(async () => {
     try { setData(await api.get('/api/line')) } catch (e) { console.error(e) } finally { setLoading(false) }
@@ -6982,6 +7081,28 @@ function SettingsPage() {
             ※復元は伝票ごとに1件ずつ送ります（件数が多いと少し時間がかかります）。<br />
             ※データ本体（上）を先に復元してからPDFを復元してください。
           </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid #eef1f5', marginTop: 14, paddingTop: 12 }}>
+          <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 8, lineHeight: 1.7 }}>
+            <b>USBへ自動バックアップ</b>（掲示板PC）：夜間に自動で、データ本体＋PDFを外付け/USBへ保存します。
+            <b>日次30・週次12・月次12</b>で自動ローテーション（毎日／日曜を除く）。
+          </div>
+          <button type="button" onClick={downloadUsbBackup}
+            style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>⬇ USBバックアップ スクリプト(.ps1)をダウンロード</button>
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ fontSize: 13, fontWeight: 700, color: '#1a4d8f', cursor: 'pointer' }}>▶ 設定手順（掲示板PC・Windows）</summary>
+            <ol style={{ fontSize: 12.5, color: '#3a4a5c', lineHeight: 1.9, marginTop: 8, paddingLeft: 22 }}>
+              <li>Vercelの環境変数に <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>BACKUP_TOKEN</code>（16文字以上のランダムな文字列）を設定して再デプロイ。</li>
+              <li>上のボタンで <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>tobunamakon-backup.ps1</code> をダウンロードし、メモ帳で開いて <b>$TOKEN</b> に同じ値、<b>$DEST</b> にUSBのフォルダ（例 <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>D:\tobunamakon-backup</code>）を設定して保存。</li>
+              <li>タスクスケジューラで<b>毎日（日曜以外）・営業終了後（例 19:30）</b>に実行。プログラム＝<code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>powershell.exe</code>、引数＝<code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>-NoProfile -ExecutionPolicy Bypass -File "(.ps1のパス)"</code>。</li>
+              <li>初回に警告が出たら、PowerShellで <code style={{ background: '#f4f6f9', padding: '1px 6px', borderRadius: 3 }}>Unblock-File .\tobunamakon-backup.ps1</code> を一度実行。</li>
+            </ol>
+            <div style={{ fontSize: 11, color: '#9aa7b5', lineHeight: 1.6 }}>
+              ※<b>BACKUP_TOKEN の値はこの画面やリポジトリに保存しません</b>（Vercelとこの.ps1にだけ）。漏れたら値を変えるだけで無効化できます。<br />
+              ※USBは挿しっぱなしだとPCと同じ被害を受けます。週1でもう1本に退避／持ち出しを推奨。
+            </div>
+          </details>
         </div>
       </div>
       )}
