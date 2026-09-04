@@ -298,7 +298,7 @@ export async function demoRequest(rawPath, options = {}) {
         ? (Array.isArray(body.extras) ? body.extras.map(x => String(x || '').trim()).filter(Boolean) : [])
         : (Array.isArray(cur.extras) ? cur.extras : [])
       const note = body.note !== undefined
-        ? String(body.note ?? '').replace(/[\r\n]+/g, ' ').slice(0, 200)
+        ? String(body.note ?? '').replace(/\r\n?/g, '\n').slice(0, 200)
         : (typeof cur.note === 'string' ? cur.note : '')
       db.attendance[date] = { rests, extras, note }
       if (body.base !== undefined) db.attendanceBase = Math.max(0, parseInt(body.base, 10) || 0)

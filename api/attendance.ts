@@ -18,9 +18,9 @@ function normRests(v: any): { id: string; name: string }[] {
 function normExtras(v: any): string[] {
   return Array.isArray(v) ? v.map((x: any) => String(x || '').trim()).filter(Boolean) : []
 }
-// 出荷予定表ヘッダの自由記述メモ（1行・日付ごと）。改行は潰し、長さを制限する。
+// 出荷予定表ヘッダの自由記述メモ（複数行可・日付ごと）。改行は保持し（\r\n は \n に統一）、長さだけ制限する。
 function normNote(v: any): string {
-  return String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, 200)
+  return String(v ?? '').replace(/\r\n?/g, '\n').slice(0, 200)
 }
 
 function parseRec(raw: unknown): { rests: { id: string; name: string }[]; extras: string[]; note: string } {

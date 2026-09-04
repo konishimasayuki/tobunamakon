@@ -40,8 +40,8 @@ function parseAtt(raw: unknown): { rests: { id: string; name: string }[]; extras
   const extras = obj && Array.isArray(obj.extras)
     ? obj.extras.map((x: any) => String(x || '').trim()).filter(Boolean)
     : []
-  // 出荷予定表ヘッダの自由記述メモ（日付ごと）。バックアップ/復元で落とさないこと。
-  const note = (obj && typeof obj.note === 'string') ? String(obj.note).replace(/[\r\n]+/g, ' ').slice(0, 200) : ''
+  // 出荷予定表ヘッダの自由記述メモ（日付ごと・複数行可）。バックアップ/復元で落とさないこと。
+  const note = (obj && typeof obj.note === 'string') ? String(obj.note).replace(/\r\n?/g, '\n').slice(0, 200) : ''
   return { rests, extras, note }
 }
 
