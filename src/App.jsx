@@ -3554,6 +3554,9 @@ function SchedulePage({ onEditShipment, isPopup }) {
     noteDateRef.current = date
     setDayNote(attendance.note || '')
   }, [attendance.date, attendance.note, date])
+  // 伸ばせる高さの上限：PC=2行（これ以上伸ばすとヘッダが表に重なる）／スマホ=3行
+  const noteMaxH = compact ? 66 : 46
+  useEffect(() => { fitNoteHeight(noteInputRef.current, noteMaxH) }, [dayNote, noteMaxH])
   // ①計測用：ポーリングの生存状況（最終tick時刻・最終変化・回数・rev）を保持して掲示板隅に表示する
   const [pollDbg, setPollDbg] = useState({ lastTickAt: null, lastChangeAt: null, ticks: 0, rev: null })
   const isPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
@@ -4566,13 +4569,13 @@ function SchedulePage({ onEditShipment, isPopup }) {
   }
   const dayNoteInput = (
     <span className="no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <input type="text" ref={noteInputRef} value={dayNote} maxLength={200}
-        onChange={e => setDayNote(e.target.value)}
+      <textarea ref={noteInputRef} value={dayNote} maxLength={200} rows={1}
+        onChange={e => { setDayNote(e.target.value); fitNoteHeight(e.target, noteMaxH) }}
         onBlur={() => commitDayNote()}
         onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); commitDayNote() } }}
         placeholder="この日のメモ（Enterで保存）"
         title="表示中の日付にだけ保存されるメモです。Enter、または入力欄から離れると保存します。"
-        style={{ width: compact ? 150 : 230, fontSize: 13, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+        style={{ width: compact ? 150 : 230, fontSize: 13, lineHeight: 1.4, fontFamily: 'inherit', padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6, resize: 'none', overflowY: 'auto', maxHeight: noteMaxH, boxSizing: 'border-box', display: 'block', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} />
       {noteSaving
         ? <span style={{ fontSize: 11, color: '#6b7a8d', whiteSpace: 'nowrap' }}>保存中…</span>
         : (noteFlash ? <span style={{ fontSize: 11, color: '#1a8f5a', fontWeight: 700, whiteSpace: 'nowrap' }}>✓保存</span> : null)}
@@ -6784,6 +6787,15 @@ function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
       </div>
     </div>
   )
+}
+
+// メモ欄の高さを内容に合わせて自動調整（1行→溢れたら2行目…最大3行、以降はスクロール）
+// 上限は呼び出し側で指定（PCはヘッダが表に被らないよう2行まで、スマホは3行まで）
+const NOTE_MAX_H = 66
+function fitNoteHeight(el, max) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, max || NOTE_MAX_H) + 'px'
 }
 
 // Uint8Array → base64（大きな配列でもスタック超過しないよう分割して変換）
