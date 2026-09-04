@@ -3296,59 +3296,62 @@ New-Item -ItemType Directory -Force -Path $daily | Out-Null
 $dataFile = Join-Path $daily ('data-' + $stamp + '.json')
 Invoke-WebRequest -Uri ($BASE + '/api/backup') -Headers $hdr -OutFile $dataFile
 
-# 2) attached PDFs -> zip (pdfs/<id>.pdf + manifest.json; same format as the in-app PDF backup)
-$list = Invoke-RestMethod -Uri ($BASE + '/api/backup?pdflist=1') -Headers $hdr
-$tmp  = Join-Path $env:TEMP ('tbpdf-' + $stamp)
-if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
-$pdfd = Join-Path $tmp 'pdfs'
-New-Item -ItemType Directory -Force -Path $pdfd | Out-Null
-$total = @($list.items).Count
-$done = 0
-$okCount = 0
-Write-Output ('PDF files to fetch: ' + $total)
-foreach ($it in $list.items) {
-  $done++
+# 2) attached PDFs -> incremental mirror under $DEST\pdfs
+#    The PDF list comes from the data backup we just downloaded (it already contains every
+#    shipment with id / hasPdf / updatedAt), so no extra server call and no extra Redis reads.
+#    Only new or updated PDFs are downloaded; files already mirrored are skipped.
+#    PDFs are kept as ONE mirrored set (not per-day copies), so the USB does not grow 54x.
+$pdfDir = Join-Path $DEST 'pdfs'
+New-Item -ItemType Directory -Force -Path $pdfDir | Out-Null
+$idxFile = Join-Path $pdfDir '_index.json'
+$idx = @{}
+if (Test-Path $idxFile) {
+  try { (Get-Content $idxFile -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $idx[$_.Name] = [string]$_.Value } } catch {}
+}
+$data = Get-Content $dataFile -Raw | ConvertFrom-Json
+$withPdf = @($data.shipments | Where-Object { $_.hasPdf -eq '1' -or $_.hasPdf -eq 1 -or $_.hasPdf -eq $true })
+$total = $withPdf.Count
+$new = 0
+$skip = 0
+$fail = 0
+Write-Output ('PDFs on server: ' + $total)
+foreach ($s in $withPdf) {
+  $sid = [string]$s.id
+  $ver = [string]$s.updatedAt
+  $f = Join-Path $pdfDir ($sid + '.pdf')
+  if ((Test-Path $f) -and ($idx[$sid] -eq $ver)) { $skip++; continue }
   try {
-    Invoke-WebRequest -Uri ($BASE + '/api/shipments?id=' + $it.id + '&pdf=1') -OutFile (Join-Path $pdfd ($it.id + '.pdf'))
-    $okCount++
-  } catch {}
-  if ($done % 20 -eq 0) { Write-Output ('  fetched ' + $done + '/' + $total) }
+    Invoke-WebRequest -Uri ($BASE + '/api/shipments?id=' + $sid + '&pdf=1') -OutFile $f
+    $idx[$sid] = $ver
+    $new++
+    if ($new % 20 -eq 0) { Write-Output ('  downloaded ' + $new + ' new') }
+  } catch { $fail++ }
 }
-@{ items = $list.items } | ConvertTo-Json -Depth 6 | Out-File (Join-Path $tmp 'manifest.json') -Encoding utf8
-$zip = Join-Path $daily ('pdfs-' + $stamp + '.zip')
-if (Test-Path $zip) { Remove-Item -Force $zip }
-if ((Get-ChildItem $pdfd -Filter '*.pdf' | Measure-Object).Count -gt 0) {
-  Compress-Archive -Path (Join-Path $tmp '*') -DestinationPath $zip -Force
-}
-Remove-Item -Recurse -Force $tmp
+$idx | ConvertTo-Json -Depth 3 | Out-File $idxFile -Encoding utf8
+Write-Output ('PDF mirror: new=' + $new + ' skipped=' + $skip + ' failed=' + $fail)
 
-# 3) promotions: weekly on Saturday, monthly on the first run of the month
+# 3) promotions (data JSON only): weekly on Saturday, monthly on the first run of the month
 $weekly  = Join-Path $DEST 'weekly'
 $monthly = Join-Path $DEST 'monthly'
 New-Item -ItemType Directory -Force -Path $weekly  | Out-Null
 New-Item -ItemType Directory -Force -Path $monthly | Out-Null
 if ((Get-Date).DayOfWeek -eq 'Saturday') {
   Copy-Item $dataFile $weekly -Force -ErrorAction SilentlyContinue
-  if (Test-Path $zip) { Copy-Item $zip $weekly -Force -ErrorAction SilentlyContinue }
 }
 if (-not (Get-ChildItem $monthly -Filter ('data-' + $ym + '*.json') -ErrorAction SilentlyContinue)) {
   Copy-Item $dataFile $monthly -Force -ErrorAction SilentlyContinue
-  if (Test-Path $zip) { Copy-Item $zip $monthly -Force -ErrorAction SilentlyContinue }
 }
 
-# 4) prune: keep newest N per folder/type
+# 4) prune data JSON generations (PDFs are a single mirror and are not rotated)
 function Prune($dir, $pat, $keep) {
   Get-ChildItem $dir -Filter $pat -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -Skip $keep | Remove-Item -Force -ErrorAction SilentlyContinue
 }
 Prune $daily   'data-*.json' $DAILY_KEEP
-Prune $daily   'pdfs-*.zip'  $DAILY_KEEP
 Prune $weekly  'data-*.json' $WEEKLY_KEEP
-Prune $weekly  'pdfs-*.zip'  $WEEKLY_KEEP
 Prune $monthly 'data-*.json' $MONTHLY_KEEP
-Prune $monthly 'pdfs-*.zip'  $MONTHLY_KEEP
 
 $elapsed = [int](((Get-Date) - $startedAt).TotalSeconds)
-Write-Output ('backup done: ' + $stamp + '  pdfs=' + $okCount + '/' + $total + '  elapsed=' + $elapsed + 's')
+Write-Output ('backup done: ' + $stamp + '  pdf(new/skip/fail)=' + $new + '/' + $skip + '/' + $fail + '  elapsed=' + $elapsed + 's')
 `
   return s.replace(/\r?\n/g, '\r\n')
 }
@@ -7165,8 +7168,9 @@ function SettingsPage() {
 
         <div style={{ borderTop: '1px solid #eef1f5', marginTop: 14, paddingTop: 12 }}>
           <div style={{ fontSize: 13, color: '#3a4a5c', marginBottom: 8, lineHeight: 1.7 }}>
-            <b>USBへ自動バックアップ</b>（掲示板PC）：夜間に自動で、データ本体＋PDFを外付け/USBへ保存します。
-            <b>日次30・週次12・月次12</b>で自動ローテーション（毎日／日曜を除く）。
+            <b>USBへ自動バックアップ</b>（掲示板PC）：夜間に自動で、データ本体＋PDFを外付け/USBへ保存します（毎日／日曜を除く）。<br />
+            ・<b>データ本体(JSON)</b>＝<b>日次30・週次12・月次12</b>で世代を保持。<br />
+            ・<b>添付PDF</b>＝<b>差分ミラー</b>（<code style={{ background: '#f4f6f9', padding: '1px 5px', borderRadius: 3 }}>pdfs</code>フォルダに1セットだけ。増えた分だけ取得するので件数が増えても短時間・省容量）。
           </div>
           <button type="button" onClick={downloadUsbBackup}
             style={{ ...S.addBtn, padding: '10px 16px', fontSize: 13 }}>⬇ USBバックアップ スクリプト(.ps1)をダウンロード</button>
