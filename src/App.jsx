@@ -2348,6 +2348,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [error, setError]           = useState('')
   const [search, setSearch]         = useState('')
   const [dateFilter, setDateFilter] = useState('')   // 日付ボタンで絞り込み中の日付（空=絞り込みなし）
+  const [editOrig, setEditOrig]     = useState(null) // 編集開始時の伝票（変更点=赤字の比較元）
   const [ampm, setAmpm]             = useState('both')   // AM/PM 絞り込み（'both'|'AM'|'PM'）。各フィルターと併用
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [saveConfirm, setSaveConfirm] = useState(false)   // 登録/更新の確認（ワンクッション）
@@ -2372,10 +2373,22 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return out
   })()
 
+  // 一覧の取得範囲。伝票が増えても重くならないよう、通常は「直近30日〜60日先」を日付索引で取得する。
+  // 日付で絞り込み中はその日だけ、検索中だけ全期間を取得する（Upstashの読み取りコマンド削減）。
+  const listQuery = (() => {
+    if (search.trim()) return ''                                   // 検索は全期間から探す
+    if (dateFilter) return '?date=' + encodeURIComponent(dateFilter)
+    const p2 = n => String(n).padStart(2, '0')
+    const fmt = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+    const base = new Date()
+    const from = new Date(base); from.setDate(base.getDate() - 30)
+    const to = new Date(base); to.setDate(base.getDate() + 60)
+    return `?from=${fmt(from)}&to=${fmt(to)}`
+  })()
   const load = useCallback(async () => {
     try {
       const [s, c, e] = await Promise.all([
-        api.get('/api/shipments'),
+        api.get('/api/shipments' + listQuery),
         api.get('/api/customers'),
         api.get('/api/employees'),
       ])
@@ -2385,7 +2398,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       setEmployees(e.filter(emp => emp.type === 'driver'))
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
-  }, [])
+  }, [listQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -2556,6 +2569,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
   const startEdit = (s) => {
     setEditing(s.id)
+    setEditOrig(s)              // 変更点(赤字)の比較元。一覧に無い伝票を開いても正しく差分が出るようにする
     setEditChanged(Array.isArray(s.changedFields) ? s.changedFields : [])
     setForm(toForm(s))
     setError('')
@@ -2572,15 +2586,21 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
 
   // 別ウィンドウ（?editShipment=...）で開いた場合、読み込み後に該当伝票を編集状態にする
   useEffect(() => {
-    if (pendingEditId && shipments.length) {
-      const s = shipments.find(x => x.id === pendingEditId)
-      if (s) {
-        startEdit(s)
-        // キャンセル伝票の「復元する」経由で開いた場合は、更新時に日付確認を出すため印を立てる
-        if (pendingRestore) { setRestoreMode(true); onRestoreConsumed && onRestoreConsumed() }
-        onPendingConsumed && onPendingConsumed()
-      }
+    if (!pendingEditId) return
+    const open = (s) => {
+      startEdit(s)
+      // キャンセル伝票の「復元する」経由で開いた場合は、更新時に日付確認を出すため印を立てる
+      if (pendingRestore) { setRestoreMode(true); onRestoreConsumed && onRestoreConsumed() }
+      onPendingConsumed && onPendingConsumed()
     }
+    const hit = shipments.find(x => x.id === pendingEditId)
+    if (hit) { open(hit); return }
+    // 一覧の取得範囲外（古い伝票・キャンセル済み等）は id 指定で1件だけ取得して開く
+    let aborted = false
+    api.get('/api/shipments?id=' + encodeURIComponent(pendingEditId))
+      .then(one => { if (!aborted && one && one.id) open(one) })
+      .catch(() => { /* 見つからない場合は何もしない */ })
+    return () => { aborted = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditId, shipments])
 
@@ -2590,7 +2610,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   // 編集中の伝票を「更新」と同じ処理で保存（UIはリセットしない＝直後に別伝票へ切替できる）
   const saveCurrentEdit = async () => {
     const payload = buildPayload()
-    const orig = shipments.find(x => x.id === editing) || {}
+    const orig = editOrig || shipments.find(x => x.id === editing) || {}
     const changed = diffChangedFields(orig, payload)
     const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
     const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
@@ -2632,7 +2652,7 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
       const payload = buildPayload()
       if (editing) {
         // 予定表で赤字表示するため、編集前(orig)と比べて変わった項目（配合は桁ごと・備考は行ごと）を積む
-        const orig = shipments.find(x => x.id === editing) || {}
+        const orig = editOrig || shipments.find(x => x.id === editing) || {}
         const changed = diffChangedFields(orig, payload)
         const changedFields = Array.from(new Set([...(Array.isArray(orig.changedFields) ? orig.changedFields : []), ...changed]))
         const updated = await api.put(`/api/shipments/${editing}`, { ...payload, changedFields })
