@@ -31,7 +31,7 @@ async function readAll(setKey: string, prefix: string): Promise<Record<string, a
 }
 
 // 出欠レコードの正規化（保存は JSON 文字列だが、クライアントによりオブジェクトで返ることもあるため両対応）。
-function parseAtt(raw: unknown): { rests: { id: string; name: string }[]; extras: string[] } {
+function parseAtt(raw: unknown): { rests: { id: string; name: string }[]; extras: string[]; note: string } {
   let obj: any = raw
   if (typeof raw === 'string') { try { obj = JSON.parse(raw) } catch { obj = null } }
   const rests = obj && Array.isArray(obj.rests)
@@ -40,11 +40,13 @@ function parseAtt(raw: unknown): { rests: { id: string; name: string }[]; extras
   const extras = obj && Array.isArray(obj.extras)
     ? obj.extras.map((x: any) => String(x || '').trim()).filter(Boolean)
     : []
-  return { rests, extras }
+  // 出荷予定表ヘッダの自由記述メモ（日付ごと）。バックアップ/復元で落とさないこと。
+  const note = (obj && typeof obj.note === 'string') ? String(obj.note).replace(/[\r\n]+/g, ' ').slice(0, 200) : ''
+  return { rests, extras, note }
 }
 
 // attendance:YYYY-MM-DD を SCAN で全件列挙（attendance:base は除外）。日付索引が無いため走査で集める。
-async function readAttendance(): Promise<{ base: number | null; records: { date: string; rests: any[]; extras: string[] }[] }> {
+async function readAttendance(): Promise<{ base: number | null; records: { date: string; rests: any[]; extras: string[]; note: string }[] }> {
   let cursor = '0'
   const dateKeys: string[] = []
   let guard = 0
@@ -54,14 +56,14 @@ async function readAttendance(): Promise<{ base: number | null; records: { date:
     for (const k of batch) { if (k !== BASE_KEY) dateKeys.push(k) }
   } while (cursor !== '0' && ++guard < 10000)
 
-  let records: { date: string; rests: any[]; extras: string[] }[] = []
+  let records: { date: string; rests: any[]; extras: string[]; note: string }[] = []
   if (dateKeys.length) {
     const p = redis.pipeline()
     dateKeys.forEach(k => p.get(k))
     const vals = (await p.exec<any[]>()) || []
     records = dateKeys.map((k, i) => {
       const rec = parseAtt(vals[i])
-      return { date: k.slice('attendance:'.length), rests: rec.rests, extras: rec.extras }
+      return { date: k.slice('attendance:'.length), rests: rec.rests, extras: rec.extras, note: rec.note }
     })
   }
   const nBase = Number(await redis.get(BASE_KEY))
@@ -213,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (Array.isArray(att.records)) {
           for (const rec of att.records) {
             if (!rec || !rec.date) continue
-            const norm = parseAtt({ rests: rec.rests, extras: rec.extras })
+            const norm = parseAtt({ rests: rec.rests, extras: rec.extras, note: rec.note })
             await redis.set(`attendance:${rec.date}`, JSON.stringify(norm))
             result.attendanceDays++
             touched = true
