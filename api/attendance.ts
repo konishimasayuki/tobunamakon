@@ -9,16 +9,28 @@ const REV_KEY = 'shipments:rev'
 const BASE_KEY = 'attendance:base'
 function keyFor(date: string) { return `attendance:${date}` }
 
-function parseRec(raw: unknown): { rests: { id: string; name: string }[]; extras: string[] } {
+// 各項目の正規化（部分更新でも同じ規則で揃える）
+function normRests(v: any): { id: string; name: string }[] {
+  return Array.isArray(v)
+    ? v.map((r: any) => ({ id: String(r?.id || ''), name: String(r?.name || '') })).filter((r: any) => r.name)
+    : []
+}
+function normExtras(v: any): string[] {
+  return Array.isArray(v) ? v.map((x: any) => String(x || '').trim()).filter(Boolean) : []
+}
+// 出荷予定表ヘッダの自由記述メモ（1行・日付ごと）。改行は潰し、長さを制限する。
+function normNote(v: any): string {
+  return String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, 200)
+}
+
+function parseRec(raw: unknown): { rests: { id: string; name: string }[]; extras: string[]; note: string } {
   let obj: any = raw
   if (typeof raw === 'string') { try { obj = JSON.parse(raw) } catch { obj = null } }
-  const rests = obj && Array.isArray(obj.rests)
-    ? obj.rests.map((r: any) => ({ id: String(r?.id || ''), name: String(r?.name || '') })).filter((r: any) => r.name)
-    : []
-  const extras = obj && Array.isArray(obj.extras)
-    ? obj.extras.map((x: any) => String(x || '').trim()).filter(Boolean)
-    : []
-  return { rests, extras }
+  return {
+    rests: normRests(obj && obj.rests),
+    extras: normExtras(obj && obj.extras),
+    note: (obj && typeof obj.note === 'string') ? normNote(obj.note) : '',
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -28,9 +40,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     try {
-      const rec = date ? parseRec(await redis.get(keyFor(date))) : { rests: [], extras: [] }
+      const rec = date ? parseRec(await redis.get(keyFor(date))) : { rests: [], extras: [], note: '' }
       const base = Number(await redis.get(BASE_KEY))
-      return res.status(200).json({ date, rests: rec.rests, extras: rec.extras, base: (Number.isFinite(base) && base > 0) ? base : 16 })
+      return res.status(200).json({ date, rests: rec.rests, extras: rec.extras, note: rec.note, base: (Number.isFinite(base) && base > 0) ? base : 16 })
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
     }
@@ -40,14 +52,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!date) return res.status(400).json({ error: '日付が必要です' })
     try {
       const body: any = req.body || {}
-      const rec = parseRec({ rests: body.rests, extras: body.extras })
+      // 部分更新：送られてきた項目だけ差し替え、未指定は既存を保持する。
+      // （出欠の保存でメモが消える／メモの保存で休みが消える、といった事故を防ぐ）
+      const cur = parseRec(await redis.get(keyFor(date)))
+      const rec = {
+        rests:  body.rests  !== undefined ? normRests(body.rests)   : cur.rests,
+        extras: body.extras !== undefined ? normExtras(body.extras) : cur.extras,
+        note:   body.note   !== undefined ? normNote(body.note)     : cur.note,
+      }
       const tx = redis.multi()
       tx.set(keyFor(date), JSON.stringify(rec))
       if (body.base !== undefined) { const b = Math.max(0, parseInt(body.base, 10) || 0); tx.set(BASE_KEY, String(b)) }
       tx.incr(REV_KEY)   // 掲示板ポーリングへ変更通知
       await tx.exec()
       const base = Number(await redis.get(BASE_KEY))
-      return res.status(200).json({ date, rests: rec.rests, extras: rec.extras, base: (Number.isFinite(base) && base > 0) ? base : 16 })
+      return res.status(200).json({ date, rests: rec.rests, extras: rec.extras, note: rec.note, base: (Number.isFinite(base) && base > 0) ? base : 16 })
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
     }

@@ -284,17 +284,26 @@ export async function demoRequest(rawPath, options = {}) {
   if (path === '/api/attendance') {
     const date = q.date || ''
     if (method === 'GET') {
-      const rec = (db.attendance && db.attendance[date]) || { rests: [], extras: [] }
-      return { date, rests: Array.isArray(rec.rests) ? rec.rests : [], extras: Array.isArray(rec.extras) ? rec.extras : [], base: db.attendanceBase || 16 }
+      const rec = (db.attendance && db.attendance[date]) || { rests: [], extras: [], note: '' }
+      return { date, rests: Array.isArray(rec.rests) ? rec.rests : [], extras: Array.isArray(rec.extras) ? rec.extras : [], note: typeof rec.note === 'string' ? rec.note : '', base: db.attendanceBase || 16 }
     }
     if (method === 'PUT' || method === 'POST') {
       if (!db.attendance) db.attendance = {}
-      const rests = Array.isArray(body.rests) ? body.rests.map(r => ({ id: String(r?.id || ''), name: String(r?.name || '') })).filter(r => r.name) : []
-      const extras = Array.isArray(body.extras) ? body.extras.map(x => String(x || '').trim()).filter(Boolean) : []
-      db.attendance[date] = { rests, extras }
+      // サーバ(api/attendance.ts)と同じ部分更新：送られた項目だけ差し替え、未指定は既存を保持する
+      const cur = db.attendance[date] || { rests: [], extras: [], note: '' }
+      const rests = body.rests !== undefined
+        ? (Array.isArray(body.rests) ? body.rests.map(r => ({ id: String(r?.id || ''), name: String(r?.name || '') })).filter(r => r.name) : [])
+        : (Array.isArray(cur.rests) ? cur.rests : [])
+      const extras = body.extras !== undefined
+        ? (Array.isArray(body.extras) ? body.extras.map(x => String(x || '').trim()).filter(Boolean) : [])
+        : (Array.isArray(cur.extras) ? cur.extras : [])
+      const note = body.note !== undefined
+        ? String(body.note ?? '').replace(/[\r\n]+/g, ' ').slice(0, 200)
+        : (typeof cur.note === 'string' ? cur.note : '')
+      db.attendance[date] = { rests, extras, note }
       if (body.base !== undefined) db.attendanceBase = Math.max(0, parseInt(body.base, 10) || 0)
       bumpRev(db); save(db)
-      return { date, rests, extras, base: db.attendanceBase || 16 }
+      return { date, rests, extras, note, base: db.attendanceBase || 16 }
     }
   }
 

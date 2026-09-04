@@ -3353,18 +3353,25 @@ function attDispName(rest) {
 // 配列を n 個ずつのまとまりに分割（休みの4人毎改行に使用）
 function chunkBy(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out }
 async function fetchAttendance(date) {
-  try { const a = await api.get('/api/attendance?date=' + encodeURIComponent(date)); return { rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], base: Number.isFinite(+a.base) ? +a.base : 16 } }
-  catch { return { rests: [], extras: [], base: 16 } }
+  try { const a = await api.get('/api/attendance?date=' + encodeURIComponent(date)); return { date, rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], note: typeof a.note === 'string' ? a.note : '', base: Number.isFinite(+a.base) ? +a.base : 16 } }
+  catch { return { date, rests: [], extras: [], note: '', base: 16 } }
 }
 async function saveAttendance(date, draft) {
   const a = await api.put('/api/attendance?date=' + encodeURIComponent(date), { rests: draft.rests, extras: draft.extras, base: draft.base })
   try { window.dispatchEvent(new Event('attendancechange')) } catch { /* noop */ }
   notifyShipmentsChanged()   // 掲示板（別端末含む）へ rev / storage で変更通知
-  return { rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], base: Number.isFinite(+a.base) ? +a.base : 16 }
+  return { date, rests: Array.isArray(a.rests) ? a.rests : [], extras: Array.isArray(a.extras) ? a.extras : [], note: typeof a.note === 'string' ? a.note : '', base: Number.isFinite(+a.base) ? +a.base : 16 }
+}
+// 出荷予定表ヘッダの自由記述メモ（その日付にだけ保存）。noteだけ送り、休み/追加要員はサーバ側で保持される。
+async function saveDayNote(date, note) {
+  const a = await api.put('/api/attendance?date=' + encodeURIComponent(date), { note: String(note ?? '') })
+  try { window.dispatchEvent(new Event('attendancechange')) } catch { /* noop */ }
+  notifyShipmentsChanged()   // 掲示板（別端末含む）へ変更通知
+  return typeof a.note === 'string' ? a.note : ''
 }
 // 表示日ぶんの出欠を読み込み、他ウィンドウ/他端末の変更（attendancechange / storage）にも追従
 function useAttendance(date) {
-  const [attendance, setAttendance] = useState({ rests: [], extras: [], base: 16 })
+  const [attendance, setAttendance] = useState({ date: '', rests: [], extras: [], note: '', base: 16 })
   const dref = useRef(date); dref.current = date
   const reload = useCallback(async () => { setAttendance(await fetchAttendance(dref.current)) }, [])
   useEffect(() => { reload() }, [date, reload])
@@ -3528,9 +3535,25 @@ function SchedulePage({ onEditShipment, isPopup }) {
   // ①計測オーバーレイの表示ON/OFF（端末ごと・既定OFF）。掲示板の画面操作の一番下で切替
   const [dbgOn, setDbgOn] = useState(readBoardDebug)
   // 出欠登録（休み・追加要員／日付ごと・全端末共有）。従業員一覧はモーダルで選択に使う
-  const [attendance, setAttendance] = useState({ rests: [], extras: [], base: 16 })
+  const [attendance, setAttendance] = useState({ date: '', rests: [], extras: [], note: '', base: 16 })
   const [allEmployees, setAllEmployees] = useState([])
   const [attModal, setAttModal] = useState(false)
+  // 出荷予定表ヘッダの自由記述メモ（表示中の日付にだけ保存。全端末で共有）
+  const [dayNote, setDayNote] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteFlash, setNoteFlash] = useState(false)
+  const noteInputRef = useRef(null)
+  const noteDateRef = useRef(date)
+  // サーバ値を反映する。入力中（フォーカス中）はポーリング更新で打ち消さないが、
+  // 日付が変わった時は入力中でも必ず貼り替える（前の日の文字を別の日に保存しないため）。
+  useEffect(() => {
+    if (attendance.date !== date) return        // 表示中の日付のデータがまだ来ていない
+    const el = noteInputRef.current
+    const focused = !!el && typeof document !== 'undefined' && document.activeElement === el
+    if (focused && noteDateRef.current === date) return   // 同じ日付を入力中なら打ち消さない
+    noteDateRef.current = date
+    setDayNote(attendance.note || '')
+  }, [attendance.date, attendance.note, date])
   // ①計測用：ポーリングの生存状況（最終tick時刻・最終変化・回数・rev）を保持して掲示板隅に表示する
   const [pollDbg, setPollDbg] = useState({ lastTickAt: null, lastChangeAt: null, ticks: 0, rev: null })
   const isPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
@@ -4525,6 +4548,36 @@ function SchedulePage({ onEditShipment, isPopup }) {
     <button type="button" onClick={() => setBoardModal(true)} title="別ウィンドウ（掲示板）の画面操作（倍率・表示項目・表示順）"
       style={{ border: '1.5px solid #0f3060', background: '#fff', color: '#0f3060', borderRadius: 7, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ 別ウィンドウ操作</button>
   )
+  // 表示中の日付にだけ保存される自由記述メモ。Enterで保存（日本語変換の確定Enterでは保存しない）＋欄から離れた時も保存。
+  const commitDayNote = async () => {
+    const v = dayNote
+    if (noteDateRef.current !== date) return    // 表示中の日付と中身がズレている時は保存しない（誤日付への書き込み防止）
+    if (v === (attendance.note || '')) return   // 変更が無ければ何もしない（無駄な書き込みを避ける）
+    setNoteSaving(true)
+    try {
+      const saved = await saveDayNote(date, v)
+      setAttendance(a => ({ ...a, note: saved }))
+      setDayNote(saved)
+      setNoteFlash(true)
+      setTimeout(() => setNoteFlash(false), 1500)
+    } catch (e) {
+      alert('メモの保存に失敗しました: ' + (e && e.message ? e.message : e))
+    } finally { setNoteSaving(false) }
+  }
+  const dayNoteInput = (
+    <span className="no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <input type="text" ref={noteInputRef} value={dayNote} maxLength={200}
+        onChange={e => setDayNote(e.target.value)}
+        onBlur={() => commitDayNote()}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); commitDayNote() } }}
+        placeholder="この日のメモ（Enterで保存）"
+        title="表示中の日付にだけ保存されるメモです。Enter、または入力欄から離れると保存します。"
+        style={{ width: compact ? 150 : 230, fontSize: 13, padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6 }} />
+      {noteSaving
+        ? <span style={{ fontSize: 11, color: '#6b7a8d', whiteSpace: 'nowrap' }}>保存中…</span>
+        : (noteFlash ? <span style={{ fontSize: 11, color: '#1a8f5a', fontWeight: 700, whiteSpace: 'nowrap' }}>✓保存</span> : null)}
+    </span>
+  )
   // 画面操作モーダルの折りたたみセクション見出し（クリックで開閉）
   const secHead = (key, title) => (
     <div onClick={() => setSecOpen(o => ({ ...o, [key]: !o[key] }))}
@@ -4576,10 +4629,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
           {attButton}
           <AttendanceLines attendance={attendance} style={{ fontSize: 12 }} />
           {/* 別ウィンドウで開く→別ウィンドウ操作→AM/PM の順で AM/PM の左にまとめる（スマホ幅では同じ行の末尾に続く） */}
-          {compact && <>{openWinBtn}{boardOpBtn}{ampmButtons}</>}
+          {compact && <>{dayNoteInput}{openWinBtn}{boardOpBtn}{ampmButtons}</>}
         </div>
         {/* PC/iPad: AM/PM はタイトルに被らないよう右端に。別ウィンドウで開く・別ウィンドウ操作をその左に置く */}
-        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8 }}>{openWinBtn}{boardOpBtn}{ampmButtons}</div>}
+        {!compact && <div className="no-print" style={{ position: 'absolute', right: 16, top: 10, display: 'flex', alignItems: 'center', gap: 8 }}>{dayNoteInput}{openWinBtn}{boardOpBtn}{ampmButtons}</div>}
       </div>
       )}
       {compact ? (
