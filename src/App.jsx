@@ -3272,6 +3272,9 @@ function backupUsbPs1(origin) {
 #      If Windows blocks it once: run  Unblock-File .\tobunamakon-backup.ps1
 
 $ErrorActionPreference = 'Stop'
+# Hide per-request progress bars. This also makes Invoke-WebRequest dramatically faster.
+$ProgressPreference = 'SilentlyContinue'
+$startedAt = Get-Date
 
 # ==== settings (EDIT THESE) ====
 $BASE  = '${base}'
@@ -3299,8 +3302,17 @@ $tmp  = Join-Path $env:TEMP ('tbpdf-' + $stamp)
 if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
 $pdfd = Join-Path $tmp 'pdfs'
 New-Item -ItemType Directory -Force -Path $pdfd | Out-Null
+$total = @($list.items).Count
+$done = 0
+$okCount = 0
+Write-Output ('PDF files to fetch: ' + $total)
 foreach ($it in $list.items) {
-  try { Invoke-WebRequest -Uri ($BASE + '/api/shipments?id=' + $it.id + '&pdf=1') -OutFile (Join-Path $pdfd ($it.id + '.pdf')) } catch {}
+  $done++
+  try {
+    Invoke-WebRequest -Uri ($BASE + '/api/shipments?id=' + $it.id + '&pdf=1') -OutFile (Join-Path $pdfd ($it.id + '.pdf'))
+    $okCount++
+  } catch {}
+  if ($done % 20 -eq 0) { Write-Output ('  fetched ' + $done + '/' + $total) }
 }
 @{ items = $list.items } | ConvertTo-Json -Depth 6 | Out-File (Join-Path $tmp 'manifest.json') -Encoding utf8
 $zip = Join-Path $daily ('pdfs-' + $stamp + '.zip')
@@ -3335,7 +3347,8 @@ Prune $weekly  'pdfs-*.zip'  $WEEKLY_KEEP
 Prune $monthly 'data-*.json' $MONTHLY_KEEP
 Prune $monthly 'pdfs-*.zip'  $MONTHLY_KEEP
 
-Write-Output ('backup done: ' + $stamp)
+$elapsed = [int](((Get-Date) - $startedAt).TotalSeconds)
+Write-Output ('backup done: ' + $stamp + '  pdfs=' + $okCount + '/' + $total + '  elapsed=' + $elapsed + 's')
 `
   return s.replace(/\r?\n/g, '\r\n')
 }
