@@ -9,6 +9,10 @@ import { requireAuth } from './_auth'
 // ※ユーザーのパスワードハッシュや LINE トークンを含むため、実行は管理者のみに制限する。
 
 const INDEX_KEY = 'shipments:bydate'
+// 一覧取得用の索引（api/shipments.ts と同じキー）。復元でもここを更新しないと、
+// 復元した伝票が「出荷登録」「キャンセル伝票」の一覧に出てこない（索引に載らないため）。
+const CREATED_KEY = 'shipments:bycreated'
+const CANCELZ_KEY = 'shipments:cancelledz'
 const REV_KEY = 'shipments:rev'
 const BASE_KEY = 'attendance:base'
 const LINE_SETTINGS_KEY = 'line:settings'
@@ -18,6 +22,10 @@ const LINE_GROUPS_KEY = 'line:groups'
 function dateScore(d: any): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''))
   return m ? parseInt(m[1] + m[2] + m[3], 10) : 0
+}
+function tsOf(v: any): number { const t = Date.parse(String(v || '')); return Number.isFinite(t) ? t : 0 }
+function isCancelled(s: any): boolean {
+  return !!s && (s.cancelled === true || s.cancelled === 'true' || s.cancelled === 1 || s.cancelled === '1')
 }
 
 // セット(setKey)のメンバーidから `${prefix}:${id}` ハッシュを全件読む。
@@ -199,7 +207,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await redis.hset(`shipment:${s.id}`, s)
           await redis.sadd('shipments', s.id)
           const sc = dateScore(s.date)
-          if (sc) { try { await redis.zadd(INDEX_KEY, { score: sc, member: s.id }) } catch { /* 索引失敗は無視 */ } }
+          try {
+            if (sc) await redis.zadd(INDEX_KEY, { score: sc, member: s.id })
+            // 登録順（一覧の並び）とキャンセル順の索引も一緒に更新する
+            await redis.zadd(CREATED_KEY, { score: tsOf(s.createdAt) || Date.now(), member: s.id })
+            if (isCancelled(s)) await redis.zadd(CANCELZ_KEY, { score: tsOf(s.cancelledAt) || tsOf(s.updatedAt) || Date.now(), member: s.id })
+            else await redis.zrem(CANCELZ_KEY, s.id)
+          } catch { /* 索引失敗は無視（一覧は索引が無ければ全件走査へフォールバックする） */ }
           result.shipments++
           touched = true
         }

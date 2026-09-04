@@ -240,6 +240,21 @@ export async function demoRequest(rawPath, options = {}) {
       const showCancelled = q.cancelled === '1'
       const from = q.date || q.from
       const to = q.date || q.to
+      const n = v => { const x = parseInt(String(v ?? ''), 10); return Number.isFinite(x) ? x : 0 }
+      const offset = Math.max(0, n(q.offset))
+      // 直近N件（登録順／キャンセル順）＝ { items, next } を返す（本番APIと同じ形）
+      const slice = (rows, count, cmp) => {
+        const sorted = [...rows].sort(cmp)
+        return { items: sorted.slice(offset, offset + count), next: offset + count < sorted.length ? offset + count : null }
+      }
+      const limitN = Math.max(0, n(q.limit))
+      if (showCancelled && limitN > 0) {
+        return slice(list.filter(s => !!s.cancelled), limitN, (a, b) => String(b.cancelledAt || b.date || '').localeCompare(String(a.cancelledAt || a.date || '')))
+      }
+      const recentN = Math.max(0, n(q.recent))
+      if (!showCancelled && recentN > 0) {
+        return slice(list.filter(s => !s.cancelled), recentN, (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      }
       const filtered = list.filter(s => (!!s.cancelled) === !!showCancelled && inRange(s.date, from, to))
       return filtered
     }

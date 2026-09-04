@@ -2336,6 +2336,10 @@ function openPdfViewer(id) {
   w.document.close()
 }
 
+// 出荷登録の一覧で一度に読み込む件数（登録が新しい順）。足りなければ「さらに読み込む」で追加する。
+// ※伝票を1件読むのに Upstash のコマンドを1つ使うため、常に全件読まずこの単位で区切る。
+const RECENT_STEP = 300
+
 function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingConsumed, pendingRestore, onRestoreConsumed, isPopup }) {
   const isMobile = useIsMobile()
   const stacked = useIsMobile(1101)   // 1101px未満はフォーム上・地図下に縦積み（iPad縦も含む）
@@ -2357,6 +2361,8 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
   const [editChanged, setEditChanged] = useState([])
   const [restoreMode, setRestoreMode] = useState(false)   // キャンセル伝票の復元経由で編集中か（更新時に日付確認を出す）
   const [page, setPage]             = useState(0)
+  const [recentLimit, setRecentLimit] = useState(RECENT_STEP)  // 一覧で取得する「登録が新しい順」の件数
+  const [hasMore, setHasMore]       = useState(false)          // まだ古い伝票が残っているか
   const [mapKey, setMapKey]         = useState(0)   // 別伝票を開いた/リセット時にSiteMapを再マウント（描画モード解除＋新住所で再描画）
   const topRef = useRef(null)
   const formRef = useRef(null)   // Enter/桁送りでの次項目フォーカス移動に使う
@@ -2373,17 +2379,13 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
     return out
   })()
 
-  // 一覧の取得範囲。伝票が増えても重くならないよう、通常は「直近30日〜60日先」を日付索引で取得する。
+  // 一覧の取得範囲。伝票が増えても重くならないよう、通常は「登録が新しい順に RECENT_STEP 件」だけ取得する。
+  // ※伝票日付の範囲では絞らない（日付が遠い先／過去の伝票でも、登録した直後に一覧の先頭へ出るように）。
   // 日付で絞り込み中はその日だけ、検索中だけ全期間を取得する（Upstashの読み取りコマンド削減）。
   const listQuery = (() => {
     if (search.trim()) return ''                                   // 検索は全期間から探す
     if (dateFilter) return '?date=' + encodeURIComponent(dateFilter)
-    const p2 = n => String(n).padStart(2, '0')
-    const fmt = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
-    const base = new Date()
-    const from = new Date(base); from.setDate(base.getDate() - 30)
-    const to = new Date(base); to.setDate(base.getDate() + 60)
-    return `?from=${fmt(from)}&to=${fmt(to)}`
+    return '?recent=' + recentLimit
   })()
   const load = useCallback(async () => {
     try {
@@ -2393,7 +2395,9 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
         api.get('/api/employees'),
       ])
       rememberEmployees(e)
-      setShipments(s)
+      // ?recent= のときは { items, next }、それ以外は配列で返る
+      setShipments(Array.isArray(s) ? s : (Array.isArray(s?.items) ? s.items : []))
+      setHasMore(!Array.isArray(s) && !!s && s.next != null)
       setCustomers(c)
       setEmployees(e.filter(emp => emp.type === 'driver'))
     } catch (e) { console.error(e) }
@@ -2955,6 +2959,15 @@ function ShipmentsPage({ editTarget, onEditConsumed, pendingEditId, onPendingCon
             <span style={{ fontSize: 13, color: '#3a4a5c' }}>{curPage + 1} / {pageCount} ページ</span>
             <button type="button" onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={curPage >= pageCount - 1}
               style={{ border: '1.5px solid #dde3ed', background: '#fff', color: curPage >= pageCount - 1 ? '#c0c8d4' : '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: curPage >= pageCount - 1 ? 'default' : 'pointer' }}>次へ →</button>
+          </div>
+        )}
+
+        {/* 一覧は「登録が新しい順に RECENT_STEP 件」だけ読み込む。それより古い伝票はここから追加読み込みする */}
+        {!loading && !noPaging && !search.trim() && hasMore && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '0 16px 14px', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => setRecentLimit(n => n + RECENT_STEP)}
+              style={{ border: '1.5px solid #dde3ed', background: '#fff', color: '#1a4d8f', borderRadius: 7, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>もっと読み込む（さらに{RECENT_STEP}件）</button>
+            <span style={{ fontSize: 12, color: '#6b7a8d' }}>※ 古い伝票は「🔍 検索」でも探せます</span>
           </div>
         )}
       </div>
@@ -6217,10 +6230,17 @@ function DenpyoView({ s, changedFields = [] }) {
   )
 }
 
+// キャンセル伝票の一覧で一度に読み込む件数（キャンセルが新しい順）。
+// 全件（数百件）を毎回読むと Upstash のコマンドを大量に消費するため、既定は直近ぶんだけにする。
+const CANCEL_STEP = 20
+
 // キャンセル伝票：削除（キャンセル）した伝票の保管庫。復元すると元に戻り一覧から消える
 function CancelPage({ onRestoreEdit }) {
   const [cancelled, setCancelled] = useState([])
   const [loading, setLoading] = useState(true)
+  const [limit, setLimit] = useState(CANCEL_STEP)   // 読み込み済みの件数（「さらに20件」で増える）
+  const [hasMore, setHasMore] = useState(false)     // これより古いキャンセル伝票が残っているか
+  const [allLoaded, setAllLoaded] = useState(false) // 絞り込み中は全件読む（直近20件の中だけ探すのを防ぐ）
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(null)        // 復元/削除処理中の伝票id
   const [detail, setDetail] = useState(null)    // フォーム表示中の伝票
@@ -6228,11 +6248,18 @@ function CancelPage({ onRestoreEdit }) {
   const [selected, setSelected] = useState(() => new Set())  // 選択中の伝票id
   const [deleting, setDeleting] = useState(false)       // 一括削除中
   const load = useCallback(async () => {
-    try { const c = await api.get('/api/shipments?cancelled=1'); setCancelled(Array.isArray(c) ? c : []) }
+    try {
+      // 絞り込み中は全件、通常はキャンセルが新しい順に limit 件（?limit= のときは { items, next } が返る）
+      const r = await api.get(allLoaded ? '/api/shipments?cancelled=1' : `/api/shipments?cancelled=1&limit=${limit}`)
+      setCancelled(Array.isArray(r) ? r : (Array.isArray(r?.items) ? r.items : []))
+      setHasMore(!Array.isArray(r) && !!r && r.next != null)
+    }
     catch (e) { console.error(e) } finally { setLoading(false) }
-  }, [])
+  }, [allLoaded, limit])
   useEffect(() => { load() }, [load])
   useShipmentsChanged(load)
+  // 絞り込みを使い始めたら全件に切り替える（直近20件の中にしか無い、という取りこぼしを防ぐ）
+  useEffect(() => { if (search.trim()) setAllLoaded(true) }, [search])
 
   // 復元の実処理（プレビュー＝detailモーダル内の「復元する」ボタンから呼ばれる）
   const doRestore = async (s) => {
@@ -6324,6 +6351,14 @@ function CancelPage({ onRestoreEdit }) {
                   <button type="button" onClick={() => setDetail(s)} style={{ flex: '0 0 auto', border: '1.5px solid #1a4d8f', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>📄 表示</button>
                 </div>
               ))}
+              {/* 既定はキャンセルが新しい順に CANCEL_STEP 件だけ。古いものはここから追加読み込みする */}
+              {hasMore && !search.trim() && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '6px 0 2px', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setLimit(n => n + CANCEL_STEP)}
+                    style={{ border: '1.5px solid #dde3ed', background: '#fff', color: '#1a4d8f', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>さらに{CANCEL_STEP}件を表示</button>
+                  <span style={{ fontSize: 12, color: '#9aa7b5' }}>※ 上の絞り込みは全件から探します</span>
+                </div>
+              )}
             </div>
           )}
       {detail && (
