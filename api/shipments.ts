@@ -91,7 +91,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const toParam = Array.isArray(q.to) ? q.to[0] : q.to
       const ft = (s: any) => { const t = Array.isArray(s.times) ? s.times[0] : s.time; return (t && t.text != null) ? t.text : (t || '') }
       let shipments: Record<string, any>[]
-      if (!showCancelled && (dateParam || (fromParam && toParam))) {
+      if (showCancelled && await ensureCancelledIndexed()) {
+        // キャンセル一覧：索引の集合ぶんだけ読む（全件走査を避ける）
+        const ids = (await redis.smembers(CANCEL_KEY)) || []
+        if (!ids.length) return res.status(200).json([])
+        const p = redis.pipeline()
+        ids.forEach((sid: string) => p.hgetall(`shipment:${sid}`))
+        const rows = (await p.exec<Record<string, any>[]>()) || []
+        shipments = rows.filter(s => s && Object.keys(s).length > 0 && isCancelled(s))
+      } else if (!showCancelled && (dateParam || (fromParam && toParam))) {
         // 索引経由：当日 or 期間ぶんの id だけ取得して読む
         await ensureIndexed()
         const min = dateScore(dateParam || fromParam)
@@ -144,8 +152,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST' && !hasId && (req.query.reindex === '1' || req.query.reindex === 'true')) {
     try {
       _indexedMem = false
+      _cancelIndexedMem = false
       await redis.del('shipments:indexed')
+      await redis.del(CANCEL_FLAG)
+      await redis.del(CANCEL_KEY)
       await ensureIndexed()
+      await ensureCancelledIndexed()
       const n = await redis.zcard(INDEX_KEY)
       return res.status(200).json({ reindexed: n })
     } catch (e) {
@@ -300,7 +312,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       await redis.del(INDEX_KEY)
       await redis.del('shipments:indexed')
+      await redis.del(CANCEL_KEY)
+      await redis.del(CANCEL_FLAG)
       _indexedMem = false
+      _cancelIndexedMem = false
       await bumpRev()   // 全削除も版番号を更新して掲示板に反映させる
       return res.status(200).json({ deleted: ids.length })
     } catch (e) {
@@ -378,6 +393,9 @@ function appendHistory(existing: any, updated: any): any[] {
 // ===== 日付インデックス（出荷予定表・配送割り当て等の「特定日」取得を高速化）=====
 // shipments:bydate は ZSET（score=YYYYMMDD, member=id）。全件読み(1+N)を当日/期間の件数ぶんに抑える。
 const INDEX_KEY = 'shipments:bydate'
+// キャンセル伝票の索引（全件走査を避けるための集合）。saveShipmentHash / removeShipment で維持する。
+const CANCEL_KEY = 'shipments:cancelled'
+const CANCEL_FLAG = 'shipments:cancelledindexed'
 function dateScore(d: any): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''))
   return m ? parseInt(m[1] + m[2] + m[3], 10) : 0
@@ -395,6 +413,9 @@ async function saveShipmentHash(id: string, obj: any, date: any): Promise<void> 
   tx.hset(`shipment:${id}`, obj)
   tx.sadd('shipments', id)              // 冪等（既存でも無害）＝作成・更新のどちらでも集合を保つ
   if (sc) tx.zadd(INDEX_KEY, { score: sc, member: id })
+  // キャンセル索引も同じMULTI内で維持（キャンセル→追加／復元→削除）
+  if (isCancelled(obj)) tx.sadd(CANCEL_KEY, id)
+  else tx.srem(CANCEL_KEY, id)
   tx.incr(REV_KEY)
   await tx.exec()
 }
@@ -405,6 +426,7 @@ async function removeShipment(id: string): Promise<void> {
   tx.del(`shipmentpdf:${id}`)
   tx.srem('shipments', id)
   tx.zrem(INDEX_KEY, id)
+  tx.srem(CANCEL_KEY, id)
   tx.incr(REV_KEY)
   await tx.exec()
 }
@@ -412,6 +434,28 @@ async function bumpRev(): Promise<void> { try { await redis.incr(REV_KEY) } catc
 async function readRev(): Promise<number> {
   try { const v = await redis.get(REV_KEY); const n = Number(v); return Number.isFinite(n) ? n : 0 } catch { return 0 }
 }
+// 既存のキャンセル伝票を一度だけ索引化（インスタンス内メモ＋Redisフラグ）。
+// 成功なら true。false のときは呼び出し側が従来どおり全件走査する（安全側）。
+let _cancelIndexedMem = false
+async function ensureCancelledIndexed(): Promise<boolean> {
+  if (_cancelIndexedMem) return true
+  try {
+    if (await redis.get(CANCEL_FLAG)) { _cancelIndexedMem = true; return true }
+    const ids = (await redis.smembers('shipments')) || []
+    if (ids.length) {
+      const p = redis.pipeline()
+      ids.forEach((sid: string) => p.hgetall(`shipment:${sid}`))
+      const rows = (await p.exec<Record<string, any>[]>()) || []
+      const add: string[] = []
+      rows.forEach((s, i) => { if (isCancelled(s)) add.push(ids[i]) })
+      if (add.length) await redis.sadd(CANCEL_KEY, add[0], ...add.slice(1))
+    }
+    await redis.set(CANCEL_FLAG, '1')
+    _cancelIndexedMem = true
+    return true
+  } catch { return false }
+}
+
 // 既存データの索引を一度だけ構築（インスタンス内メモ＋Redisフラグ）。初回の日付取得時に自動実行。
 let _indexedMem = false
 async function ensureIndexed(): Promise<void> {
