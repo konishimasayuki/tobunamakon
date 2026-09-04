@@ -3554,9 +3554,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
     noteDateRef.current = date
     setDayNote(attendance.note || '')
   }, [attendance.date, attendance.note, date])
-  // 伸ばせる高さの上限：PC=2行（これ以上伸ばすとヘッダが表に重なる）／スマホ=3行
-  const noteMaxH = compact ? 66 : 46
-  useEffect(() => { fitNoteHeight(noteInputRef.current, noteMaxH) }, [dayNote, noteMaxH])
+  // 伸ばせる高さの上限（4行ぶん）。PCはヘッダの高さも一緒に広げて表に重ならないようにする
+  const noteMaxH = 88
+  const [noteH, setNoteH] = useState(28)
+  useEffect(() => { const h = fitNoteHeight(noteInputRef.current, noteMaxH); if (h) setNoteH(h) }, [dayNote, noteMaxH])
   // ①計測用：ポーリングの生存状況（最終tick時刻・最終変化・回数・rev）を保持して掲示板隅に表示する
   const [pollDbg, setPollDbg] = useState({ lastTickAt: null, lastChangeAt: null, ticks: 0, rev: null })
   const isPrint = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1'
@@ -4570,11 +4571,10 @@ function SchedulePage({ onEditShipment, isPopup }) {
   const dayNoteInput = (
     <span className="no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <textarea ref={noteInputRef} value={dayNote} maxLength={200} rows={1}
-        onChange={e => { setDayNote(e.target.value); fitNoteHeight(e.target, noteMaxH) }}
+        onChange={e => { setDayNote(e.target.value); const h = fitNoteHeight(e.target, noteMaxH); if (h) setNoteH(h) }}
         onBlur={() => commitDayNote()}
-        onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); commitDayNote() } }}
-        placeholder="この日のメモ（Enterで保存）"
-        title="表示中の日付にだけ保存されるメモです。Enter、または入力欄から離れると保存します。"
+        placeholder="この日のメモ（外を押すと保存）"
+        title="表示中の日付にだけ保存されるメモです。Enterで改行、入力欄の外を押すと保存します。"
         style={{ width: compact ? 150 : 230, fontSize: 13, lineHeight: 1.4, fontFamily: 'inherit', padding: '5px 8px', border: '1.5px solid #bbb', borderRadius: 6, resize: 'none', overflowY: 'auto', maxHeight: noteMaxH, boxSizing: 'border-box', display: 'block', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} />
       {noteSaving
         ? <span style={{ fontSize: 11, color: '#6b7a8d', whiteSpace: 'nowrap' }}>保存中…</span>
@@ -4621,7 +4621,7 @@ function SchedulePage({ onEditShipment, isPopup }) {
           </div>
         </div>
       ) : (
-      <div style={{ position: 'relative', padding: '12px 16px', minHeight: 44, display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div style={{ position: 'relative', padding: '12px 16px', minHeight: compact ? 44 : Math.max(44, noteH + 18), display: compact ? 'flex' : 'block', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
         <div style={{ textAlign: 'center', fontSize: compact ? 18 : 22, fontWeight: 700, color: '#111', letterSpacing: compact ? '0.15em' : '0.35em' }}>出荷予定表</div>
         <div style={compact
           ? { display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, color: '#111' }
@@ -6793,9 +6793,11 @@ function DebugThreadView({ thread, user, fmt, onImgs, onPosted, onDelete }) {
 // 上限は呼び出し側で指定（PCはヘッダが表に被らないよう2行まで、スマホは3行まで）
 const NOTE_MAX_H = 66
 function fitNoteHeight(el, max) {
-  if (!el) return
+  if (!el) return 0
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, max || NOTE_MAX_H) + 'px'
+  const h = Math.min(el.scrollHeight, max || NOTE_MAX_H)
+  el.style.height = h + 'px'
+  return h
 }
 
 // Uint8Array → base64（大きな配列でもスタック超過しないよう分割して変換）
